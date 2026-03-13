@@ -10,11 +10,41 @@
 | Elemento       | Detalle                                                  |
 |----------------|----------------------------------------------------------|
 | **Nombre**     | Texpro Productos Químicos y Tratamiento de Aguas         |
-| **Slogan**     | "Todo un equipo a su disposición"                        |
+| **Slogan**     | "Productos Químicos y Tratamiento de Aguas"              |
 | **Cert.**      | ISO 9001:2015 — ISP — Asociado CITUC                     |
-| **Logo**       | Extraer desde `/assets/images/logo-texpro.*` (ver nota)  |
 
-> ⚠️ **Nota:** El logo oficial debe descargarse desde el sitio web y colocarse en `src/assets/images/logo-texpro.svg` (o `.png`). No reemplazar ni modificar proporciones.
+---
+
+## 🖼️ Assets Oficiales de Marca
+
+Todos los archivos de marca han sido provistos oficialmente. Deben colocarse en `src/assets/images/` **sin modificar** proporciones, colores ni efectos.
+
+| Archivo original                                  | Ruta en proyecto                                      | Uso principal                                      |
+|---------------------------------------------------|-------------------------------------------------------|----------------------------------------------------|
+| `LOGO-2023.jpg`                                   | `src/assets/images/logo-texpro-full.jpg`              | Logo completo horizontal (isotipo + TEXPRO + bajada) — uso general |
+| `Isotipo-TEXPRO.jpg`                              | `src/assets/images/isotipo-texpro.jpg`                | Isotipo circular oscuro — favicon, îcono de app   |
+| `Isotipo-TEXPRO_fondo_blanco.jpg`                 | `src/assets/images/isotipo-texpro-white-bg.jpg`       | Isotipo circular sobre fondo blanco — documentos, reportes |
+| `LOGO-TEXPRO-fondo-transparente-blanco.jpg`       | `src/assets/images/logo-texpro-isotipo-claro.jpg`     | Isotipo + bajada sobre fondo claro (sin texto TEXPRO) |
+| `LOGO-TEXPRO-fondo-transparente-blancobajada.jpg` | `src/assets/images/logo-texpro-bajada-blanco.jpg`     | Logo versión blanca — uso sobre fondos oscuros / sidebar |
+
+### 📌 Guía de uso por contexto
+
+| Contexto                           | Asset a usar                            |
+|------------------------------------|-----------------------------------------|
+| **Sidebar** (fondo azul oscuro)    | `logo-texpro-bajada-blanco.jpg`         |
+| **Header** (fondo blanco)          | `logo-texpro-full.jpg`                  |
+| **Favicon / Tab del browser**      | `isotipo-texpro.jpg`                    |
+| **Login / Pantalla de bienvenida** | `logo-texpro-full.jpg`                  |
+| **Reportes / PDFs**                | `isotipo-texpro-white-bg.jpg`           |
+| **Emails / notificaciones**        | `logo-texpro-full.jpg`                  |
+
+### ⚠️ Reglas de uso del logo
+
+1. **No** cambiar colores del logo bajo ningún contexto
+2. **No** estirar, deformar ni recortar el isotipo
+3. **No** aplicar efectos (sombras, filtros, opacidad) sobre el logo
+4. Mantener siempre el **área de respiro** mínima alrededor del logo
+5. Sobre fondos oscuros usar **siempre** la versión blanca (`logo-texpro-bajada-blanco.jpg`)
 
 ---
 
@@ -37,17 +67,21 @@
 
 ### 🟢 Verdes corporativos Texpro
 
-| Variable                  | Hex       | Uso sugerido                          |
-|---------------------------|-----------|---------------------------------------|
-| `--color-green`           | `#00E2A7` | Verde vibrante — badges, highlights   |
-| `--color-green-mid`       | `#19BF94` | Hover sobre elementos verdes          |
-| `--color-green-dark`      | `#00A885` | Estado activo / pressed               |
+> Presentes directamente en el isotipo oficial. Color dominante de la marca.
+
+| Variable                  | Hex       | Uso sugerido                                        |
+|---------------------------|-----------|-----------------------------------------------------|
+| `--color-green`           | `#00E2A7` | Verde vibrante — badges, highlights, CTAs principales |
+| `--color-green-mid`       | `#19BF94` | Hover sobre elementos verdes                        |
+| `--color-green-dark`      | `#00A885` | Estado activo / pressed                             |
 
 ### Gris corporativo
 
-| Variable                  | Hex       | Uso sugerido                          |
-|---------------------------|-----------|---------------------------------------|
-| `--color-corporate-gray`  | `#3A3A3A` | Textos de cuerpo, sidebar texto       |
+> Presente en el anillo del isotipo y en el texto "TEXPRO" del logo oficial.
+
+| Variable                  | Hex       | Uso sugerido                                        |
+|---------------------------|-----------|-----------------------------------------------------|
+| `--color-corporate-gray`  | `#3A3A3A` | Textos de cuerpo, sidebar texto, nombre "TEXPRO"    |
 
 ### Neutros y estados
 
@@ -87,26 +121,25 @@
 ## 📐 Espaciado y Layout
 
 ```css
---sidebar-width:        240px;
+--sidebar-width:           240px;
 --sidebar-width-collapsed: 64px;
---header-height:        60px;
---content-max-width:    1400px;
+--header-height:           60px;
+--content-max-width:       1400px;
 ```
 
 ---
 
 ## 🧩 Componentes Globales
 
-Todos los módulos deben usar estos componentes base:
-
 ### Sidebar / Navegación lateral
 - Fondo: `--color-primary` (`#003F8A`)
 - Texto: `--color-white`
 - Item activo: borde izquierdo `3px` en `--color-green` (`#00E2A7`)
-- Logo Texpro en la parte superior
+- Logo: `logo-texpro-bajada-blanco.jpg` en la parte superior
 
 ### Header / Topbar
 - Fondo: `--color-white` con `--shadow-sm`
+- Logo: `logo-texpro-full.jpg`
 - Título del módulo en `--color-primary`
 - Iconos de usuario/notificaciones a la derecha
 
@@ -138,25 +171,29 @@ Todos los módulos deben usar estos componentes base:
 src/
 └── assets/
     ├── images/
-    │   ├── logo-texpro.svg       ← Logo principal
-    │   ├── logo-texpro-white.svg ← Versión blanca (para sidebar)
-    │   └── favicon.ico
-    ├── icons/                    ← Iconos SVG por módulo
+    │   ├── logo-texpro-full.jpg           ← Logo completo horizontal (uso general)
+    │   ├── isotipo-texpro.jpg             ← Isotipo oscuro (favicon, îcono app)
+    │   ├── isotipo-texpro-white-bg.jpg    ← Isotipo fondo blanco (reportes, PDF)
+    │   ├── logo-texpro-isotipo-claro.jpg  ← Isotipo + bajada fondo claro
+    │   ├── logo-texpro-bajada-blanco.jpg  ← Logo blanco (sidebar, fondos oscuros)
+    │   └── favicon.ico                    ← Derivado del isotipo
+    ├── icons/                             ← Iconos SVG por módulo (Lucide Icons)
     └── styles/
-        ├── tokens.css            ← Variables CSS (design tokens)
-        ├── global.css            ← Reset + estilos base
-        └── components.css        ← Componentes reutilizables
+        ├── tokens.css                     ← Variables CSS (design tokens)
+        ├── global.css                     ← Reset + estilos base
+        └── components.css                 ← Componentes reutilizables
 ```
 
 ---
 
-## 📌 Reglas de Uso
+## 📌 Reglas Generales
 
 1. **Nunca** usar colores hardcodeados — siempre `var(--color-*)`
 2. **Nunca** modificar el logo (proporciones, colores, efectos)
 3. Todos los módulos comparten el mismo **sidebar** y **header**
 4. Las fuentes deben cargarse desde `assets/` en producción
 5. Los iconos usarán **Lucide Icons** o equivalente SVG
+6. En fondos oscuros usar **siempre** la versión blanca del logo
 
 ---
 
