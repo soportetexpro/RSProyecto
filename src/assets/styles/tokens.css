@@ -11,14 +11,24 @@
      COLORES
   ════════════════════════════════════════ */
 
-  /* Primarios */
+  /* Primarios — Azul corporativo */
   --color-primary:        #003F8A;
   --color-primary-dark:   #002A5E;
   --color-primary-light:  #0056B3;
 
-  /* Secundarios */
+  /* Secundarios — Celeste agua */
   --color-secondary:      #00AEEF;
   --color-accent:         #F5A623;
+
+  /* ────────────────────────────────────────
+     Verdes corporativos Texpro
+  ──────────────────────────────────────── */
+  --color-green:          #00E2A7;  /* Verde principal (vibrante) */
+  --color-green-mid:      #19BF94;  /* Verde medio (hover / variante) */
+  --color-green-dark:     #00A885;  /* Verde oscuro (activo / pressed) */
+
+  /* Gris corporativo */
+  --color-corporate-gray: #3A3A3A;  /* Gris oscuro Texpro */
 
   /* Neutros */
   --color-white:          #FFFFFF;
@@ -105,10 +115,10 @@
      LAYOUT
   ════════════════════════════════════════ */
 
-  --sidebar-width:        240px;
+  --sidebar-width:           240px;
   --sidebar-width-collapsed: 64px;
-  --header-height:        60px;
-  --content-max-width:    1400px;
+  --header-height:           60px;
+  --content-max-width:       1400px;
 
   /* ════════════════════════════════════════
      TRANSICIONES
@@ -122,7 +132,7 @@
      Z-INDEX
   ════════════════════════════════════════ */
 
-  --z-base:    1;
+  --z-base:     1;
   --z-dropdown: 100;
   --z-sticky:   200;
   --z-overlay:  300;
