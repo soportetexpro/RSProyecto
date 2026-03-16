@@ -15,5 +15,6 @@ module.exports = {
   ],
   modulePathIgnorePatterns: ['<rootDir>/dist/'],
   clearMocks: true,
-  verbose: true
+  verbose: true,
+  forceExit: true             // cierra el proceso al terminar — resuelve open handles del pool MySQL
 };

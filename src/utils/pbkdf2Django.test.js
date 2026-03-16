@@ -5,20 +5,23 @@
  * Verifica parseDjangoHash y verifyPasswordDjango
  * sin dependencia de BD ni red.
  *
- * El hash de prueba se genera con el mismo algoritmo
- * para garantizar compatibilidad real con Django.
+ * NOTA sobre iteraciones:
+ *   TEST_ITERATIONS = 1000 (en lugar de 600000 de producción).
+ *   Los tests unitarios verifican la corrección del algoritmo,
+ *   no la resistencia criptográfica. Las 600k iteraciones reales
+ *   se validan en tests de integración con BD activa.
  */
 
 const crypto = require('crypto');
 const { parseDjangoHash, verifyPasswordDjango } = require('./pbkdf2Django');
 
-// ── Generar un hash real compatible con Django para tests ──
+// ── Hash de prueba — iteraciones reducidas para velocidad en CI ──
 const TEST_PASSWORD   = 'TestPassword123!';
 const TEST_SALT       = 'testSaltParaTexpro2026';
-const TEST_ITERATIONS = 600000;
+const TEST_ITERATIONS = 1000; // producción usa 600000 — aquí se prueba la lógica, no la resistencia
 
-const derivedKey  = crypto.pbkdf2Sync(TEST_PASSWORD, TEST_SALT, TEST_ITERATIONS, 32, 'sha256');
-const TEST_HASH   = derivedKey.toString('base64');
+const derivedKey    = crypto.pbkdf2Sync(TEST_PASSWORD, TEST_SALT, TEST_ITERATIONS, 32, 'sha256');
+const TEST_HASH     = derivedKey.toString('base64');
 const VALID_ENCODED = `pbkdf2_sha256$${TEST_ITERATIONS}$${TEST_SALT}$${TEST_HASH}`;
 
 // ───────────────────────────────────────────────────────────────
@@ -91,11 +94,11 @@ describe('verifyPasswordDjango', () => {
     expect(verifyPasswordDjango(TEST_PASSWORD, encodedShort)).toBe(false);
   });
 
-  test('verifica correctamente con iteraciones distintas', () => {
-    const iters       = 10000;
-    const dk          = crypto.pbkdf2Sync(TEST_PASSWORD, TEST_SALT, iters, 32, 'sha256');
-    const hash10k     = dk.toString('base64');
-    const encoded10k  = `pbkdf2_sha256$${iters}$${TEST_SALT}$${hash10k}`;
+  test('verifica correctamente con iteraciones distintas (10000)', () => {
+    const iters      = 10000;
+    const dk         = crypto.pbkdf2Sync(TEST_PASSWORD, TEST_SALT, iters, 32, 'sha256');
+    const hash10k    = dk.toString('base64');
+    const encoded10k = `pbkdf2_sha256$${iters}$${TEST_SALT}$${hash10k}`;
     expect(verifyPasswordDjango(TEST_PASSWORD, encoded10k)).toBe(true);
   });
 
