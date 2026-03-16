@@ -3,6 +3,9 @@
  *
  * login.test.js — Tests unitarios del módulo Login
  * Framework: Jest + jsdom
+ *
+ * Los valores de entrada usados en los tests son datos de ejemplo
+ * corporativos — no representan credenciales reales de acceso.
  */
 
 describe('Login — Validación de formulario', () => {
@@ -10,7 +13,7 @@ describe('Login — Validación de formulario', () => {
   beforeEach(() => {
     document.body.innerHTML = `
       <form id="loginForm">
-        <input id="usuario" type="text" />
+        <input id="usuario" type="email" />
         <span id="error-usuario"></span>
         <input id="password" type="password" />
         <span id="error-password"></span>
@@ -28,18 +31,18 @@ describe('Login — Validación de formulario', () => {
     `;
   });
 
-  test('Muestra error si usuario está vacío', () => {
+  test('Muestra error si correo está vacío', () => {
     const errorEl = document.getElementById('error-usuario');
     const input   = document.getElementById('usuario');
     input.value   = '';
 
     if (!input.value.trim()) {
       input.classList.add('is-error');
-      errorEl.textContent = 'El usuario es requerido.';
+      errorEl.textContent = 'El correo es requerido.';
     }
 
     expect(input.classList.contains('is-error')).toBe(true);
-    expect(errorEl.textContent).toBe('El usuario es requerido.');
+    expect(errorEl.textContent).toBe('El correo es requerido.');
   });
 
   test('Muestra error si contraseña está vacía', () => {
@@ -59,8 +62,10 @@ describe('Login — Validación de formulario', () => {
   test('No muestra error con campos válidos', () => {
     const inputU = document.getElementById('usuario');
     const inputP = document.getElementById('password');
-    inputU.value = 'admin';
-    inputP.value = '1234';
+
+    // Valores genéricos de test — no son credenciales reales
+    inputU.value = 'usuario@texpro.cl';
+    inputP.value = 'contrasena_test';
 
     const errorU = document.getElementById('error-usuario');
     const errorP = document.getElementById('error-password');
