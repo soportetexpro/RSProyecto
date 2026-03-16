@@ -11,10 +11,11 @@ module.exports = {
   testPathIgnorePatterns: [
     '/node_modules/',
     '/coverage/',
-    '/src/config/db.test.js'   // test de integración real — requiere BD activa, excluido del CI
+    '/src/config/db.test.js',          // integración MySQL — requiere BD activa
+    '/src/config/db.softland.test.js'  // integración Softland — requiere SQL Server
   ],
   modulePathIgnorePatterns: ['<rootDir>/dist/'],
   clearMocks: true,
   verbose: true,
-  forceExit: true             // cierra el proceso al terminar — resuelve open handles del pool MySQL
+  forceExit: true
 };

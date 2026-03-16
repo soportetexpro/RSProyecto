@@ -11,11 +11,15 @@
     "lint": "eslint .",
     "test": "jest --passWithNoTests",
     "test:coverage": "jest --coverage --passWithNoTests",
+    "test:mysql": "jest src/config/db.test.js --runInBand --forceExit",
+    "test:softland": "jest src/config/db.softland.test.js --runInBand --forceExit",
+    "test:integration": "npm run test:mysql && npm run test:softland",
     "build": "node -e \"console.log('Build OK')\""
   },
   "dependencies": {
     "dotenv": "^16.4.5",
     "express": "^4.21.2",
+    "mssql": "^11.0.1",
     "mysql2": "^3.11.0"
   },
   "devDependencies": {
