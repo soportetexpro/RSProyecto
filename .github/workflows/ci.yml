@@ -48,7 +48,7 @@ jobs:
           fi
 
   # ─────────────────────────────────────────
-  # JOB 2: Tests unitarios
+  # JOB 2: Tests unitarios con cobertura
   # ─────────────────────────────────────────
   test:
     name: 🧪 Tests Unitarios

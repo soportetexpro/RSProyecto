@@ -25,14 +25,12 @@ const config = {
   password: process.env.SOFTLAND_DB_PASSWORD,
   database: process.env.SOFTLAND_DB_NAME,
   options: {
-    encrypt:                true,   // requerido por Softland Cloud
-    trustServerCertificate: false,  // produccion: no confiar en certs auto-firmados
+
     connectTimeout:         15000,
     requestTimeout:         30000
   },
   pool: {
-    max:              5,    // replica de lectura — pool pequeño
-    min:              0,
+
     idleTimeoutMillis: 30000
   }
 };

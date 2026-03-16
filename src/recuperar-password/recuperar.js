@@ -1,34 +1,28 @@
 /**
- * recuperar.js — RSProyecto Texpro
- * Flujo de 3 pasos: Email → Código OTP → Nueva contraseña
+ * recuperar.js - RSProyecto Texpro
+ * Flujo de 3 pasos: Email -> Codigo OTP -> Nueva contrasena
  */
 
 (function () {
   'use strict';
 
-  // ─ Estado global del flujo
-  let emailUsuario = '';
-
-  // ─ Referencias de pasos
+  // Referencias de pasos
   const steps    = [null, 'step1', 'step2', 'step3', 'step4'];
   const stepDots = [null, 'stepDot1', 'stepDot2', 'stepDot3'];
   const stepLines = ['stepLine1', 'stepLine2'];
 
-  // ─────────────────────────
-  // Navegación entre pasos
-  // ─────────────────────────
+  // Estado global del flujo (prefijo _ = usado internamente)
+  let _emailEnvio = '';
+
   function goToStep(next) {
-    // Ocultar todos los step-content
     document.querySelectorAll('.step-content').forEach(el => el.classList.remove('active'));
     document.getElementById(steps[next]).classList.add('active');
 
-    // Actualizar indicador visual
     for (let i = 1; i <= 3; i++) {
       const dot = document.getElementById(stepDots[i]);
       if (i < next) {
         dot.classList.remove('active');
         dot.classList.add('done');
-        // Marcar la línea como completada
         if (i <= 2) document.getElementById(stepLines[i - 1]).classList.add('done');
       } else if (i === next) {
         dot.classList.add('active');
@@ -38,7 +32,6 @@
       }
     }
 
-    // Ocultar "volver" en el paso de éxito
     const backLogin = document.getElementById('backLogin');
     if (next === 4) {
       document.getElementById('stepsIndicator').style.display = 'none';
@@ -46,9 +39,7 @@
     }
   }
 
-  // ─────────────────────────
-  // PASO 1 — Validar email
-  // ─────────────────────────
+  // PASO 1 - Validar email
   document.getElementById('formStep1').addEventListener('submit', async (e) => {
     e.preventDefault();
     const emailInput = document.getElementById('email');
@@ -57,42 +48,33 @@
     const loader     = document.getElementById('loaderStep1');
     const value      = emailInput.value.trim();
 
-    // Validar
     if (!value) {
       setError(emailInput, errorEmail, 'El correo es requerido.');
       return;
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
-      setError(emailInput, errorEmail, 'Ingresa un correo válido.');
+      setError(emailInput, errorEmail, 'Ingresa un correo valido.');
       return;
     }
     clearError(emailInput, errorEmail);
-
     setLoading(btn, loader, true);
 
     try {
-      /**
-       * TODO: reemplazar con llamada real al backend
-       * await fetch('/api/auth/recuperar', { method:'POST', body: JSON.stringify({ email: value }) });
-       */
+      // TODO: await fetch('/api/auth/recuperar', { method:'POST', body: JSON.stringify({ email: value }) });
       await simulate(1500);
-
-      emailUsuario = value;
+      _emailEnvio = value;
       document.getElementById('emailMostrado').textContent = maskEmail(value);
       goToStep(2);
       startResendTimer();
       document.getElementById('otp1').focus();
-
-    } catch (err) {
-      setError(emailInput, errorEmail, 'No se pudo enviar el código. Intenta nuevamente.');
+    } catch {
+      setError(emailInput, errorEmail, 'No se pudo enviar el codigo. Intenta nuevamente.');
     } finally {
       setLoading(btn, loader, false);
     }
   });
 
-  // ─────────────────────────
-  // PASO 2 — Validar OTP
-  // ─────────────────────────
+  // PASO 2 - Validar OTP
   const otpInputs = Array.from({ length: 6 }, (_, i) => document.getElementById('otp' + (i + 1)));
 
   otpInputs.forEach((input, idx) => {
@@ -113,7 +95,6 @@
       }
     });
 
-    // Pegar código completo
     input.addEventListener('paste', (e) => {
       e.preventDefault();
       const pasted = (e.clipboardData || window.clipboardData).getData('text').replace(/[^0-9]/g, '').slice(0, 6);
@@ -129,34 +110,26 @@
 
   document.getElementById('formStep2').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const otpValue  = otpInputs.map(i => i.value).join('');
-    const errorOtp  = document.getElementById('error-otp');
-    const btn       = document.getElementById('btnStep2');
-    const loader    = document.getElementById('loaderStep2');
+    const otpValue = otpInputs.map(i => i.value).join('');
+    const errorOtp = document.getElementById('error-otp');
+    const btn      = document.getElementById('btnStep2');
+    const loader   = document.getElementById('loaderStep2');
 
     if (otpValue.length < 6) {
-      errorOtp.textContent = 'Ingresa los 6 dígitos del código.';
+      errorOtp.textContent = 'Ingresa los 6 digitos del codigo.';
       otpInputs.forEach(i => i.classList.add('is-error'));
       return;
     }
     errorOtp.textContent = '';
     otpInputs.forEach(i => i.classList.remove('is-error'));
-
     setLoading(btn, loader, true);
 
     try {
-      /**
-       * TODO: reemplazar con validación real al backend
-       * await fetch('/api/auth/verificar-otp', { method:'POST', body: JSON.stringify({ email: emailUsuario, otp: otpValue }) });
-       */
+      // TODO: await fetch('/api/auth/verificar-otp', { method:'POST', body: JSON.stringify({ email: _emailEnvio, otp: otpValue }) });
       await simulate(1500);
-
-      // Simulación: código demo = 123456
-      if (otpValue !== '123456') throw new Error('Código incorrecto.');
-
+      if (otpValue !== '123456') throw new Error('Codigo incorrecto.');
       goToStep(3);
       document.getElementById('newpass').focus();
-
     } catch (err) {
       errorOtp.textContent = err.message;
       otpInputs.forEach(i => i.classList.add('is-error'));
@@ -165,26 +138,21 @@
     }
   });
 
-  // ─────────────────────────
-  // PASO 3 — Nueva contraseña
-  // ─────────────────────────
+  // PASO 3 - Nueva contrasena
   const newpassInput     = document.getElementById('newpass');
   const confirmpassInput = document.getElementById('confirmpass');
 
-  // Indicador de fortaleza
   newpassInput.addEventListener('input', () => {
     const val      = newpassInput.value;
     const strength = getStrength(val);
     const fill     = document.getElementById('strengthFill');
     const label    = document.getElementById('strengthLabel');
-
-    const levels = [
-      { pct: '0%',   color: '',                          text: '',             class: '' },
-      { pct: '33%',  color: 'var(--color-danger)',       text: 'Débil',         class: 'danger' },
-      { pct: '66%',  color: 'var(--color-warning)',      text: 'Moderada',      class: 'warning' },
-      { pct: '100%', color: 'var(--color-green)',        text: 'Segura',        class: 'success' },
+    const levels   = [
+      { pct: '0%',   color: '',                     text: '' },
+      { pct: '33%',  color: 'var(--color-danger)',  text: 'Debil' },
+      { pct: '66%',  color: 'var(--color-warning)', text: 'Moderada' },
+      { pct: '100%', color: 'var(--color-green)',   text: 'Segura' }
     ];
-
     const lvl = levels[strength];
     fill.style.width      = lvl.pct;
     fill.style.background = lvl.color;
@@ -195,14 +163,13 @@
   function getStrength(pass) {
     if (!pass) return 0;
     let score = 0;
-    if (pass.length >= 8)              score++;
-    if (/[A-Z]/.test(pass))            score++;
-    if (/[0-9]/.test(pass))            score++;
-    if (/[^A-Za-z0-9]/.test(pass))    score++;
+    if (pass.length >= 8)           score++;
+    if (/[A-Z]/.test(pass))         score++;
+    if (/[0-9]/.test(pass))         score++;
+    if (/[^A-Za-z0-9]/.test(pass)) score++;
     return Math.min(score > 2 ? 3 : score > 1 ? 2 : 1, 3);
   }
 
-  // Toggle passwords paso 3
   setupToggle('toggleNew',     'newpass',     'eyeNew',     'eyeNewOff');
   setupToggle('toggleConfirm', 'confirmpass', 'eyeConfirm', 'eyeConfirmOff');
 
@@ -217,40 +184,33 @@
     let valid        = true;
 
     if (!newVal || newVal.length < 8) {
-      setError(newpassInput, errorNew, 'Mínimo 8 caracteres.');
+      setError(newpassInput, errorNew, 'Minimo 8 caracteres.');
       valid = false;
     } else { clearError(newpassInput, errorNew); }
 
     if (!confirmVal) {
-      setError(confirmpassInput, errorConf, 'Confirma tu contraseña.');
+      setError(confirmpassInput, errorConf, 'Confirma tu contrasena.');
       valid = false;
     } else if (newVal !== confirmVal) {
-      setError(confirmpassInput, errorConf, 'Las contraseñas no coinciden.');
+      setError(confirmpassInput, errorConf, 'Las contrasenas no coinciden.');
       valid = false;
     } else { clearError(confirmpassInput, errorConf); }
 
     if (!valid) return;
-
     setLoading(btn, loader, true);
 
     try {
-      /**
-       * TODO: reemplazar con llamada real al backend
-       * await fetch('/api/auth/nueva-password', { method:'POST', body: JSON.stringify({ email: emailUsuario, password: newVal }) });
-       */
+      // TODO: await fetch('/api/auth/nueva-password', { method:'POST', body: JSON.stringify({ email: _emailEnvio, password: newVal }) });
       await simulate(1500);
       goToStep(4);
-
-    } catch (err) {
+    } catch {
       setError(newpassInput, errorNew, 'No se pudo guardar. Intenta nuevamente.');
     } finally {
       setLoading(btn, loader, false);
     }
   });
 
-  // ─────────────────────────
-  // Timer reenviar código (60s)
-  // ─────────────────────────
+  // Timer reenviar codigo (60s)
   let timerInterval = null;
 
   function startResendTimer() {
@@ -259,7 +219,6 @@
     let secs    = 60;
     btn.disabled = true;
     label.textContent = '(' + secs + 's)';
-
     timerInterval = setInterval(() => {
       secs--;
       label.textContent = '(' + secs + 's)';
@@ -272,19 +231,14 @@
   }
 
   document.getElementById('btnResend').addEventListener('click', async () => {
-    /**
-     * TODO: llamada al backend para reenviar
-     * await fetch('/api/auth/recuperar', { method:'POST', body: JSON.stringify({ email: emailUsuario }) });
-     */
+    // TODO: await fetch('/api/auth/recuperar', { method:'POST', body: JSON.stringify({ email: _emailEnvio }) });
     startResendTimer();
     otpInputs.forEach(i => { i.value = ''; i.classList.remove('is-filled', 'is-error'); });
     otpInputs[0].focus();
     document.getElementById('error-otp').textContent = '';
   });
 
-  // ─────────────────────────
   // Utilidades
-  // ─────────────────────────
   function setError(input, span, msg) {
     input.classList.add('is-error');
     span.textContent = msg;
@@ -297,7 +251,7 @@
 
   function setLoading(btn, loader, state) {
     btn.disabled = state;
-    btn.querySelector('.btn-text').style.display  = state ? 'none' : 'flex';
+    btn.querySelector('.btn-text').style.display = state ? 'none' : 'flex';
     loader.style.display = state ? 'flex' : 'none';
   }
 
@@ -306,7 +260,7 @@
       const inp = document.getElementById(inputId);
       const isPwd = inp.type === 'password';
       inp.type = isPwd ? 'text' : 'password';
-      document.getElementById(eyeId).style.display    = isPwd ? 'none' : 'block';
+      document.getElementById(eyeId).style.display    = isPwd ? 'none'  : 'block';
       document.getElementById(eyeOffId).style.display = isPwd ? 'block' : 'none';
     });
   }
