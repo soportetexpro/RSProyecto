@@ -15,8 +15,6 @@
 
 const jwt = require('jsonwebtoken');
 
-const JWT_SECRET = process.env.JWT_SECRET;
-
 function verifyToken(req, res, next) {
   const authHeader = req.headers['authorization'];
 
@@ -27,7 +25,8 @@ function verifyToken(req, res, next) {
     });
   }
 
-  const token = authHeader.slice(7); // quitar 'Bearer '
+  const token      = authHeader.slice(7); // quitar 'Bearer '
+  const JWT_SECRET = process.env.JWT_SECRET; // leer en runtime
 
   if (!JWT_SECRET) {
     console.error('[verifyToken] JWT_SECRET no definido en .env');
@@ -36,7 +35,7 @@ function verifyToken(req, res, next) {
 
   try {
     const payload = jwt.verify(token, JWT_SECRET);
-    req.user = payload; // { id, email, nombre, is_admin, area, codigo }
+    req.user = payload;
     next();
   } catch (err) {
     if (err.name === 'TokenExpiredError') {

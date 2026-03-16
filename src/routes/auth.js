@@ -8,11 +8,11 @@ const { verifyToken }          = require('../utils/verifyToken');
 
 const router = express.Router();
 
-const JWT_SECRET     = process.env.JWT_SECRET;
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '8h';
-
 // ── POST /api/auth/login ──────────────────────────────────────────
 router.post('/login', async (req, res) => {
+  const JWT_SECRET     = process.env.JWT_SECRET;
+  const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '8h';
+
   try {
     if (!JWT_SECRET) {
       console.error('[auth/login] JWT_SECRET no definido en .env');
@@ -102,7 +102,6 @@ router.get('/me', verifyToken, async (req, res) => {
       return res.status(401).json({ ok: false, error: 'Usuario no encontrado o inactivo' });
     }
 
-    // Omitir password sin asignar variable intermedia
     const usuarioSinPassword = Object.fromEntries(
       Object.entries(usuario).filter(([k]) => k !== 'password')
     );
