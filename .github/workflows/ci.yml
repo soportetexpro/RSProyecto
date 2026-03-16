@@ -57,6 +57,15 @@ jobs:
     strategy:
       matrix:
         node-version: ['20', '22']
+
+    # Variables de entorno para los tests unitarios
+    # JWT_SECRET se define como GitHub Secret (Settings → Secrets → Actions)
+    env:
+      NODE_ENV:       test
+      JWT_SECRET:     ${{ secrets.JWT_SECRET }}
+      JWT_EXPIRES_IN: 8h
+      DB_NAME:        bdtexpro
+
     steps:
       - name: Checkout código
         uses: actions/checkout@v4
