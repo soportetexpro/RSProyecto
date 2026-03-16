@@ -11,7 +11,10 @@ module.exports = {
   testPathIgnorePatterns: [
     '/node_modules/',
     '/coverage/',
-
+    // Tests de integración — requieren BD real, excluidos de npm test y CI
+    // Ejecutar manualmente: npm run test:mysql | npm run test:softland
+    'src/config/db\.test\.js',
+    'src/config/db\.softland\.test\.js'
   ],
   modulePathIgnorePatterns: ['<rootDir>/dist/'],
   clearMocks: true,
