@@ -1,18 +1,16 @@
-/**
- * recuperar.js - RSProyecto Texpro
- * Flujo de 3 pasos: Email -> Codigo OTP -> Nueva contrasena
- */
+// recuperar.js - RSProyecto Texpro
+// Flujo de 3 pasos: Email -> Codigo OTP -> Nueva contrasena
 
 (function () {
   'use strict';
 
   // Referencias de pasos
-  const steps    = [null, 'step1', 'step2', 'step3', 'step4'];
-  const stepDots = [null, 'stepDot1', 'stepDot2', 'stepDot3'];
+  const steps     = [null, 'step1', 'step2', 'step3', 'step4'];
+  const stepDots  = [null, 'stepDot1', 'stepDot2', 'stepDot3'];
   const stepLines = ['stepLine1', 'stepLine2'];
 
-  // Estado global del flujo (prefijo _ = usado internamente)
-  let _emailEnvio = '';
+  // Estado del flujo — se asigna al avanzar pasos
+  let emailFlujo = '';
 
   function goToStep(next) {
     document.querySelectorAll('.step-content').forEach(el => el.classList.remove('active'));
@@ -32,10 +30,9 @@
       }
     }
 
-    const backLogin = document.getElementById('backLogin');
     if (next === 4) {
       document.getElementById('stepsIndicator').style.display = 'none';
-      backLogin.style.display = 'none';
+      document.getElementById('backLogin').style.display = 'none';
     }
   }
 
@@ -48,13 +45,9 @@
     const loader     = document.getElementById('loaderStep1');
     const value      = emailInput.value.trim();
 
-    if (!value) {
-      setError(emailInput, errorEmail, 'El correo es requerido.');
-      return;
-    }
+    if (!value) { setError(emailInput, errorEmail, 'El correo es requerido.'); return; }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
-      setError(emailInput, errorEmail, 'Ingresa un correo valido.');
-      return;
+      setError(emailInput, errorEmail, 'Ingresa un correo valido.'); return;
     }
     clearError(emailInput, errorEmail);
     setLoading(btn, loader, true);
@@ -62,7 +55,7 @@
     try {
       // TODO: await fetch('/api/auth/recuperar', { method:'POST', body: JSON.stringify({ email: value }) });
       await simulate(1500);
-      _emailEnvio = value;
+      emailFlujo = value;
       document.getElementById('emailMostrado').textContent = maskEmail(value);
       goToStep(2);
       startResendTimer();
@@ -81,28 +74,17 @@
     input.addEventListener('input', (e) => {
       const val = e.target.value.replace(/[^0-9]/g, '');
       e.target.value = val;
-      if (val) {
-        input.classList.add('is-filled');
-        if (idx < 5) otpInputs[idx + 1].focus();
-      } else {
-        input.classList.remove('is-filled');
-      }
+      if (val) { input.classList.add('is-filled'); if (idx < 5) otpInputs[idx + 1].focus(); }
+      else { input.classList.remove('is-filled'); }
     });
-
     input.addEventListener('keydown', (e) => {
-      if (e.key === 'Backspace' && !input.value && idx > 0) {
-        otpInputs[idx - 1].focus();
-      }
+      if (e.key === 'Backspace' && !input.value && idx > 0) otpInputs[idx - 1].focus();
     });
-
     input.addEventListener('paste', (e) => {
       e.preventDefault();
       const pasted = (e.clipboardData || window.clipboardData).getData('text').replace(/[^0-9]/g, '').slice(0, 6);
       pasted.split('').forEach((digit, i) => {
-        if (otpInputs[i]) {
-          otpInputs[i].value = digit;
-          otpInputs[i].classList.add('is-filled');
-        }
+        if (otpInputs[i]) { otpInputs[i].value = digit; otpInputs[i].classList.add('is-filled'); }
       });
       if (pasted.length === 6) otpInputs[5].focus();
     });
@@ -117,15 +99,14 @@
 
     if (otpValue.length < 6) {
       errorOtp.textContent = 'Ingresa los 6 digitos del codigo.';
-      otpInputs.forEach(i => i.classList.add('is-error'));
-      return;
+      otpInputs.forEach(i => i.classList.add('is-error')); return;
     }
     errorOtp.textContent = '';
     otpInputs.forEach(i => i.classList.remove('is-error'));
     setLoading(btn, loader, true);
 
     try {
-      // TODO: await fetch('/api/auth/verificar-otp', { method:'POST', body: JSON.stringify({ email: _emailEnvio, otp: otpValue }) });
+      // TODO: await fetch('/api/auth/verificar-otp', { method:'POST', body: JSON.stringify({ email: emailFlujo, otp: otpValue }) });
       await simulate(1500);
       if (otpValue !== '123456') throw new Error('Codigo incorrecto.');
       goToStep(3);
@@ -143,21 +124,18 @@
   const confirmpassInput = document.getElementById('confirmpass');
 
   newpassInput.addEventListener('input', () => {
-    const val      = newpassInput.value;
-    const strength = getStrength(val);
-    const fill     = document.getElementById('strengthFill');
-    const label    = document.getElementById('strengthLabel');
-    const levels   = [
+    const strength = getStrength(newpassInput.value);
+    const fill  = document.getElementById('strengthFill');
+    const label = document.getElementById('strengthLabel');
+    const levels = [
       { pct: '0%',   color: '',                     text: '' },
       { pct: '33%',  color: 'var(--color-danger)',  text: 'Debil' },
       { pct: '66%',  color: 'var(--color-warning)', text: 'Moderada' },
       { pct: '100%', color: 'var(--color-green)',   text: 'Segura' }
     ];
     const lvl = levels[strength];
-    fill.style.width      = lvl.pct;
-    fill.style.background = lvl.color;
-    label.textContent     = lvl.text;
-    label.style.color     = lvl.color;
+    fill.style.width = lvl.pct; fill.style.background = lvl.color;
+    label.textContent = lvl.text; label.style.color = lvl.color;
   });
 
   function getStrength(pass) {
@@ -184,23 +162,20 @@
     let valid        = true;
 
     if (!newVal || newVal.length < 8) {
-      setError(newpassInput, errorNew, 'Minimo 8 caracteres.');
-      valid = false;
+      setError(newpassInput, errorNew, 'Minimo 8 caracteres.'); valid = false;
     } else { clearError(newpassInput, errorNew); }
 
     if (!confirmVal) {
-      setError(confirmpassInput, errorConf, 'Confirma tu contrasena.');
-      valid = false;
+      setError(confirmpassInput, errorConf, 'Confirma tu contrasena.'); valid = false;
     } else if (newVal !== confirmVal) {
-      setError(confirmpassInput, errorConf, 'Las contrasenas no coinciden.');
-      valid = false;
+      setError(confirmpassInput, errorConf, 'Las contrasenas no coinciden.'); valid = false;
     } else { clearError(confirmpassInput, errorConf); }
 
     if (!valid) return;
     setLoading(btn, loader, true);
 
     try {
-      // TODO: await fetch('/api/auth/nueva-password', { method:'POST', body: JSON.stringify({ email: _emailEnvio, password: newVal }) });
+      // TODO: await fetch('/api/auth/nueva-password', { method:'POST', body: JSON.stringify({ email: emailFlujo, password: newVal }) });
       await simulate(1500);
       goToStep(4);
     } catch {
@@ -210,7 +185,7 @@
     }
   });
 
-  // Timer reenviar codigo (60s)
+  // Timer reenviar (60s)
   let timerInterval = null;
 
   function startResendTimer() {
@@ -230,8 +205,8 @@
     }, 1000);
   }
 
-  document.getElementById('btnResend').addEventListener('click', async () => {
-    // TODO: await fetch('/api/auth/recuperar', { method:'POST', body: JSON.stringify({ email: _emailEnvio }) });
+  document.getElementById('btnResend').addEventListener('click', () => {
+    // TODO: await fetch('/api/auth/recuperar', { method:'POST', body: JSON.stringify({ email: emailFlujo }) });
     startResendTimer();
     otpInputs.forEach(i => { i.value = ''; i.classList.remove('is-filled', 'is-error'); });
     otpInputs[0].focus();
@@ -239,22 +214,13 @@
   });
 
   // Utilidades
-  function setError(input, span, msg) {
-    input.classList.add('is-error');
-    span.textContent = msg;
-  }
-
-  function clearError(input, span) {
-    input.classList.remove('is-error');
-    span.textContent = '';
-  }
-
+  function setError(input, span, msg) { input.classList.add('is-error'); span.textContent = msg; }
+  function clearError(input, span) { input.classList.remove('is-error'); span.textContent = ''; }
   function setLoading(btn, loader, state) {
     btn.disabled = state;
     btn.querySelector('.btn-text').style.display = state ? 'none' : 'flex';
     loader.style.display = state ? 'flex' : 'none';
   }
-
   function setupToggle(btnId, inputId, eyeId, eyeOffId) {
     document.getElementById(btnId).addEventListener('click', () => {
       const inp = document.getElementById(inputId);
@@ -264,14 +230,10 @@
       document.getElementById(eyeOffId).style.display = isPwd ? 'block' : 'none';
     });
   }
-
   function maskEmail(email) {
     const [user, domain] = email.split('@');
     return user.slice(0, 2) + '***@' + domain;
   }
-
-  function simulate(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
+  function simulate(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 
 })();

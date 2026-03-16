@@ -1,14 +1,22 @@
 'use strict';
 
+// auth.js - Rutas de autenticacion
+// POST /api/auth/login  - Valida credenciales y devuelve JWT
+// GET  /api/auth/me     - Devuelve datos del usuario autenticado (requiere JWT)
+// POST /api/auth/logout - Logout simbolico (el cliente elimina el token)
 
+const express  = require('express');
+const jwt      = require('jsonwebtoken');
+const { getUsuarioCompletoByEmail, findById, updateLastLogin } = require('../models/usuario');
+const { verifyPasswordDjango } = require('../utils/pbkdf2Django');
+const { verifyToken }          = require('../utils/verifyToken');
 
 const router = express.Router();
 
 const JWT_SECRET     = process.env.JWT_SECRET;
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '8h';
 
-// ── POST /api/auth/login ──────────────────────────────────────────
-// Body: { email: string, password: string }
+// -- POST /api/auth/login ------------------------------------------
 router.post('/login', async (req, res) => {
   try {
     if (!JWT_SECRET) {
@@ -20,14 +28,10 @@ router.post('/login', async (req, res) => {
     const password = String(req.body.password || '').trim();
 
     if (!email || !password) {
-      return res.status(400).json({
-        ok:    false,
-        error: 'Email y contrasena son requeridos'
-      });
+      return res.status(400).json({ ok: false, error: 'Email y contrasena son requeridos' });
     }
 
     const usuario = await getUsuarioCompletoByEmail(email);
-
 
     if (!usuario) {
       return res.status(401).json({ ok: false, error: 'Credenciales invalidas' });
@@ -50,8 +54,18 @@ router.post('/login', async (req, res) => {
 
     await updateLastLogin(usuario.id);
 
+    const payload = {
+      id:       usuario.id,
+      email:    usuario.email,
+      nombre:   usuario.nombre,
+      area:     usuario.area,
+      codigo:   usuario.codigo,
+      is_admin: Boolean(usuario.is_admin)
+    };
 
-
+    const token = jwt.sign(payload, JWT_SECRET, {
+      expiresIn: JWT_EXPIRES_IN,
+      issuer:    'rsproyecto-texpro'
     });
 
     const responseUser = {
@@ -74,7 +88,7 @@ router.post('/login', async (req, res) => {
     return res.status(200).json({
       ok:      true,
       message: 'Login correcto',
-
+      token,
       user:    responseUser
     });
 
@@ -84,7 +98,31 @@ router.post('/login', async (req, res) => {
   }
 });
 
+// -- GET /api/auth/me ----------------------------------------------
+router.get('/me', verifyToken, async (req, res) => {
+  try {
+    const usuario = await findById(req.user.id);
 
+    if (!usuario || !usuario.is_active) {
+      return res.status(401).json({ ok: false, error: 'Usuario no encontrado o inactivo' });
+    }
+
+    const { password: _pw, ...usuarioSinPassword } = usuario;
+
+    return res.status(200).json({ ok: true, user: usuarioSinPassword });
+
+  } catch (err) {
+    console.error('[auth/me]', err);
+    return res.status(500).json({ ok: false, error: 'Error al obtener usuario' });
+  }
+});
+
+// -- POST /api/auth/logout -----------------------------------------
+router.post('/logout', verifyToken, (_req, res) => {
+  return res.status(200).json({
+    ok:      true,
+    message: 'Sesion cerrada. Elimina el token del cliente.'
+  });
 });
 
 module.exports = router;
