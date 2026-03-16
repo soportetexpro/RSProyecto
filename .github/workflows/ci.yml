@@ -29,7 +29,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          # cache solo se activa si existe package-lock.json
           cache: ${{ hashFiles('package-lock.json') != '' && 'npm' || '' }}
 
       - name: Instalar dependencias
@@ -76,10 +75,10 @@ jobs:
             echo "No hay package.json aún — saltando instalación"
           fi
 
-      - name: Ejecutar tests
+      - name: Ejecutar tests con cobertura
         run: |
-          if [ -f package.json ] && grep -q '"test"' package.json; then
-            npm test -- --coverage
+          if [ -f package.json ] && grep -q '"test:coverage"' package.json; then
+            npm run test:coverage
           else
             echo "Tests no configurados aún — saltando"
           fi
