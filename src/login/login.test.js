@@ -1,4 +1,6 @@
 /**
+ * @jest-environment jsdom
+ *
  * login.test.js — Tests unitarios del módulo Login
  * Framework: Jest + jsdom
  */
@@ -31,7 +33,6 @@ describe('Login — Validación de formulario', () => {
     const input   = document.getElementById('usuario');
     input.value   = '';
 
-    // Simular validación
     if (!input.value.trim()) {
       input.classList.add('is-error');
       errorEl.textContent = 'El usuario es requerido.';
@@ -83,13 +84,11 @@ describe('Login — Validación de formulario', () => {
     const inputP = document.getElementById('password');
     inputP.type  = 'password';
 
-    // Simular click en toggle
     const isPassword = inputP.type === 'password';
     inputP.type = isPassword ? 'text' : 'password';
 
     expect(inputP.type).toBe('text');
 
-    // Toggle de vuelta
     inputP.type = inputP.type === 'password' ? 'text' : 'password';
     expect(inputP.type).toBe('password');
   });
