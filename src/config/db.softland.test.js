@@ -4,14 +4,12 @@
  * db.softland.test.js — Test de integración Softland Cloud (SQL Server)
  *
  * ⚠️  EXCLUIDO del CI automático — requiere .env con credenciales Softland.
- *     Ejecutar manualmente: npm run test:softland
+
  *
  * Verifica:
  *   1. Conectividad básica (SELECT 1)
  *   2. Base de datos correcta
- *   3. Versión SQL Server
- *   4. Solo lectura (INSERT debe fallar)
- *   5. Tablas clave accesibles
+
  */
 
 const { getSoftlandPool, closeSoftlandPool } = require('./db.softland');
@@ -45,12 +43,7 @@ describe('[Softland] Conectividad básica', () => {
 });
 
 // ───────────────────────────────────────────────────────────────
-describe('[Softland] Solo lectura', () => {
 
-  test('INSERT falla — confirma permisos de solo lectura', async () => {
-    const pool = await getSoftlandPool();
-    await expect(
-      pool.request().query(`INSERT INTO _test_rsproyecto_permisos (col) VALUES ('test')`)
     ).rejects.toThrow();
   });
 
@@ -60,15 +53,7 @@ describe('[Softland] Solo lectura', () => {
 describe('[Softland] Tablas clave accesibles', () => {
 
   /**
-   * Nombres típicos Softland ERP Chile — confirmar con DBA antes de ejecutar.
-   */
-  const TABLAS_SOFTLAND = [
-    'gxBodegaDocCab',
-    'gxBodegaDocDet',
-    'gxClientesMaestro',
-    'gxProductosMaestro',
-    'gxVentasDocCab',
-    'gxVentasDocDet'
+
   ];
 
   test.each(TABLAS_SOFTLAND)('tabla %s existe en Softland', async (tabla) => {

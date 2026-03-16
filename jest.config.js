@@ -11,8 +11,7 @@ module.exports = {
   testPathIgnorePatterns: [
     '/node_modules/',
     '/coverage/',
-    '/src/config/db.test.js',          // integración MySQL — requiere BD activa
-    '/src/config/db.softland.test.js'  // integración Softland — requiere SQL Server
+
   ],
   modulePathIgnorePatterns: ['<rootDir>/dist/'],
   clearMocks: true,
