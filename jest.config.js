@@ -1,10 +1,19 @@
 /** @type {import('jest').Config} */
 module.exports = {
-  testEnvironment: 'jsdom',
+  rootDir: '.',
+  testEnvironment: 'node',
   roots: ['<rootDir>/src'],
   testMatch: ['**/*.test.js'],
+  moduleFileExtensions: ['js', 'json'],
   collectCoverage: false,
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov'],
-  modulePathIgnorePatterns: ['<rootDir>/dist/']
+  testPathIgnorePatterns: [
+    '/node_modules/',
+    '/coverage/',
+    '/src/config/db.test.js'   // test de integración real — requiere BD activa, excluido del CI
+  ],
+  modulePathIgnorePatterns: ['<rootDir>/dist/'],
+  clearMocks: true,
+  verbose: true
 };
