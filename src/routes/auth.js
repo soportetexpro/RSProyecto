@@ -2,15 +2,17 @@
 
 /**
  * auth.js — Rutas de autenticación
- * POST /api/auth/login
  *
- * Autentica contra ventas_usuario usando hash PBKDF2-SHA256 de Django.
- * No expone el campo password en la respuesta.
+ * POST /api/auth/login   — autentica y retorna JWT
+ * GET  /api/auth/me      — retorna datos del usuario autenticado (requiere JWT)
+ * POST /api/auth/logout  — logout (el cliente descarta el token)
  */
 
-const express                 = require('express');
-const { getUsuarioCompletoByEmail, updateLastLogin } = require('../models/usuario');
-const { verifyPasswordDjango }                       = require('../utils/pbkdf2Django');
+const express = require('express');
+const { getUsuarioCompletoByEmail, updateLastLogin, findById } = require('../models/usuario');
+const { verifyPasswordDjango } = require('../utils/pbkdf2Django');
+const { generarToken }         = require('../utils/jwt');
+const { requireAuth }          = require('../middlewares/requireAuth');
 
 const router = express.Router();
 
@@ -33,7 +35,7 @@ router.post('/login', async (req, res) => {
     // 1. Buscar usuario con todos sus datos relacionados
     const usuario = await getUsuarioCompletoByEmail(email);
 
-    // 2. Si no existe → respuesta genérica (no revelar si el email es válido)
+    // 2. No revelar si el email existe o no
     if (!usuario) {
       return res.status(401).json({ ok: false, error: 'Credenciales inválidas' });
     }
@@ -58,27 +60,36 @@ router.post('/login', async (req, res) => {
     // 5. Actualizar last_login
     await updateLastLogin(usuario.id);
 
-    // 6. Construir respuesta sin exponer password
+    // 6. Generar JWT
+    const token = generarToken({
+      id:       usuario.id,
+      email:    usuario.email,
+      is_admin: usuario.is_admin
+    });
+
+    // 7. Construir respuesta sin exponer password
     const responseUser = {
-      id:                   usuario.id,
-      nombre:               usuario.nombre,
-      email:                usuario.email,
-      area:                 usuario.area,
-      codigo:               usuario.codigo,
-      tema:                 usuario.tema,
-      is_admin:             Boolean(usuario.is_admin),
-      is_active:            Boolean(usuario.is_active),
-      last_login:           usuario.last_login,
-      fecha_creacion:       usuario.fecha_creacion,
-      vendedores:           usuario.vendedores,
-      permisos:             usuario.permisos,
-      metas:                usuario.metas,
-      facturasCompartidas:  usuario.facturasCompartidas
+      id:                  usuario.id,
+      nombre:              usuario.nombre,
+      email:               usuario.email,
+      area:                usuario.area,
+      codigo:              usuario.codigo,
+      tema:                usuario.tema,
+      is_admin:            Boolean(usuario.is_admin),
+      is_active:           Boolean(usuario.is_active),
+      last_login:          usuario.last_login,
+      fecha_creacion:      usuario.fecha_creacion,
+      vendedores:          usuario.vendedores,
+      permisos:            usuario.permisos,
+      metas:               usuario.metas,
+      facturasCompartidas: usuario.facturasCompartidas
     };
 
     return res.status(200).json({
       ok:      true,
       message: 'Login correcto',
+      token,                         // ← JWT para usar en rutas protegidas
+      expiresIn: process.env.JWT_EXPIRES_IN || '8h',
       user:    responseUser
     });
 
@@ -86,6 +97,33 @@ router.post('/login', async (req, res) => {
     console.error('[auth/login]', err);
     return res.status(500).json({ ok: false, error: 'No se pudo procesar el login' });
   }
+});
+
+// ─────────────────────────────────────────────────────────────────
+// GET /api/auth/me   — ruta protegida
+// Header: Authorization: Bearer <token>
+// ─────────────────────────────────────────────────────────────────
+router.get('/me', requireAuth, async (req, res) => {
+  try {
+    const usuario = await findById(req.usuario.sub);
+    if (!usuario || !usuario.is_active) {
+      return res.status(401).json({ ok: false, error: 'Sesión inválida.' });
+    }
+    const { password: _pw, ...usuarioSinPassword } = usuario;
+    return res.status(200).json({ ok: true, user: usuarioSinPassword });
+  } catch (err) {
+    console.error('[auth/me]', err);
+    return res.status(500).json({ ok: false, error: 'Error al obtener usuario.' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────
+// POST /api/auth/logout
+// El JWT es stateless: el cliente simplemente descarta el token.
+// Esta ruta confirma al frontend que el logout fue procesado.
+// ─────────────────────────────────────────────────────────────────
+router.post('/logout', requireAuth, (_req, res) => {
+  return res.status(200).json({ ok: true, message: 'Sesión cerrada correctamente.' });
 });
 
 module.exports = router;
