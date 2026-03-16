@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Texpro — Dashboard</title>
+  <link rel="icon" type="image/jpg" href="../assets/images/isotipo-texpro.jpg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Open+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../assets/styles/tokens.css" />
+  <link rel="stylesheet" href="dashboard.css" />
+</head>
+<body>
+
+  <!-- ════════════ SIDEBAR ════════════ -->
+  <aside class="sidebar" id="sidebar">
+
+    <div class="sidebar-header">
+      <img
+        src="../assets/images/isotipo-texpro.jpg"
+        alt="Texpro"
+        class="sidebar-logo"
+        onerror="this.style.display='none'"
+      />
+      <span class="sidebar-brand">TEXPRO</span>
+      <button class="sidebar-toggle" id="sidebarToggle" aria-label="Colapsar menú">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+      </button>
+    </div>
+
+    <nav class="sidebar-nav" id="sidebarNav">
+      <!-- generado por dashboard.js -->
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="sidebar-user" id="sidebarUser">
+        <div class="user-avatar" id="userAvatar">?</div>
+        <div class="user-info">
+          <span class="user-name" id="userName">Cargando...</span>
+          <span class="user-area" id="userArea"></span>
+        </div>
+      </div>
+      <button class="btn-logout" id="btnLogout" title="Cerrar sesión">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
+        <span class="btn-logout-text">Cerrar sesión</span>
+      </button>
+    </div>
+
+  </aside>
+
+  <!-- ════════════ LAYOUT PRINCIPAL ════════════ -->
+  <div class="main-wrapper" id="mainWrapper">
+
+    <!-- Header -->
+    <header class="main-header">
+      <div class="header-left">
+        <button class="header-menu-btn" id="headerMenuBtn" aria-label="Menú móvil">
+          <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
+        </button>
+        <h1 class="header-title" id="headerTitle">Dashboard</h1>
+      </div>
+      <div class="header-right">
+        <span class="header-date" id="headerDate"></span>
+        <div class="header-user-chip" id="headerUserChip">
+          <div class="chip-avatar" id="chipAvatar">?</div>
+          <span class="chip-name" id="chipName">...</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Contenido -->
+    <main class="main-content" id="mainContent">
+
+      <!-- Bienvenida -->
+      <section class="welcome-section" id="welcomeSection">
+        <div class="welcome-card">
+          <div class="welcome-text">
+            <h2 id="welcomeTitle">Bienvenido</h2>
+            <p id="welcomeSubtitle">Sistema de Gestión Interna Texpro</p>
+          </div>
+          <div class="welcome-badge" id="welcomeBadge"></div>
+        </div>
+      </section>
+
+      <!-- Tarjetas de módulos -->
+      <section class="modules-section">
+        <h3 class="section-title">Módulos disponibles</h3>
+        <div class="modules-grid" id="modulesGrid">
+          <!-- generado por dashboard.js -->
+        </div>
+      </section>
+
+    </main>
+
+    <footer class="main-footer">
+      <span>Texpro Productos Químicos y Tratamiento de Aguas</span>
+      <span class="footer-version">v1.0.0</span>
+    </footer>
+
+  </div>
+
+  <script src="dashboard.js"></script>
+</body>
+</html>
