@@ -1,13 +1,23 @@
 /**
  * login.js — RSProyecto Texpro
- * Manejo del formulario de login (frontend)
- * La validación real contra servidor se integrará con el backend.
+ * Frontend de autenticación conectado con POST /api/auth/login
+ *
+ * Flujo:
+ *   1. Valida campos (email + password)
+ *   2. Llama a POST /api/auth/login con fetch
+ *   3. Guarda sesión en sessionStorage
+ *   4. Redirige al dashboard
  */
 
 (function () {
   'use strict';
 
-  // ── Referencias DOM ──────────────────────────────
+  // ── Configuración ─────────────────────────────────────────────
+  const API_BASE = window.API_BASE || 'http://localhost:3000';
+  const LOGIN_URL = `${API_BASE}/api/auth/login`;
+  const DASHBOARD_URL = '../dashboard/index.html';
+
+  // ── Referencias DOM ─────────────────────────────────────────
   const form         = document.getElementById('loginForm');
   const inputUsuario = document.getElementById('usuario');
   const inputPass    = document.getElementById('password');
@@ -20,7 +30,7 @@
   const iconEye      = document.getElementById('icon-eye');
   const iconEyeOff   = document.getElementById('icon-eye-off');
 
-  // ── Toggle mostrar/ocultar contraseña ────────────
+  // ── Toggle mostrar/ocultar contraseña ────────────────────────
   togglePass.addEventListener('click', () => {
     const isPassword = inputPass.type === 'password';
     inputPass.type = isPassword ? 'text' : 'password';
@@ -29,23 +39,28 @@
     togglePass.setAttribute('aria-label', isPassword ? 'Ocultar contraseña' : 'Mostrar contraseña');
   });
 
-  // ── Limpiar errores al escribir ───────────────────
+  // ── Limpiar errores al escribir ─────────────────────────────
   inputUsuario.addEventListener('input', () => clearFieldError('usuario'));
   inputPass.addEventListener('input',    () => clearFieldError('password'));
 
-  // ── Validación de campos ──────────────────────────
+  // ── Validación de campos ──────────────────────────────────
   function validateFields() {
     let valid = true;
+    const email = inputUsuario.value.trim();
+    const pass  = inputPass.value.trim();
 
-    if (!inputUsuario.value.trim()) {
-      setFieldError('usuario', 'El usuario es requerido.');
+    if (!email) {
+      setFieldError('usuario', 'El correo es requerido.');
+      valid = false;
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setFieldError('usuario', 'Ingresa un correo válido.');
       valid = false;
     }
 
-    if (!inputPass.value.trim()) {
+    if (!pass) {
       setFieldError('password', 'La contraseña es requerida.');
       valid = false;
-    } else if (inputPass.value.length < 4) {
+    } else if (pass.length < 4) {
       setFieldError('password', 'Mínimo 4 caracteres.');
       valid = false;
     }
@@ -68,14 +83,28 @@
     alertError.style.display = 'none';
   }
 
-  // ── Estado de carga ───────────────────────────────
+  // ── Estado de carga ────────────────────────────────────────
   function setLoading(state) {
-    btnLogin.disabled     = state;
-    btnText.style.display  = state ? 'none'  : 'flex';
+    btnLogin.disabled       = state;
+    btnText.style.display   = state ? 'none' : 'flex';
     btnLoader.style.display = state ? 'flex' : 'none';
   }
 
-  // ── Submit del formulario ─────────────────────────
+  // ── Guardar sesión en sessionStorage ───────────────────────
+  function saveSession(user) {
+    sessionStorage.setItem('texpro_user', JSON.stringify({
+      id:        user.id,
+      nombre:    user.nombre,
+      email:     user.email,
+      area:      user.area,
+      codigo:    user.codigo,
+      tema:      user.tema,
+      is_admin:  user.is_admin,
+      vendedores: user.vendedores
+    }));
+  }
+
+  // ── Submit del formulario ─────────────────────────────────
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     alertError.style.display = 'none';
@@ -85,43 +114,47 @@
     setLoading(true);
 
     try {
-      /**
-       * TODO: reemplazar con llamada real al backend
-       * Ejemplo:
-       *   const res = await fetch('/api/auth/login', {
-       *     method: 'POST',
-       *     headers: { 'Content-Type': 'application/json' },
-       *     body: JSON.stringify({
-       *       usuario: inputUsuario.value.trim(),
-       *       password: inputPass.value
-       *     })
-       *   });
-       *   const data = await res.json();
-       *   if (!res.ok) throw new Error(data.message || 'Error de autenticación');
-       *   window.location.href = '/dashboard';
-       */
+      const response = await fetch(LOGIN_URL, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email:    inputUsuario.value.trim().toLowerCase(),
+          password: inputPass.value
+        })
+      });
 
-      // Simulación temporal (2 segundos) — REMOVER al integrar backend
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      const data = await response.json();
 
-      // Simulación: usuario demo
-      const usuario = inputUsuario.value.trim().toLowerCase();
-      if (usuario === 'admin' && inputPass.value === '1234') {
-        // Redirigir al dashboard (módulo principal)
-        window.location.href = '../dashboard/index.html';
-      } else {
-        throw new Error('Usuario o contraseña incorrectos.');
+      if (!response.ok) {
+        // 401, 403, 400 — mostrar mensaje del servidor
+        const msg = data.error || 'Error de autenticación.';
+
+        if (response.status === 403) {
+          showAlert('Cuenta inactiva. Contacta a soporte.');
+        } else {
+          showAlert(msg);
+        }
+        return;
       }
 
-    } catch (err) {
-      alertMsg.textContent = err.message;
-      alertError.style.display = 'flex';
+      // ✅ Login exitoso
+      saveSession(data.user);
+      window.location.href = DASHBOARD_URL;
+
+    } catch {
+      // Error de red o servidor caído
+      showAlert('No se pudo conectar con el servidor. Verifica tu conexión.');
     } finally {
       setLoading(false);
     }
   });
 
-  // ── Enter en campo usuario pasa al password ───────
+  function showAlert(msg) {
+    alertMsg.textContent = msg;
+    alertError.style.display = 'flex';
+  }
+
+  // ── Enter en campo email pasa al password ──────────────────
   inputUsuario.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
