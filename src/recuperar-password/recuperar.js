@@ -9,8 +9,8 @@
   const stepDots  = [null, 'stepDot1', 'stepDot2', 'stepDot3'];
   const stepLines = ['stepLine1', 'stepLine2'];
 
-  // Estado del flujo — se asigna al avanzar pasos
-  let emailFlujo = '';
+  // Estado del flujo — almacena el email entre pasos
+  let emailFlujo;
 
   function goToStep(next) {
     document.querySelectorAll('.step-content').forEach(el => el.classList.remove('active'));
