@@ -3,25 +3,24 @@
 /**
  * auth.js — Rutas de autenticación
  *
- * POST /api/auth/login   — autentica y retorna JWT
- * GET  /api/auth/me      — retorna datos del usuario autenticado (requiere JWT)
- * POST /api/auth/logout  — logout (el cliente descarta el token)
- */
 
-const express = require('express');
-const { getUsuarioCompletoByEmail, updateLastLogin, findById } = require('../models/usuario');
-const { verifyPasswordDjango } = require('../utils/pbkdf2Django');
-const { generarToken }         = require('../utils/jwt');
-const { requireAuth }          = require('../middlewares/requireAuth');
 
 const router = express.Router();
 
-// ─────────────────────────────────────────────────────────────────
+const JWT_SECRET     = process.env.JWT_SECRET;
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '8h';
+
+// ───────────────────────────────────────────────────────────────
 // POST /api/auth/login
 // Body: { email: string, password: string }
-// ─────────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────────────
 router.post('/login', async (req, res) => {
   try {
+    if (!JWT_SECRET) {
+      console.error('[auth/login] JWT_SECRET no definido en .env');
+      return res.status(500).json({ ok: false, error: 'Error de configuración del servidor' });
+    }
+
     const email    = String(req.body.email    || '').trim().toLowerCase();
     const password = String(req.body.password || '').trim();
 
@@ -35,12 +34,12 @@ router.post('/login', async (req, res) => {
     // 1. Buscar usuario con todos sus datos relacionados
     const usuario = await getUsuarioCompletoByEmail(email);
 
-    // 2. No revelar si el email existe o no
+
     if (!usuario) {
       return res.status(401).json({ ok: false, error: 'Credenciales inválidas' });
     }
 
-    // 3. Verificar cuenta activa
+    // 3. Cuenta inactiva
     if (!usuario.is_active) {
       return res.status(403).json({ ok: false, error: 'Cuenta inactiva. Contacta a soporte.' });
     }
@@ -60,11 +59,7 @@ router.post('/login', async (req, res) => {
     // 5. Actualizar last_login
     await updateLastLogin(usuario.id);
 
-    // 6. Generar JWT
-    const token = generarToken({
-      id:       usuario.id,
-      email:    usuario.email,
-      is_admin: usuario.is_admin
+
     });
 
     // 7. Construir respuesta sin exponer password
@@ -88,8 +83,7 @@ router.post('/login', async (req, res) => {
     return res.status(200).json({
       ok:      true,
       message: 'Login correcto',
-      token,                         // ← JWT para usar en rutas protegidas
-      expiresIn: process.env.JWT_EXPIRES_IN || '8h',
+
       user:    responseUser
     });
 
@@ -99,31 +93,7 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// ─────────────────────────────────────────────────────────────────
-// GET /api/auth/me   — ruta protegida
-// Header: Authorization: Bearer <token>
-// ─────────────────────────────────────────────────────────────────
-router.get('/me', requireAuth, async (req, res) => {
-  try {
-    const usuario = await findById(req.usuario.sub);
-    if (!usuario || !usuario.is_active) {
-      return res.status(401).json({ ok: false, error: 'Sesión inválida.' });
-    }
-    const { password: _pw, ...usuarioSinPassword } = usuario;
-    return res.status(200).json({ ok: true, user: usuarioSinPassword });
-  } catch (err) {
-    console.error('[auth/me]', err);
-    return res.status(500).json({ ok: false, error: 'Error al obtener usuario.' });
-  }
-});
 
-// ─────────────────────────────────────────────────────────────────
-// POST /api/auth/logout
-// El JWT es stateless: el cliente simplemente descarta el token.
-// Esta ruta confirma al frontend que el logout fue procesado.
-// ─────────────────────────────────────────────────────────────────
-router.post('/logout', requireAuth, (_req, res) => {
-  return res.status(200).json({ ok: true, message: 'Sesión cerrada correctamente.' });
 });
 
 module.exports = router;
