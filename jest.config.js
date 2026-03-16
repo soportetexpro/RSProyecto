@@ -1,10 +1,15 @@
 /** @type {import('jest').Config} */
 module.exports = {
-  testEnvironment: 'jsdom',
+  rootDir: '.',
+  testEnvironment: 'node',
   roots: ['<rootDir>/src'],
   testMatch: ['**/*.test.js'],
+  moduleFileExtensions: ['js', 'json'],
   collectCoverage: false,
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov'],
-  modulePathIgnorePatterns: ['<rootDir>/dist/']
+  testPathIgnorePatterns: ['/node_modules/', '/coverage/'],
+  modulePathIgnorePatterns: ['<rootDir>/dist/'],
+  clearMocks: true,
+  verbose: true
 };
