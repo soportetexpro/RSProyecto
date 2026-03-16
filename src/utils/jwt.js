@@ -17,15 +17,14 @@
 
 const jwt = require('jsonwebtoken');
 
-const SECRET     = process.env.JWT_SECRET;
-const EXPIRES_IN = process.env.JWT_EXPIRES_IN || '8h';
-
 /**
  * Genera un token JWT con el payload mínimo del usuario.
  * @param {{ id: number, email: string, is_admin: boolean }} usuario
  * @returns {string} token firmado
  */
 function generarToken(usuario) {
+  const SECRET     = process.env.JWT_SECRET;
+  const EXPIRES_IN = process.env.JWT_EXPIRES_IN || '8h';
   if (!SECRET) throw new Error('JWT_SECRET no está definido en .env');
   return jwt.sign(
     {
@@ -45,6 +44,7 @@ function generarToken(usuario) {
  * @returns {{ sub: number, email: string, is_admin: boolean, iat: number, exp: number }}
  */
 function verificarToken(token) {
+  const SECRET = process.env.JWT_SECRET;
   if (!SECRET) throw new Error('JWT_SECRET no está definido en .env');
   return jwt.verify(token, SECRET);
 }
