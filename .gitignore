@@ -1,9 +1,27 @@
+# Dependencias
 node_modules/
+
+# Build
 coverage/
 dist/
+
+# Variables de entorno — NUNCA commitear
 .env
+.env.local
+.env.*.local
+
+# Logs
 *.log
+npm-debug.log*
+
+# Sistema operativo
 .DS_Store
 Thumbs.db
+
+# IDEs
 .vscode/
 .idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
