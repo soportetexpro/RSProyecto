@@ -23,6 +23,7 @@
     "eslint": "^9.21.0",
     "globals": "^15.15.0",
     "jest": "^30.0.0",
-    "jest-environment-jsdom": "^30.3.0"
+    "jest-environment-jsdom": "^30.3.0",
+    "supertest": "^7.0.0"
   }
 }
