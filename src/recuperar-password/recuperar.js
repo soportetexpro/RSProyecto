@@ -7,7 +7,7 @@
   'use strict';
 
   // ─ Estado global del flujo
-  let emailUsuario = '';
+  let _emailUsuario = '';
 
   // ─ Referencias de pasos
   const steps    = [null, 'step1', 'step2', 'step3', 'step4'];
@@ -18,17 +18,14 @@
   // Navegación entre pasos
   // ─────────────────────────
   function goToStep(next) {
-    // Ocultar todos los step-content
     document.querySelectorAll('.step-content').forEach(el => el.classList.remove('active'));
     document.getElementById(steps[next]).classList.add('active');
 
-    // Actualizar indicador visual
     for (let i = 1; i <= 3; i++) {
       const dot = document.getElementById(stepDots[i]);
       if (i < next) {
         dot.classList.remove('active');
         dot.classList.add('done');
-        // Marcar la línea como completada
         if (i <= 2) document.getElementById(stepLines[i - 1]).classList.add('done');
       } else if (i === next) {
         dot.classList.add('active');
@@ -38,7 +35,6 @@
       }
     }
 
-    // Ocultar "volver" en el paso de éxito
     const backLogin = document.getElementById('backLogin');
     if (next === 4) {
       document.getElementById('stepsIndicator').style.display = 'none';
@@ -57,7 +53,6 @@
     const loader     = document.getElementById('loaderStep1');
     const value      = emailInput.value.trim();
 
-    // Validar
     if (!value) {
       setError(emailInput, errorEmail, 'El correo es requerido.');
       return;
@@ -77,13 +72,13 @@
        */
       await simulate(1500);
 
-      emailUsuario = value;
+      _emailUsuario = value;
       document.getElementById('emailMostrado').textContent = maskEmail(value);
       goToStep(2);
       startResendTimer();
       document.getElementById('otp1').focus();
 
-    } catch (err) {
+    } catch {
       setError(emailInput, errorEmail, 'No se pudo enviar el código. Intenta nuevamente.');
     } finally {
       setLoading(btn, loader, false);
@@ -113,7 +108,6 @@
       }
     });
 
-    // Pegar código completo
     input.addEventListener('paste', (e) => {
       e.preventDefault();
       const pasted = (e.clipboardData || window.clipboardData).getData('text').replace(/[^0-9]/g, '').slice(0, 6);
@@ -147,11 +141,10 @@
     try {
       /**
        * TODO: reemplazar con validación real al backend
-       * await fetch('/api/auth/verificar-otp', { method:'POST', body: JSON.stringify({ email: emailUsuario, otp: otpValue }) });
+       * await fetch('/api/auth/verificar-otp', { method:'POST', body: JSON.stringify({ email: _emailUsuario, otp: otpValue }) });
        */
       await simulate(1500);
 
-      // Simulación: código demo = 123456
       if (otpValue !== '123456') throw new Error('Código incorrecto.');
 
       goToStep(3);
@@ -171,7 +164,6 @@
   const newpassInput     = document.getElementById('newpass');
   const confirmpassInput = document.getElementById('confirmpass');
 
-  // Indicador de fortaleza
   newpassInput.addEventListener('input', () => {
     const val      = newpassInput.value;
     const strength = getStrength(val);
@@ -179,10 +171,10 @@
     const label    = document.getElementById('strengthLabel');
 
     const levels = [
-      { pct: '0%',   color: '',                          text: '',             class: '' },
-      { pct: '33%',  color: 'var(--color-danger)',       text: 'Débil',         class: 'danger' },
-      { pct: '66%',  color: 'var(--color-warning)',      text: 'Moderada',      class: 'warning' },
-      { pct: '100%', color: 'var(--color-green)',        text: 'Segura',        class: 'success' },
+      { pct: '0%',   color: '',                     text: '',        class: '' },
+      { pct: '33%',  color: 'var(--color-danger)',  text: 'Débil',   class: 'danger' },
+      { pct: '66%',  color: 'var(--color-warning)', text: 'Moderada',class: 'warning' },
+      { pct: '100%', color: 'var(--color-green)',   text: 'Segura',  class: 'success' },
     ];
 
     const lvl = levels[strength];
@@ -195,14 +187,13 @@
   function getStrength(pass) {
     if (!pass) return 0;
     let score = 0;
-    if (pass.length >= 8)              score++;
-    if (/[A-Z]/.test(pass))            score++;
-    if (/[0-9]/.test(pass))            score++;
-    if (/[^A-Za-z0-9]/.test(pass))    score++;
+    if (pass.length >= 8)           score++;
+    if (/[A-Z]/.test(pass))         score++;
+    if (/[0-9]/.test(pass))         score++;
+    if (/[^A-Za-z0-9]/.test(pass)) score++;
     return Math.min(score > 2 ? 3 : score > 1 ? 2 : 1, 3);
   }
 
-  // Toggle passwords paso 3
   setupToggle('toggleNew',     'newpass',     'eyeNew',     'eyeNewOff');
   setupToggle('toggleConfirm', 'confirmpass', 'eyeConfirm', 'eyeConfirmOff');
 
@@ -236,12 +227,12 @@
     try {
       /**
        * TODO: reemplazar con llamada real al backend
-       * await fetch('/api/auth/nueva-password', { method:'POST', body: JSON.stringify({ email: emailUsuario, password: newVal }) });
+       * await fetch('/api/auth/nueva-password', { method:'POST', body: JSON.stringify({ email: _emailUsuario, password: newVal }) });
        */
       await simulate(1500);
       goToStep(4);
 
-    } catch (err) {
+    } catch {
       setError(newpassInput, errorNew, 'No se pudo guardar. Intenta nuevamente.');
     } finally {
       setLoading(btn, loader, false);
@@ -274,7 +265,7 @@
   document.getElementById('btnResend').addEventListener('click', async () => {
     /**
      * TODO: llamada al backend para reenviar
-     * await fetch('/api/auth/recuperar', { method:'POST', body: JSON.stringify({ email: emailUsuario }) });
+     * await fetch('/api/auth/recuperar', { method:'POST', body: JSON.stringify({ email: _emailUsuario }) });
      */
     startResendTimer();
     otpInputs.forEach(i => { i.value = ''; i.classList.remove('is-filled', 'is-error'); });
@@ -297,7 +288,7 @@
 
   function setLoading(btn, loader, state) {
     btn.disabled = state;
-    btn.querySelector('.btn-text').style.display  = state ? 'none' : 'flex';
+    btn.querySelector('.btn-text').style.display = state ? 'none' : 'flex';
     loader.style.display = state ? 'flex' : 'none';
   }
 
@@ -306,7 +297,7 @@
       const inp = document.getElementById(inputId);
       const isPwd = inp.type === 'password';
       inp.type = isPwd ? 'text' : 'password';
-      document.getElementById(eyeId).style.display    = isPwd ? 'none' : 'block';
+      document.getElementById(eyeId).style.display    = isPwd ? 'none'  : 'block';
       document.getElementById(eyeOffId).style.display = isPwd ? 'block' : 'none';
     });
   }

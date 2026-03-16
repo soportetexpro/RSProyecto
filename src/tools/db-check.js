@@ -21,7 +21,7 @@ const { pool, testConnection } = require('../config/db');
     console.error(err && err.message ? err.message : err);
     if (err && err.code) console.error('Código SQL/error:', err.code);
     if (err && err.sqlMessage) console.error('sqlMessage:', err.sqlMessage);
-    try { await pool.end(); } catch (_) {}
+    try { await pool.end(); } catch { /* ignorar error al cerrar pool */ }
     process.exit(2);
   }
 })();
