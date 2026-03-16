@@ -102,7 +102,10 @@ router.get('/me', verifyToken, async (req, res) => {
       return res.status(401).json({ ok: false, error: 'Usuario no encontrado o inactivo' });
     }
 
-    const { password: _pw, ...usuarioSinPassword } = usuario;
+    // Omitir password sin asignar variable intermedia
+    const usuarioSinPassword = Object.fromEntries(
+      Object.entries(usuario).filter(([k]) => k !== 'password')
+    );
 
     return res.status(200).json({ ok: true, user: usuarioSinPassword });
 
