@@ -20,18 +20,10 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
 // ── Ruta raíz → redirige al login ──────────────────────────
-
-app.use(express.static(path.join(__dirname, '..')));
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
-
-efff6ea (feat(server): express.static + redirección / al login)
 app.get('/', (_req, res) => {
   res.redirect('/src/login/index.html');
 });
 
-
-efff6ea (feat(server): express.static + redirección / al login)
 app.get('/api/health', async (_req, res) => {
   try {
     await testConnection();
@@ -41,24 +33,16 @@ app.get('/api/health', async (_req, res) => {
   }
 });
 
-
 // ── Rutas API ──────────────────────────────────────────
 app.use('/api/auth', authRoutes);
 app.use('/api/auth', recuperarRoutes);
 
 // ── 404 ─────────────────────────────────────────────────
-
-app.use('/api/auth', authRoutes);
-app.use('/api/auth', recuperarRoutes);
-
-efff6ea (feat(server): express.static + redirección / al login)
 app.use((req, res) => {
   res.status(404).json({ ok: false, error: `Ruta no encontrada: ${req.method} ${req.originalUrl}` });
 });
 
-
 // ── 500 ─────────────────────────────────────────────────
-efff6ea (feat(server): express.static + redirección / al login)
 app.use((err, _req, res, _next) => {
   console.error(err);
   res.status(500).json({ ok: false, error: 'Error interno del servidor' });
