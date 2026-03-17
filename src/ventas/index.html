@@ -9,11 +9,12 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Open+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="../assets/styles/tokens.css" />
+  <link rel="stylesheet" href="../dashboard/dashboard.css" />
   <link rel="stylesheet" href="ventas.css" />
 </head>
 <body>
 
-  <!-- SIDEBAR (mismo patrón que dashboard) -->
+  <!-- SIDEBAR -->
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-header">
       <img src="../assets/images/isotipo-texpro.jpg" alt="Texpro" class="sidebar-logo" onerror="this.style.display='none'" />
@@ -60,28 +61,24 @@
     <main class="main-content" id="mainContent">
 
       <!-- FILTROS -->
-      <section class="ventas-filtros" id="ventasFiltros">
+      <section class="ventas-filtros">
         <div class="filtros-card">
           <h3 class="filtros-titulo">Filtros</h3>
           <div class="filtros-grid">
-
+            <div class="filtro-grupo">
+              <label class="filtro-label" for="filtroMes">Mes</label>
+              <select class="filtro-select" id="filtroMes"></select>
+            </div>
+            <div class="filtro-grupo">
+              <label class="filtro-label" for="filtroAnio">Año</label>
+              <select class="filtro-select" id="filtroAnio"></select>
+            </div>
             <div class="filtro-grupo">
               <label class="filtro-label" for="filtroVendedor">Vendedor</label>
               <select class="filtro-select" id="filtroVendedor">
                 <option value="">Todos</option>
               </select>
             </div>
-
-            <div class="filtro-grupo">
-              <label class="filtro-label" for="filtroFechaDesde">Desde</label>
-              <input class="filtro-input" type="date" id="filtroFechaDesde" />
-            </div>
-
-            <div class="filtro-grupo">
-              <label class="filtro-label" for="filtroFechaHasta">Hasta</label>
-              <input class="filtro-input" type="date" id="filtroFechaHasta" />
-            </div>
-
             <div class="filtro-grupo filtro-grupo--btn">
               <button class="btn-buscar" id="btnBuscar">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
@@ -89,14 +86,13 @@
               </button>
               <button class="btn-limpiar" id="btnLimpiar">Limpiar</button>
             </div>
-
           </div>
         </div>
       </section>
 
       <!-- KPIs -->
-      <section class="ventas-kpis" id="ventasKpis">
-        <div class="kpi-card" id="kpiTotalVentas">
+      <section class="ventas-kpis">
+        <div class="kpi-card">
           <div class="kpi-icono kpi-icono--verde">
             <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="1" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
           </div>
@@ -105,18 +101,16 @@
             <span class="kpi-valor" id="kpiValorTotal">—</span>
           </div>
         </div>
-
-        <div class="kpi-card" id="kpiCantidadPedidos">
+        <div class="kpi-card">
           <div class="kpi-icono kpi-icono--azul">
             <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
           </div>
           <div class="kpi-info">
-            <span class="kpi-label">Nº Pedidos</span>
+            <span class="kpi-label">Nº Folios</span>
             <span class="kpi-valor" id="kpiValorPedidos">—</span>
           </div>
         </div>
-
-        <div class="kpi-card" id="kpiTicketPromedio">
+        <div class="kpi-card">
           <div class="kpi-icono kpi-icono--naranja">
             <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
           </div>
@@ -125,52 +119,48 @@
             <span class="kpi-valor" id="kpiValorTicket">—</span>
           </div>
         </div>
-
-        <div class="kpi-card" id="kpiCumplimientoMeta">
+        <div class="kpi-card">
           <div class="kpi-icono kpi-icono--morado">
             <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
           </div>
           <div class="kpi-info">
-            <span class="kpi-label">Cumplimiento Meta</span>
-            <span class="kpi-valor" id="kpiValorMeta">—</span>
+            <span class="kpi-label">Descuento Total</span>
+            <span class="kpi-valor" id="kpiValorDescuento">—</span>
           </div>
         </div>
       </section>
 
-      <!-- TABLA DE VENTAS -->
+      <!-- TABLA -->
       <section class="ventas-tabla-seccion">
         <div class="tabla-card">
           <div class="tabla-header">
             <h3 class="tabla-titulo">Detalle de Ventas</h3>
             <div class="tabla-acciones">
-              <input class="tabla-busqueda" type="text" id="tablaBusqueda" placeholder="Buscar por cliente, folio..." />
+              <input class="tabla-busqueda" type="text" id="tablaBusqueda" placeholder="Buscar folio o cliente..." />
               <button class="btn-exportar" id="btnExportar">
                 <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
                 Exportar CSV
               </button>
             </div>
           </div>
-
           <div class="tabla-wrapper">
             <table class="ventas-tabla" id="ventasTabla">
               <thead>
                 <tr>
-                  <th data-col="folio">Folio <span class="sort-icon">⇅</span></th>
-                  <th data-col="fecha">Fecha <span class="sort-icon">⇅</span></th>
+                  <th data-col="Folio">Folio <span class="sort-icon">⇅</span></th>
+                  <th data-col="fecha_formato">Fecha <span class="sort-icon">⇅</span></th>
                   <th data-col="cliente">Cliente <span class="sort-icon">⇅</span></th>
-                  <th data-col="vendedor">Vendedor <span class="sort-icon">⇅</span></th>
-                  <th data-col="neto">Neto <span class="sort-icon">⇅</span></th>
-                  <th data-col="estado">Estado</th>
+                  <th data-col="CodVendedor">Vendedor <span class="sort-icon">⇅</span></th>
+                  <th data-col="monto">Monto <span class="sort-icon">⇅</span></th>
+                  <th data-col="descuento">Descuento <span class="sort-icon">⇅</span></th>
+                  <th>Detalle</th>
                 </tr>
               </thead>
               <tbody id="ventasTbody">
-                <tr class="tabla-empty">
-                  <td colspan="6">Aplica los filtros para ver las ventas</td>
-                </tr>
+                <tr class="tabla-empty"><td colspan="7">Aplica los filtros para ver las ventas</td></tr>
               </tbody>
             </table>
           </div>
-
           <div class="tabla-footer">
             <span class="tabla-total" id="tablaTotal">0 registros</span>
             <div class="paginacion" id="paginacion"></div>
@@ -184,6 +174,43 @@
       <span>Texpro Productos Químicos y Tratamiento de Aguas</span>
       <span class="footer-version">v1.0.0</span>
     </footer>
+  </div>
+
+  <!-- MODAL DETALLE FOLIO -->
+  <div class="modal-overlay" id="modalOverlay" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitulo">
+      <div class="modal-header">
+        <div class="modal-titulo-grupo">
+          <h2 class="modal-titulo" id="modalTitulo">Detalle Folio</h2>
+          <span class="modal-subtitulo" id="modalSubtitulo"></span>
+        </div>
+        <button class="modal-cerrar" id="modalCerrar" aria-label="Cerrar">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+      </div>
+      <div class="modal-resumen" id="modalResumen"></div>
+      <div class="modal-body">
+        <table class="modal-tabla" id="modalTabla">
+          <thead>
+            <tr>
+              <th>Cód. Producto</th>
+              <th>Descripción</th>
+              <th>Cantidad</th>
+              <th>Precio Unitario</th>
+              <th>Precio Hoy</th>
+              <th>Total Línea</th>
+            </tr>
+          </thead>
+          <tbody id="modalTbody">
+            <tr><td colspan="6" style="text-align:center;padding:2rem">Cargando...</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="modal-footer">
+        <span class="modal-total-label">Total Folio:</span>
+        <span class="modal-total-valor" id="modalTotalValor">—</span>
+      </div>
+    </div>
   </div>
 
   <script src="ventas.js"></script>
