@@ -8,6 +8,7 @@ const { testConnection } = require('./config/db');
 const authRoutes         = require('./routes/auth');
 const recuperarRoutes    = require('./routes/recuperar');
 const ventasRoutes       = require('./routes/ventas');
+const dashboardRoutes    = require('./routes/dashboard');
 
 const app  = express();
 const PORT = Number(process.env.PORT || 3000);
@@ -35,9 +36,10 @@ app.get('/api/health', async (_req, res) => {
 });
 
 // ── Rutas API ─────────────────────────────────────────────────────────
-app.use('/api/auth',   authRoutes);
-app.use('/api/auth',   recuperarRoutes);
-app.use('/api/ventas', ventasRoutes);
+app.use('/api/auth',      authRoutes);
+app.use('/api/auth',      recuperarRoutes);
+app.use('/api/ventas',    ventasRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 
 // ── 404 ──────────────────────────────────────────────────────────────
 app.use((req, res) => {
