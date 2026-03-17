@@ -1,17 +1,24 @@
 'use strict';
 
 /**
- * usuario.js — Modelo de ventas_usuario
+ * usuario.js — Modelo de la tabla `usuario`
  *
  * LOGIN: solo findByEmail + updateLastLogin (email + password)
  * Las relaciones (vendedores, metas, permisos, facturas) se cargan
  * en cada módulo que las necesite, no en el login.
+ *
+ * Tablas:
+ *   usuario           — usuarios del sistema (autenticación)
+ *   usuario_vendedor  — códigos de vendedor por usuario
+ *   usuario_permiso   — permisos adicionales
+ *   vendedor_meta     — metas anuales
+ *   tasas_descuentos  — tasas de descuento (auxiliar)
  */
 
 const { pool } = require('../config/db');
 
 // ───────────────────────────────────────────────────────────────
-// ventas_usuario
+// Tabla: usuario
 // ───────────────────────────────────────────────────────────────
 
 /**
@@ -22,7 +29,7 @@ async function findByEmail(email) {
   const [rows] = await pool.execute(
     `SELECT id, password, last_login, nombre, email, area,
             codigo, tema, is_active, is_admin, fecha_creacion
-     FROM ventas_usuario
+     FROM usuario
      WHERE email = ?
      LIMIT 1`,
     [email]
@@ -38,7 +45,7 @@ async function findById(id) {
   const [rows] = await pool.execute(
     `SELECT id, last_login, nombre, email, area,
             codigo, tema, is_active, is_admin, fecha_creacion
-     FROM ventas_usuario
+     FROM usuario
      WHERE id = ?
      LIMIT 1`,
     [id]
@@ -51,7 +58,7 @@ async function findById(id) {
  */
 async function updateLastLogin(usuarioId) {
   const [result] = await pool.execute(
-    'UPDATE ventas_usuario SET last_login = NOW(6) WHERE id = ?',
+    'UPDATE usuario SET last_login = NOW(6) WHERE id = ?',
     [usuarioId]
   );
   return result.affectedRows > 0;
