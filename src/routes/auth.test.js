@@ -11,8 +11,17 @@ const app     = require('../server');
 jest.mock('../models/usuario');
 jest.mock('../utils/pbkdf2Django');
 
-const { findByEmail, findById, updateLastLogin } = require('../models/usuario');
+const {
+  findByEmail,
+  findById,
+  updateLastLogin,
+  getVendedoresByUsuarioId,
+  getMetasByUsuarioId
+} = require('../models/usuario');
 const { verifyPasswordDjango } = require('../utils/pbkdf2Django');
+
+const MOCK_VENDEDORES = [{ id: 15, cod_vendedor: '194', tipo: 'P', usuario_id: 7 }];
+const MOCK_METAS      = [{ id: 22, fecha: '2023-01-01', meta: '8072983.97', usuario_id: 7 }];
 
 const MOCK_USUARIO = {
   id:             7,
@@ -75,6 +84,8 @@ describe('POST /api/auth/login', () => {
     findByEmail.mockResolvedValue(MOCK_USUARIO);
     verifyPasswordDjango.mockReturnValue(true);
     updateLastLogin.mockResolvedValue(true);
+    getVendedoresByUsuarioId.mockResolvedValue(MOCK_VENDEDORES);
+    getMetasByUsuarioId.mockResolvedValue(MOCK_METAS);
 
     const res = await request(app).post('/api/auth/login').send({ email: 'csoto@texpro.cl', password: 'correctpass' });
 
@@ -85,12 +96,16 @@ describe('POST /api/auth/login', () => {
     expect(res.body.user).toBeDefined();
     expect(res.body.user.password).toBeUndefined();
     expect(res.body.user.email).toBe('csoto@texpro.cl');
+    expect(res.body.user.vendedores).toEqual(MOCK_VENDEDORES);
+    expect(res.body.user.metas).toEqual(MOCK_METAS);
   });
 
   test('token generado contiene payload correcto', async () => {
     findByEmail.mockResolvedValue(MOCK_USUARIO);
     verifyPasswordDjango.mockReturnValue(true);
     updateLastLogin.mockResolvedValue(true);
+    getVendedoresByUsuarioId.mockResolvedValue(MOCK_VENDEDORES);
+    getMetasByUsuarioId.mockResolvedValue(MOCK_METAS);
 
     const res     = await request(app).post('/api/auth/login').send({ email: 'csoto@texpro.cl', password: 'pass' });
     const payload = jwt.verify(res.body.token, process.env.JWT_SECRET);
