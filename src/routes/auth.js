@@ -2,7 +2,7 @@
 
 const express  = require('express');
 const jwt      = require('jsonwebtoken');
-const { getUsuarioCompletoByEmail, findById, updateLastLogin } = require('../models/usuario');
+const { findByEmail, findById, updateLastLogin } = require('../models/usuario');
 const { verifyPasswordDjango } = require('../utils/pbkdf2Django');
 const { verifyToken }          = require('../utils/verifyToken');
 
@@ -26,7 +26,7 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'Email y contraseña son requeridos' });
     }
 
-    const usuario = await getUsuarioCompletoByEmail(email);
+    const usuario = await findByEmail(email);
 
     if (!usuario) {
       return res.status(401).json({ ok: false, error: 'Credenciales inválidas' });
