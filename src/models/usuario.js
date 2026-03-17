@@ -15,6 +15,7 @@
  *   tasas_descuentos  — tasas de descuento (auxiliar)
  */
 
+const crypto   = require('crypto');
 const { pool } = require('../config/db');
 
 // ───────────────────────────────────────────────────────────────
@@ -60,6 +61,40 @@ async function updateLastLogin(usuarioId) {
   const [result] = await pool.execute(
     'UPDATE usuario SET last_login = NOW(6) WHERE id = ?',
     [usuarioId]
+  );
+  return result.affectedRows > 0;
+}
+
+/**
+ * Genera un hash PBKDF2-SHA256 en formato Django y actualiza la
+ * contraseña del usuario en la tabla `usuario`.
+ *
+ * Formato: pbkdf2_sha256$<iter>$<salt>$<hash_b64>
+ * Iteraciones: 600000 (mismo que Django 4.x)
+ *
+ * @param {string} email      — email del usuario
+ * @param {string} nuevaPass  — contraseña en texto plano
+ * @returns {Promise<boolean>} true si se actualizó, false si no existe
+ */
+async function updatePassword(email, nuevaPass) {
+  const ITERATIONS = 600000;
+  const KEYLEN     = 32;
+  const DIGEST     = 'sha256';
+  const salt       = crypto.randomBytes(12).toString('base64url').slice(0, 22);
+
+  const derived = crypto.pbkdf2Sync(
+    Buffer.from(nuevaPass, 'utf8'),
+    Buffer.from(salt, 'utf8'),
+    ITERATIONS,
+    KEYLEN,
+    DIGEST
+  ).toString('base64');
+
+  const hash = `pbkdf2_sha256$${ITERATIONS}$${salt}$${derived}`;
+
+  const [result] = await pool.execute(
+    'UPDATE usuario SET password = ? WHERE email = ? AND is_active = 1',
+    [hash, email]
   );
   return result.affectedRows > 0;
 }
@@ -118,6 +153,7 @@ module.exports = {
   findByEmail,
   findById,
   updateLastLogin,
+  updatePassword,
   getVendedoresByUsuarioId,
   getPermisosByUsuarioId,
   getMetasByUsuarioId,

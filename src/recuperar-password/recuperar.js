@@ -1,16 +1,20 @@
 // recuperar.js - RSProyecto Texpro
-// Flujo de 3 pasos: Email -> Codigo OTP -> Nueva contrasena
+// Flujo de 3 pasos: Email -> Codigo OTP -> Nueva contraseña
+// Conectado con API: /api/auth/recuperar, /verificar-otp, /nueva-password
 
 (function () {
   'use strict';
+
+  const API_BASE = window.API_BASE || 'http://localhost:3000';
 
   // Referencias de pasos
   const steps     = [null, 'step1', 'step2', 'step3', 'step4'];
   const stepDots  = [null, 'stepDot1', 'stepDot2', 'stepDot3'];
   const stepLines = ['stepLine1', 'stepLine2'];
 
-  // Estado del flujo — se actualiza al avanzar pasos
-  let emailFlujo = ''; // eslint-disable-line no-unused-vars
+  // Estado del flujo
+  let emailFlujo  = '';
+  let resetToken  = '';
 
   function goToStep(next) {
     document.querySelectorAll('.step-content').forEach(el => el.classList.remove('active'));
@@ -36,7 +40,7 @@
     }
   }
 
-  // PASO 1 - Validar email
+  // ── PASO 1: Enviar OTP al correo ────────────────────────────────
   document.getElementById('formStep1').addEventListener('submit', async (e) => {
     e.preventDefault();
     const emailInput = document.getElementById('email');
@@ -47,27 +51,37 @@
 
     if (!value) { setError(emailInput, errorEmail, 'El correo es requerido.'); return; }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
-      setError(emailInput, errorEmail, 'Ingresa un correo valido.'); return;
+      setError(emailInput, errorEmail, 'Ingresa un correo válido.'); return;
     }
     clearError(emailInput, errorEmail);
     setLoading(btn, loader, true);
 
     try {
-      // TODO: await fetch('/api/auth/recuperar', { method:'POST', body: JSON.stringify({ email: value }) });
-      await simulate(1500);
-      emailFlujo = value;
+      const res = await fetch(`${API_BASE}/api/auth/recuperar`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ email: value.toLowerCase() })
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(emailInput, errorEmail, data.error || 'No se pudo enviar el código.');
+        return;
+      }
+
+      emailFlujo = value.toLowerCase();
       document.getElementById('emailMostrado').textContent = maskEmail(value);
       goToStep(2);
       startResendTimer();
       document.getElementById('otp1').focus();
     } catch {
-      setError(emailInput, errorEmail, 'No se pudo enviar el codigo. Intenta nuevamente.');
+      setError(emailInput, errorEmail, 'No se pudo conectar con el servidor.');
     } finally {
       setLoading(btn, loader, false);
     }
   });
 
-  // PASO 2 - Validar OTP
+  // ── PASO 2: Verificar OTP ───────────────────────────────────────
   const otpInputs = Array.from({ length: 6 }, (_, i) => document.getElementById('otp' + (i + 1)));
 
   otpInputs.forEach((input, idx) => {
@@ -78,11 +92,12 @@
       else { input.classList.remove('is-filled'); }
     });
     input.addEventListener('keydown', (e) => {
-      if (e.key === 'Backspace' && !input.value && idx > 0) otpInputs[idx - 1].focus(); 
+      if (e.key === 'Backspace' && !input.value && idx > 0) otpInputs[idx - 1].focus();
     });
     input.addEventListener('paste', (e) => {
       e.preventDefault();
-      const pasted = (e.clipboardData || window.clipboardData).getData('text').replace(/[^0-9]/g, '').slice(0, 6);
+      const pasted = (e.clipboardData || window.clipboardData).getData('text')
+        .replace(/[^0-9]/g, '').slice(0, 6);
       pasted.split('').forEach((digit, i) => {
         if (otpInputs[i]) { otpInputs[i].value = digit; otpInputs[i].classList.add('is-filled'); }
       });
@@ -98,7 +113,7 @@
     const loader   = document.getElementById('loaderStep2');
 
     if (otpValue.length < 6) {
-      errorOtp.textContent = 'Ingresa los 6 digitos del codigo.';
+      errorOtp.textContent = 'Ingresa los 6 dígitos del código.';
       otpInputs.forEach(i => i.classList.add('is-error')); return;
     }
     errorOtp.textContent = '';
@@ -106,20 +121,32 @@
     setLoading(btn, loader, true);
 
     try {
-      // TODO: await fetch('/api/auth/verificar-otp', { method:'POST', body: JSON.stringify({ email: emailFlujo, otp: otpValue }) });
-      await simulate(1500);
-      if (otpValue !== '123456') throw new Error('Codigo incorrecto.');
+      const res = await fetch(`${API_BASE}/api/auth/verificar-otp`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ email: emailFlujo, otp: otpValue })
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        errorOtp.textContent = data.error || 'Código incorrecto o expirado.';
+        otpInputs.forEach(i => i.classList.add('is-error'));
+        return;
+      }
+
+      // Guarda el token temporal de reset
+      resetToken = data.resetToken;
       goToStep(3);
       document.getElementById('newpass').focus();
-    } catch (err) {
-      errorOtp.textContent = err.message;
+    } catch {
+      errorOtp.textContent = 'No se pudo conectar con el servidor.';
       otpInputs.forEach(i => i.classList.add('is-error'));
     } finally {
       setLoading(btn, loader, false);
     }
   });
 
-  // PASO 3 - Nueva contrasena
+  // ── PASO 3: Nueva contraseña ────────────────────────────────────
   const newpassInput     = document.getElementById('newpass');
   const confirmpassInput = document.getElementById('confirmpass');
 
@@ -129,7 +156,7 @@
     const label = document.getElementById('strengthLabel');
     const levels = [
       { pct: '0%',   color: '',                     text: '' },
-      { pct: '33%',  color: 'var(--color-danger)',  text: 'Debil' },
+      { pct: '33%',  color: 'var(--color-danger)',  text: 'Débil' },
       { pct: '66%',  color: 'var(--color-warning)', text: 'Moderada' },
       { pct: '100%', color: 'var(--color-green)',   text: 'Segura' }
     ];
@@ -162,30 +189,42 @@
     let valid        = true;
 
     if (!newVal || newVal.length < 8) {
-      setError(newpassInput, errorNew, 'Minimo 8 caracteres.'); valid = false;
+      setError(newpassInput, errorNew, 'Mínimo 8 caracteres.'); valid = false;
     } else { clearError(newpassInput, errorNew); }
 
     if (!confirmVal) {
-      setError(confirmpassInput, errorConf, 'Confirma tu contrasena.'); valid = false;
+      setError(confirmpassInput, errorConf, 'Confirma tu contraseña.'); valid = false;
     } else if (newVal !== confirmVal) {
-      setError(confirmpassInput, errorConf, 'Las contrasenas no coinciden.'); valid = false;
+      setError(confirmpassInput, errorConf, 'Las contraseñas no coinciden.'); valid = false;
     } else { clearError(confirmpassInput, errorConf); }
 
     if (!valid) return;
     setLoading(btn, loader, true);
 
     try {
-      // TODO: await fetch('/api/auth/nueva-password', { method:'POST', body: JSON.stringify({ email: emailFlujo, password: newVal }) });
-      await simulate(1500);
+      const res = await fetch(`${API_BASE}/api/auth/nueva-password`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ resetToken, password: newVal })
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(newpassInput, errorNew, data.error || 'No se pudo guardar. Intenta nuevamente.');
+        return;
+      }
+
+      // Limpia el token de reset
+      resetToken = '';
       goToStep(4);
     } catch {
-      setError(newpassInput, errorNew, 'No se pudo guardar. Intenta nuevamente.');
+      setError(newpassInput, errorNew, 'No se pudo conectar con el servidor.');
     } finally {
       setLoading(btn, loader, false);
     }
   });
 
-  // Timer reenviar (60s)
+  // ── Timer reenviar (60s) ────────────────────────────────────────
   let timerInterval = null;
 
   function startResendTimer() {
@@ -205,15 +244,22 @@
     }, 1000);
   }
 
-  document.getElementById('btnResend').addEventListener('click', () => {
-    // TODO: await fetch('/api/auth/recuperar', { method:'POST', body: JSON.stringify({ email: emailFlujo }) });
+  document.getElementById('btnResend').addEventListener('click', async () => {
     startResendTimer();
     otpInputs.forEach(i => { i.value = ''; i.classList.remove('is-filled', 'is-error'); });
     otpInputs[0].focus();
     document.getElementById('error-otp').textContent = '';
+
+    try {
+      await fetch(`${API_BASE}/api/auth/recuperar`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ email: emailFlujo })
+      });
+    } catch { /* silencioso — el timer ya dio feedback visual */ }
   });
 
-  // Utilidades
+  // ── Utilidades ──────────────────────────────────────────────────
   function setError(input, span, msg) { input.classList.add('is-error'); span.textContent = msg; }
   function clearError(input, span) { input.classList.remove('is-error'); span.textContent = ''; }
   function setLoading(btn, loader, state) {
@@ -234,6 +280,5 @@
     const [user, domain] = email.split('@');
     return user.slice(0, 2) + '***@' + domain;
   }
-  function simulate(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 
 })();

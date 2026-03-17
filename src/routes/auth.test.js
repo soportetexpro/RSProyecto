@@ -6,10 +6,21 @@
 
 const request = require('supertest');
 const jwt     = require('jsonwebtoken');
-const app     = require('../server');
 
+// ── Mocks ANTES de cargar app ──────────────────────────────────
 jest.mock('../models/usuario');
 jest.mock('../utils/pbkdf2Django');
+jest.mock('../utils/mailer', () => ({ enviarOtp: jest.fn().mockResolvedValue(undefined) }));
+jest.mock('../utils/otpStore', () => ({
+  crearOtp:    jest.fn().mockResolvedValue('123456'),
+  verificarOtp: jest.fn().mockResolvedValue(true)
+}));
+jest.mock('../config/db', () => ({
+  pool:           { execute: jest.fn() },
+  testConnection: jest.fn().mockResolvedValue(true)
+}));
+
+const app = require('../server');
 
 const {
   findByEmail,
