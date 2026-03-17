@@ -1,5 +1,6 @@
 'use strict';
 
+const path    = require('path');
 const express = require('express');
 require('dotenv').config();
 
@@ -9,11 +10,20 @@ const authRoutes        = require('./routes/auth');
 const app  = express();
 const PORT = Number(process.env.PORT || 3000);
 
-// ── Middlewares globales ──────────────────────────────────────────
+// ── Archivos estáticos (frontend) ─────────────────────────────
+// Sirve todo desde la raíz del proyecto → http://localhost:3000/src/login/index.html
+app.use(express.static(path.join(__dirname, '..')));
+
+// ── Middlewares globales ──────────────────────────────────
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// ── Healthcheck ───────────────────────────────────────────────────
+// ── Ruta raíz → redirige al login ──────────────────────────
+app.get('/', (_req, res) => {
+  res.redirect('/src/login/index.html');
+});
+
+// ── Healthcheck ────────────────────────────────────────
 app.get('/api/health', async (_req, res) => {
   try {
     await testConnection();
@@ -23,10 +33,10 @@ app.get('/api/health', async (_req, res) => {
   }
 });
 
-// ── Rutas ─────────────────────────────────────────────────────────
+// ── Rutas API ──────────────────────────────────────────
 app.use('/api/auth', authRoutes);
 
-// ── 404 ───────────────────────────────────────────────────────────
+// ── 404 ─────────────────────────────────────────────────
 app.use((req, res) => {
   res.status(404).json({
     ok: false,
@@ -34,7 +44,7 @@ app.use((req, res) => {
   });
 });
 
-// ── 500 ───────────────────────────────────────────────────────────
+// ── 500 ─────────────────────────────────────────────────
 app.use((err, _req, res, _next) => {
   console.error(err);
   res.status(500).json({ ok: false, error: 'Error interno del servidor' });
