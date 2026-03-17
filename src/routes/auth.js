@@ -7,12 +7,19 @@
  * GET  /api/auth/me      — datos del usuario autenticado (requiere JWT)
  * POST /api/auth/logout  — logout (el cliente descarta el token)
  *
- * El login SOLO verifica credenciales y retorna datos básicos del usuario.
- * Las relaciones (vendedores, metas, permisos) se cargan en cada módulo.
+ * Relaciones cargadas en el login (para evitar requests extras en el dashboard):
+ *   - vendedores  (códigos de vendedor del usuario)
+ *   - metas       (metas anuales de venta)
  */
 
 const express = require('express');
-const { findByEmail, updateLastLogin, findById } = require('../models/usuario');
+const {
+  findByEmail,
+  updateLastLogin,
+  findById,
+  getVendedoresByUsuarioId,
+  getMetasByUsuarioId
+} = require('../models/usuario');
 const { verifyPasswordDjango } = require('../utils/pbkdf2Django');
 const { generarToken }         = require('../utils/jwt');
 const { requireAuth }          = require('../middlewares/requireAuth');
@@ -22,7 +29,7 @@ const router = express.Router();
 // ─────────────────────────────────────────────────────────────────
 // POST /api/auth/login
 // Body: { email: string, password: string }
-// Respuesta: { ok, token, expiresIn, user: { datos básicos sin password } }
+// Respuesta: { ok, token, expiresIn, user: { datos básicos + vendedores + metas } }
 // ─────────────────────────────────────────────────────────────────
 router.post('/login', async (req, res) => {
   try {
@@ -57,7 +64,12 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ ok: false, error: 'Credenciales inválidas' });
     }
 
-    await updateLastLogin(usuario.id);
+    // Ejecutar en paralelo: last_login + relaciones del usuario
+    const [vendedores, metas] = await Promise.all([
+      getVendedoresByUsuarioId(usuario.id),
+      getMetasByUsuarioId(usuario.id),
+      updateLastLogin(usuario.id)
+    ]);
 
     const token = generarToken({
       id:       usuario.id,
@@ -80,7 +92,9 @@ router.post('/login', async (req, res) => {
         is_admin:       Boolean(usuario.is_admin),
         is_active:      Boolean(usuario.is_active),
         last_login:     usuario.last_login,
-        fecha_creacion: usuario.fecha_creacion
+        fecha_creacion: usuario.fecha_creacion,
+        vendedores,
+        metas
       }
     });
 

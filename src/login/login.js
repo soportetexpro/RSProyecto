@@ -12,12 +12,12 @@
 (function () {
   'use strict';
 
-  // ── Configuración ─────────────────────────────────────────────
-  const API_BASE = window.API_BASE || 'http://localhost:3000';
-  const LOGIN_URL = `${API_BASE}/api/auth/login`;
+  // ── Configuración ────────────────────────────────────────────
+  const API_BASE    = window.API_BASE || 'http://localhost:3000';
+  const LOGIN_URL   = `${API_BASE}/api/auth/login`;
   const DASHBOARD_URL = '../dashboard/index.html';
 
-  // ── Referencias DOM ─────────────────────────────────────────
+  // ── Referencias DOM ───────────────────────────────────────
   const form         = document.getElementById('loginForm');
   const inputUsuario = document.getElementById('usuario');
   const inputPass    = document.getElementById('password');
@@ -30,7 +30,7 @@
   const iconEye      = document.getElementById('icon-eye');
   const iconEyeOff   = document.getElementById('icon-eye-off');
 
-  // ── Toggle mostrar/ocultar contraseña ────────────────────────
+  // ── Toggle mostrar/ocultar contraseña ─────────────────────
   togglePass.addEventListener('click', () => {
     const isPassword = inputPass.type === 'password';
     inputPass.type = isPassword ? 'text' : 'password';
@@ -39,11 +39,11 @@
     togglePass.setAttribute('aria-label', isPassword ? 'Ocultar contraseña' : 'Mostrar contraseña');
   });
 
-  // ── Limpiar errores al escribir ─────────────────────────────
+  // ── Limpiar errores al escribir ─────────────────────────
   inputUsuario.addEventListener('input', () => clearFieldError('usuario'));
   inputPass.addEventListener('input',    () => clearFieldError('password'));
 
-  // ── Validación de campos ──────────────────────────────────
+  // ── Validación de campos ──────────────────────────────
   function validateFields() {
     let valid = true;
     const email = inputUsuario.value.trim();
@@ -83,28 +83,29 @@
     alertError.style.display = 'none';
   }
 
-  // ── Estado de carga ────────────────────────────────────────
+  // ── Estado de carga ──────────────────────────────────
   function setLoading(state) {
     btnLogin.disabled       = state;
     btnText.style.display   = state ? 'none' : 'flex';
     btnLoader.style.display = state ? 'flex' : 'none';
   }
 
-  // ── Guardar sesión en sessionStorage ───────────────────────
+  // ── Guardar sesión en sessionStorage ─────────────────────
   function saveSession(user) {
     sessionStorage.setItem('texpro_user', JSON.stringify({
-      id:        user.id,
-      nombre:    user.nombre,
-      email:     user.email,
-      area:      user.area,
-      codigo:    user.codigo,
-      tema:      user.tema,
-      is_admin:  user.is_admin,
-      vendedores: user.vendedores
+      id:         user.id,
+      nombre:     user.nombre,
+      email:      user.email,
+      area:       user.area,
+      codigo:     user.codigo,
+      tema:       user.tema,
+      is_admin:   user.is_admin,
+      vendedores: user.vendedores || [],
+      metas:      user.metas      || []
     }));
   }
 
-  // ── Submit del formulario ─────────────────────────────────
+  // ── Submit del formulario ────────────────────────────
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     alertError.style.display = 'none';
@@ -126,9 +127,7 @@
       const data = await response.json();
 
       if (!response.ok) {
-        // 401, 403, 400 — mostrar mensaje del servidor
         const msg = data.error || 'Error de autenticación.';
-
         if (response.status === 403) {
           showAlert('Cuenta inactiva. Contacta a soporte.');
         } else {
@@ -142,7 +141,6 @@
       window.location.href = DASHBOARD_URL;
 
     } catch {
-      // Error de red o servidor caído
       showAlert('No se pudo conectar con el servidor. Verifica tu conexión.');
     } finally {
       setLoading(false);
@@ -154,7 +152,7 @@
     alertError.style.display = 'flex';
   }
 
-  // ── Enter en campo email pasa al password ──────────────────
+  // ── Enter en campo email pasa al password ────────────────
   inputUsuario.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
