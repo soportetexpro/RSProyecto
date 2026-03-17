@@ -1,41 +1,64 @@
 'use strict';
 
+ HEAD
 const express  = require('express');
 const jwt      = require('jsonwebtoken');
 const { findByEmail, findById, updateLastLogin } = require('../models/usuario');
+
+/**
+ * auth.js — Rutas de autenticación
+ *
+ * POST /api/auth/login   — login con email + password, retorna JWT
+ * GET  /api/auth/me      — datos del usuario autenticado (requiere JWT)
+ * POST /api/auth/logout  — logout (el cliente descarta el token)
+ *
+ * El login SOLO verifica credenciales y retorna datos básicos del usuario.
+ * Las relaciones (vendedores, metas, permisos) se cargan en cada módulo.
+ */
+
+const express = require('express');
+const { findByEmail, updateLastLogin, findById } = require('../models/usuario');
+dcb0c2287d95a7244a7c012752b89b40d4ce540
 const { verifyPasswordDjango } = require('../utils/pbkdf2Django');
-const { verifyToken }          = require('../utils/verifyToken');
+const { generarToken }         = require('../utils/jwt');
+const { requireAuth }          = require('../middlewares/requireAuth');
 
 const router = express.Router();
 
-// ── POST /api/auth/login ──────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────
+// POST /api/auth/login
+// Body: { email: string, password: string }
+// Respuesta: { ok, token, expiresIn, user: { datos básicos sin password } }
+// ─────────────────────────────────────────────────────────────────
 router.post('/login', async (req, res) => {
-  const JWT_SECRET     = process.env.JWT_SECRET;
-  const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '8h';
-
   try {
-    if (!JWT_SECRET) {
-      console.error('[auth/login] JWT_SECRET no definido en .env');
-      return res.status(500).json({ ok: false, error: 'Error de configuración del servidor' });
-    }
-
     const email    = String(req.body.email    || '').trim().toLowerCase();
     const password = String(req.body.password || '').trim();
 
+    // 1. Validar campos requeridos
     if (!email || !password) {
-      return res.status(400).json({ ok: false, error: 'Email y contraseña son requeridos' });
+      return res.status(400).json({
+        ok:    false,
+        error: 'Email y contraseña son requeridos'
+      });
     }
 
+
+    // 2. Buscar usuario por email en ventas_usuario
+dcb0c2287d95a7244a7c012752b89b40d4ce540
     const usuario = await findByEmail(email);
 
+    // 3. No revelar si el email existe o no (evita enumeración)
     if (!usuario) {
       return res.status(401).json({ ok: false, error: 'Credenciales inválidas' });
     }
 
+    // 4. Verificar que la cuenta esté activa
     if (!usuario.is_active) {
       return res.status(403).json({ ok: false, error: 'Cuenta inactiva. Contacta a soporte.' });
     }
 
+    // 5. Verificar contraseña contra hash PBKDF2-SHA256 de Django
     let isValid = false;
     try {
       isValid = verifyPasswordDjango(password, usuario.password);
@@ -47,44 +70,34 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ ok: false, error: 'Credenciales inválidas' });
     }
 
+    // 6. Actualizar last_login
     await updateLastLogin(usuario.id);
 
-    const payload = {
+    // 7. Generar JWT
+    const token = generarToken({
       id:       usuario.id,
       email:    usuario.email,
-      nombre:   usuario.nombre,
-      area:     usuario.area,
-      codigo:   usuario.codigo,
-      is_admin: Boolean(usuario.is_admin)
-    };
-
-    const token = jwt.sign(payload, JWT_SECRET, {
-      expiresIn: JWT_EXPIRES_IN,
-      issuer:    'rsproyecto-texpro'
+      is_admin: usuario.is_admin
     });
 
-    const responseUser = {
-      id:                  usuario.id,
-      nombre:              usuario.nombre,
-      email:               usuario.email,
-      area:                usuario.area,
-      codigo:              usuario.codigo,
-      tema:                usuario.tema,
-      is_admin:            Boolean(usuario.is_admin),
-      is_active:           Boolean(usuario.is_active),
-      last_login:          usuario.last_login,
-      fecha_creacion:      usuario.fecha_creacion,
-      vendedores:          usuario.vendedores,
-      permisos:            usuario.permisos,
-      metas:               usuario.metas,
-      facturasCompartidas: usuario.facturasCompartidas
-    };
-
+    // 8. Respuesta — solo datos básicos del usuario, sin password ni relaciones
     return res.status(200).json({
-      ok:      true,
-      message: 'Login correcto',
+      ok:        true,
+      message:   'Login correcto',
       token,
-      user:    responseUser
+      expiresIn: process.env.JWT_EXPIRES_IN || '8h',
+      user: {
+        id:             usuario.id,
+        nombre:         usuario.nombre,
+        email:          usuario.email,
+        area:           usuario.area,
+        codigo:         usuario.codigo,
+        tema:           usuario.tema,
+        is_admin:       Boolean(usuario.is_admin),
+        is_active:      Boolean(usuario.is_active),
+        last_login:     usuario.last_login,
+        fecha_creacion: usuario.fecha_creacion
+      }
     });
 
   } catch (err) {
@@ -93,33 +106,30 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// ── GET /api/auth/me ──────────────────────────────────────────────
-router.get('/me', verifyToken, async (req, res) => {
+// ─────────────────────────────────────────────────────────────────
+// GET /api/auth/me   — ruta protegida
+// Header: Authorization: Bearer <token>
+// Retorna datos básicos actualizados del usuario autenticado
+// ─────────────────────────────────────────────────────────────────
+router.get('/me', requireAuth, async (req, res) => {
   try {
-    const usuario = await findById(req.user.id);
-
+    const usuario = await findById(req.usuario.sub);
     if (!usuario || !usuario.is_active) {
-      return res.status(401).json({ ok: false, error: 'Usuario no encontrado o inactivo' });
+      return res.status(401).json({ ok: false, error: 'Sesión inválida.' });
     }
-
-    const usuarioSinPassword = Object.fromEntries(
-      Object.entries(usuario).filter(([k]) => k !== 'password')
-    );
-
-    return res.status(200).json({ ok: true, user: usuarioSinPassword });
-
+    return res.status(200).json({ ok: true, user: usuario });
   } catch (err) {
     console.error('[auth/me]', err);
-    return res.status(500).json({ ok: false, error: 'Error al obtener usuario' });
+    return res.status(500).json({ ok: false, error: 'Error al obtener usuario.' });
   }
 });
 
-// ── POST /api/auth/logout ─────────────────────────────────────────
-router.post('/logout', verifyToken, (_req, res) => {
-  return res.status(200).json({
-    ok:      true,
-    message: 'Sesión cerrada. Elimina el token del cliente.'
-  });
+// ─────────────────────────────────────────────────────────────────
+// POST /api/auth/logout   — ruta protegida
+// El JWT es stateless: el cliente descarta el token.
+// ─────────────────────────────────────────────────────────────────
+router.post('/logout', requireAuth, (_req, res) => {
+  return res.status(200).json({ ok: true, message: 'Sesión cerrada correctamente.' });
 });
 
 module.exports = router;

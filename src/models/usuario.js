@@ -1,26 +1,35 @@
 'use strict';
 
 /**
- * usuario.js — Modelo principal
- * Mapea ventas_usuario y sus tablas relacionadas:
- *   - usuario_vendedor
- *   - usuario_permiso
- *   - vendedor_meta
- *   - factura_compartida
- *   - tasas_descuentos (auxiliar)
+ * usuario.js — Modelo de la tabla `usuario`
+ *
+ * LOGIN: solo findByEmail + updateLastLogin (email + password)
+ * Las relaciones (vendedores, metas, permisos, facturas) se cargan
+ * en cada módulo que las necesite, no en el login.
+ *
+ * Tablas:
+ *   usuario           — usuarios del sistema (autenticación)
+ *   usuario_vendedor  — códigos de vendedor por usuario
+ *   usuario_permiso   — permisos adicionales
+ *   vendedor_meta     — metas anuales
+ *   tasas_descuentos  — tasas de descuento (auxiliar)
  */
 
 const { pool } = require('../config/db');
 
-// ─────────────────────────────────────────────────────────────────
-// ventas_usuario
-// ─────────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────────────
+// Tabla: usuario
+// ───────────────────────────────────────────────────────────────
 
+/**
+ * Busca un usuario por email (incluye password para verificación).
+ * Solo para uso interno del login — nunca exponer en respuesta HTTP.
+ */
 async function findByEmail(email) {
   const [rows] = await pool.execute(
     `SELECT id, password, last_login, nombre, email, area,
             codigo, tema, is_active, is_admin, fecha_creacion
-     FROM ventas_usuario
+     FROM usuario
      WHERE email = ?
      LIMIT 1`,
     [email]
@@ -28,11 +37,15 @@ async function findByEmail(email) {
   return rows[0] || null;
 }
 
+/**
+ * Busca un usuario por ID (sin password).
+ * Usado en GET /api/auth/me para refrescar datos de sesión.
+ */
 async function findById(id) {
   const [rows] = await pool.execute(
-    `SELECT id, password, last_login, nombre, email, area,
+    `SELECT id, last_login, nombre, email, area,
             codigo, tema, is_active, is_admin, fecha_creacion
-     FROM ventas_usuario
+     FROM usuario
      WHERE id = ?
      LIMIT 1`,
     [id]
@@ -40,21 +53,25 @@ async function findById(id) {
   return rows[0] || null;
 }
 
+/**
+ * Actualiza el campo last_login al momento del login exitoso.
+ */
 async function updateLastLogin(usuarioId) {
   const [result] = await pool.execute(
-    'UPDATE ventas_usuario SET last_login = NOW(6) WHERE id = ?',
+    'UPDATE usuario SET last_login = NOW(6) WHERE id = ?',
     [usuarioId]
   );
   return result.affectedRows > 0;
 }
 
-// ─────────────────────────────────────────────────────────────────
-// usuario_vendedor  (tipo: P = Principal, C = Compartido)
-// ─────────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────────────
+// Relaciones — disponibles para módulos, NO usadas en login
+// ───────────────────────────────────────────────────────────────
 
+/** Retorna los códigos de vendedor de un usuario (tipo P=Principal, C=Compartido) */
 async function getVendedoresByUsuarioId(usuarioId) {
   const [rows] = await pool.execute(
-    `SELECT id, cod_vendedor, tipo, usuario_id
+    `SELECT id, cod_vendedor, tipo
      FROM usuario_vendedor
      WHERE usuario_id = ?
      ORDER BY tipo DESC, cod_vendedor ASC`,
@@ -63,13 +80,10 @@ async function getVendedoresByUsuarioId(usuarioId) {
   return rows;
 }
 
-// ─────────────────────────────────────────────────────────────────
-// usuario_permiso
-// ─────────────────────────────────────────────────────────────────
-
+/** Retorna los permisos adicionales de un usuario */
 async function getPermisosByUsuarioId(usuarioId) {
   const [rows] = await pool.execute(
-    `SELECT id, permiso, usuario_id
+    `SELECT id, permiso
      FROM usuario_permiso
      WHERE usuario_id = ?
      ORDER BY permiso ASC`,
@@ -78,13 +92,10 @@ async function getPermisosByUsuarioId(usuarioId) {
   return rows;
 }
 
-// ─────────────────────────────────────────────────────────────────
-// vendedor_meta
-// ─────────────────────────────────────────────────────────────────
-
+/** Retorna las metas anuales de un usuario, ordenadas de más reciente a más antigua */
 async function getMetasByUsuarioId(usuarioId) {
   const [rows] = await pool.execute(
-    `SELECT id, fecha, meta, usuario_id
+    `SELECT id, fecha, meta
      FROM vendedor_meta
      WHERE usuario_id = ?
      ORDER BY fecha DESC`,
@@ -93,30 +104,7 @@ async function getMetasByUsuarioId(usuarioId) {
   return rows;
 }
 
-// ─────────────────────────────────────────────────────────────────
-// factura_compartida
-// NOTA: usuario_id puede ser NULL en registros actuales del dump.
-// La consulta por cod_vendedor se maneja desde el módulo Ventas.
-// ─────────────────────────────────────────────────────────────────
-
-async function getFacturasCompartidasByUsuarioId(usuarioId) {
-  const [rows] = await pool.execute(
-    `SELECT id, folio, anio, mes, fecha, cliente,
-            monto_neto, monto_asignado, porcentaje, rol,
-            cod_vendedor_principal, cod_vendedor_compartido,
-            nombre_vendedor_compartido, fecha_registro, usuario_id
-     FROM factura_compartida
-     WHERE usuario_id = ?
-     ORDER BY fecha DESC, id DESC`,
-    [usuarioId]
-  );
-  return rows;
-}
-
-// ─────────────────────────────────────────────────────────────────
-// tasas_descuentos  (auxiliar — no usa usuario_id)
-// ─────────────────────────────────────────────────────────────────
-
+/** Retorna todas las tasas de descuento (auxiliar, sin filtro por usuario) */
 async function getTasasDescuentos() {
   const [rows] = await pool.execute(
     `SELECT id, anio, fecha_corte, porcentaje, orden
@@ -126,24 +114,6 @@ async function getTasasDescuentos() {
   return rows;
 }
 
-// ─────────────────────────────────────────────────────────────────
-// Carga completa del usuario para la sesión
-// ─────────────────────────────────────────────────────────────────
-
-async function getUsuarioCompletoByEmail(email) {
-  const usuario = await findByEmail(email);
-  if (!usuario) return null;
-
-  const [vendedores, permisos, metas, facturasCompartidas] = await Promise.all([
-    getVendedoresByUsuarioId(usuario.id),
-    getPermisosByUsuarioId(usuario.id),
-    getMetasByUsuarioId(usuario.id),
-    getFacturasCompartidasByUsuarioId(usuario.id)
-  ]);
-
-  return { ...usuario, vendedores, permisos, metas, facturasCompartidas };
-}
-
 module.exports = {
   findByEmail,
   findById,
@@ -151,7 +121,5 @@ module.exports = {
   getVendedoresByUsuarioId,
   getPermisosByUsuarioId,
   getMetasByUsuarioId,
-  getFacturasCompartidasByUsuarioId,
-  getTasasDescuentos,
-  getUsuarioCompletoByEmail
+  getTasasDescuentos
 };
