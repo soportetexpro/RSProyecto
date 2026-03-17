@@ -11,7 +11,7 @@
 -- Fuente de verdad del esquema para RSProyecto
 --
 -- TABLAS:
---   ventas_usuario       - Usuarios del sistema (auth)
+--   usuario              - Usuarios del sistema (auth) [renombrada desde ventas_usuario]
 --   usuario_vendedor     - Códigos de vendedor asociados a cada usuario (N:1)
 --   vendedor_meta        - Metas anuales por usuario vendedor
 --   usuario_permiso      - Permisos adicionales por usuario
@@ -19,19 +19,14 @@
 --   tasas_descuentos     - Tasas de descuento anuales
 --
 -- RELACIONES FK:
---   usuario_vendedor.usuario_id   -> ventas_usuario.id
---   vendedor_meta.usuario_id      -> ventas_usuario.id
---   usuario_permiso.usuario_id    -> ventas_usuario.id
---   factura_compartida.usuario_id -> ventas_usuario.id
+--   usuario_vendedor.usuario_id   -> usuario.id
+--   vendedor_meta.usuario_id      -> usuario.id
+--   usuario_permiso.usuario_id    -> usuario.id
+--   factura_compartida.usuario_id -> usuario.id
 
 SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
 START TRANSACTION;
 SET time_zone = "+00:00";
-
-/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
-/*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
-/*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
-/*!40101 SET NAMES utf8mb4 */;
 
 -- --------------------------------------------------------
 -- Estructura de tabla: `factura_compartida`
@@ -94,24 +89,24 @@ CREATE TABLE `usuario_vendedor` (
 
 CREATE TABLE `vendedor_meta` (
   `id` bigint(20) NOT NULL,
-  `fecha` date NOT NULL,         -- siempre 1 de enero del año
+  `fecha` date NOT NULL,
   `meta` decimal(15,2) NOT NULL,
   `usuario_id` bigint(20) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
--- Estructura de tabla: `ventas_usuario`
+-- Estructura de tabla: `usuario`  [renombrada desde ventas_usuario]
 -- --------------------------------------------------------
 
-CREATE TABLE `ventas_usuario` (
+CREATE TABLE `usuario` (
   `id` bigint(20) NOT NULL,
-  `password` varchar(128) NOT NULL,    -- pbkdf2_sha256$600000$...
+  `password` varchar(128) NOT NULL,
   `last_login` datetime(6) DEFAULT NULL,
   `nombre` varchar(100) NOT NULL,
   `email` varchar(254) NOT NULL,
   `area` varchar(100) NOT NULL,
-  `codigo` varchar(20) NOT NULL,       -- código principal del vendedor
-  `tema` varchar(20) NOT NULL,         -- 'claro' | 'oscuro'
+  `codigo` varchar(20) NOT NULL,
+  `tema` varchar(20) NOT NULL,
   `is_active` tinyint(1) NOT NULL,
   `is_admin` tinyint(1) NOT NULL,
   `fecha_creacion` datetime(6) NOT NULL
@@ -120,24 +115,24 @@ CREATE TABLE `ventas_usuario` (
 -- Índices
 ALTER TABLE `factura_compartida`
   ADD PRIMARY KEY (`id`),
-  ADD KEY `factura_compartida_usuario_id_11b8449d_fk_usuario_id` (`usuario_id`);
+  ADD KEY `factura_compartida_usuario_id_fk` (`usuario_id`);
 
 ALTER TABLE `tasas_descuentos`
   ADD PRIMARY KEY (`id`);
 
 ALTER TABLE `usuario_permiso`
   ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `usuario_permiso_usuario_id_permiso_2e11b893_uniq` (`usuario_id`,`permiso`);
+  ADD UNIQUE KEY `usuario_permiso_usuario_id_permiso_uniq` (`usuario_id`, `permiso`);
 
 ALTER TABLE `usuario_vendedor`
   ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `usuario_vendedor_usuario_id_cod_vendedor_70f17e9e_uniq` (`usuario_id`,`cod_vendedor`);
+  ADD UNIQUE KEY `usuario_vendedor_usuario_id_cod_vendedor_uniq` (`usuario_id`, `cod_vendedor`);
 
 ALTER TABLE `vendedor_meta`
   ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `vendedor_meta_usuario_id_fecha_7a0c976c_uniq` (`usuario_id`,`fecha`);
+  ADD UNIQUE KEY `vendedor_meta_usuario_id_fecha_uniq` (`usuario_id`, `fecha`);
 
-ALTER TABLE `ventas_usuario`
+ALTER TABLE `usuario`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `email` (`email`);
 
@@ -147,23 +142,23 @@ ALTER TABLE `tasas_descuentos`   MODIFY `id` int(11)    NOT NULL AUTO_INCREMENT;
 ALTER TABLE `usuario_permiso`    MODIFY `id` bigint(20) NOT NULL AUTO_INCREMENT;
 ALTER TABLE `usuario_vendedor`   MODIFY `id` bigint(20) NOT NULL AUTO_INCREMENT;
 ALTER TABLE `vendedor_meta`      MODIFY `id` bigint(20) NOT NULL AUTO_INCREMENT;
-ALTER TABLE `ventas_usuario`     MODIFY `id` bigint(20) NOT NULL AUTO_INCREMENT;
+ALTER TABLE `usuario`            MODIFY `id` bigint(20) NOT NULL AUTO_INCREMENT;
 
 -- Foreign Keys
 ALTER TABLE `factura_compartida`
-  ADD CONSTRAINT `factura_compartida_usuario_id_11b8449d_fk_usuario_id`
-  FOREIGN KEY (`usuario_id`) REFERENCES `ventas_usuario` (`id`);
+  ADD CONSTRAINT `factura_compartida_usuario_id_fk`
+  FOREIGN KEY (`usuario_id`) REFERENCES `usuario` (`id`);
 
 ALTER TABLE `usuario_permiso`
-  ADD CONSTRAINT `usuario_permiso_usuario_id_1a69092a_fk_usuario_id`
-  FOREIGN KEY (`usuario_id`) REFERENCES `ventas_usuario` (`id`);
+  ADD CONSTRAINT `usuario_permiso_usuario_id_fk`
+  FOREIGN KEY (`usuario_id`) REFERENCES `usuario` (`id`);
 
 ALTER TABLE `usuario_vendedor`
-  ADD CONSTRAINT `usuario_vendedor_usuario_id_a17f8133_fk_usuario_id`
-  FOREIGN KEY (`usuario_id`) REFERENCES `ventas_usuario` (`id`);
+  ADD CONSTRAINT `usuario_vendedor_usuario_id_fk`
+  FOREIGN KEY (`usuario_id`) REFERENCES `usuario` (`id`);
 
 ALTER TABLE `vendedor_meta`
-  ADD CONSTRAINT `vendedor_meta_usuario_id_49292287_fk_usuario_id`
-  FOREIGN KEY (`usuario_id`) REFERENCES `ventas_usuario` (`id`);
+  ADD CONSTRAINT `vendedor_meta_usuario_id_fk`
+  FOREIGN KEY (`usuario_id`) REFERENCES `usuario` (`id`);
 
 COMMIT;

@@ -35,7 +35,7 @@ describe('[MySQL] Conectividad basica', () => {
 describe('[MySQL] Tablas requeridas', () => {
 
   const TABLAS_REQUERIDAS = [
-    'ventas_usuario',
+    'usuario',           // renombrada desde ventas_usuario
     'usuario_vendedor',
     'usuario_permiso',
     'vendedor_meta',
@@ -69,8 +69,8 @@ describe('[MySQL] Estructura de tablas criticas', () => {
     return rows.map(r => r.COLUMN_NAME);
   }
 
-  test('ventas_usuario tiene columnas requeridas', async () => {
-    const cols = await getColumnas('ventas_usuario');
+  test('usuario tiene columnas requeridas', async () => {
+    const cols = await getColumnas('usuario');
     ['id', 'nombre', 'email', 'password', 'area', 'codigo', 'is_active', 'is_admin'].forEach(col => {
       expect(cols).toContain(col);
     });
@@ -95,9 +95,9 @@ describe('[MySQL] Estructura de tablas criticas', () => {
 // ------------------------------------------------------------------
 describe('[MySQL] Datos iniciales', () => {
 
-  test('existe al menos 1 usuario activo en ventas_usuario', async () => {
+  test('existe al menos 1 usuario activo en usuario', async () => {
     const [rows] = await pool.query(
-      'SELECT COUNT(*) AS total FROM ventas_usuario WHERE is_active = 1'
+      'SELECT COUNT(*) AS total FROM usuario WHERE is_active = 1'
     );
     expect(rows[0].total).toBeGreaterThanOrEqual(1);
   });
@@ -113,7 +113,7 @@ describe('[MySQL] Datos iniciales', () => {
     const [rows] = await pool.query(`
       SELECT COUNT(*) AS huerfanos
       FROM usuario_vendedor v
-      LEFT JOIN ventas_usuario u ON v.usuario_id = u.id
+      LEFT JOIN usuario u ON v.usuario_id = u.id
       WHERE u.id IS NULL
     `);
     expect(rows[0].huerfanos).toBe(0);
