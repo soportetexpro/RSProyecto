@@ -2,32 +2,12 @@
 
 /**
  * auth.test.js — Tests unitarios de autenticación con JWT
- *
- * Cubre:
- *   POST /api/auth/login
- *     - Credenciales faltantes
- *     - Usuario no encontrado
- *     - Cuenta inactiva
- *     - Contraseña incorrecta
- *     - Login exitoso → devuelve token + user
- *     - Token generado es válido y contiene el payload correcto
- *
- *   GET /api/auth/me
- *     - Sin token → 401
- *     - Token inválido → 401
- *     - Token válido → 200 con datos del usuario
- *     - Usuario inactivo → 401
- *
- *   POST /api/auth/logout
- *     - Sin token → 401
- *     - Con token válido → 200
  */
 
 const request = require('supertest');
 const jwt     = require('jsonwebtoken');
 const app     = require('../server');
 
-// ───── Mocks ────────────────────────────────────────────────────
 jest.mock('../models/usuario');
 jest.mock('../utils/pbkdf2Django');
 
@@ -48,7 +28,6 @@ const MOCK_USUARIO = {
   fecha_creacion: '2026-03-11T18:57:11.000Z'
 };
 
-// JWT_SECRET para tests
 process.env.JWT_SECRET     = 'test-secret-rsproyecto';
 process.env.JWT_EXPIRES_IN = '8h';
 
@@ -104,7 +83,7 @@ describe('POST /api/auth/login', () => {
     expect(res.body.token).toBeDefined();
     expect(typeof res.body.token).toBe('string');
     expect(res.body.user).toBeDefined();
-    expect(res.body.user.password).toBeUndefined(); // nunca exponer password
+    expect(res.body.user.password).toBeUndefined();
     expect(res.body.user.email).toBe('csoto@texpro.cl');
   });
 
@@ -116,7 +95,6 @@ describe('POST /api/auth/login', () => {
     const res     = await request(app).post('/api/auth/login').send({ email: 'csoto@texpro.cl', password: 'pass' });
     const payload = jwt.verify(res.body.token, process.env.JWT_SECRET);
 
-    // generarToken usa { sub, email, is_admin }
     expect(payload.sub).toBe(MOCK_USUARIO.id);
     expect(payload.email).toBe(MOCK_USUARIO.email);
     expect(payload.is_admin).toBe(false);
@@ -131,7 +109,6 @@ describe('GET /api/auth/me', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    // requireAuth usa jwt.js → payload: { sub, email, is_admin }
     validToken = jwt.sign(
       { sub: 7, email: 'csoto@texpro.cl', is_admin: false },
       process.env.JWT_SECRET,
@@ -153,8 +130,9 @@ describe('GET /api/auth/me', () => {
   });
 
   test('200 con token válido — devuelve usuario sin password', async () => {
-    // findById devuelve el usuario sin password (como hace la query real)
-    const { password: _pw, ...usuarioSinPassword } = MOCK_USUARIO;
+    const usuarioSinPassword = Object.fromEntries(
+      Object.entries(MOCK_USUARIO).filter(([k]) => k !== 'password')
+    );
     findById.mockResolvedValue(usuarioSinPassword);
 
     const res = await request(app)
@@ -168,7 +146,9 @@ describe('GET /api/auth/me', () => {
   });
 
   test('401 si el usuario está inactivo (BD)', async () => {
-    const { password: _pw, ...usuarioInactivo } = { ...MOCK_USUARIO, is_active: 0 };
+    const usuarioInactivo = Object.fromEntries(
+      Object.entries({ ...MOCK_USUARIO, is_active: 0 }).filter(([k]) => k !== 'password')
+    );
     findById.mockResolvedValue(usuarioInactivo);
 
     const res = await request(app)

@@ -10,8 +10,7 @@
   const stepLines = ['stepLine1', 'stepLine2'];
 
   // Estado del flujo — se actualiza al avanzar pasos
-  // eslint-disable-next-line prefer-const
-  let emailFlujo = '';
+  let emailFlujo = ''; // eslint-disable-line no-unused-vars
 
   function goToStep(next) {
     document.querySelectorAll('.step-content').forEach(el => el.classList.remove('active'));
@@ -79,7 +78,7 @@
       else { input.classList.remove('is-filled'); }
     });
     input.addEventListener('keydown', (e) => {
-      if (e.key === 'Backspace' && !input.value && idx > 0) otpInputs[idx - 1].focus();
+      if (e.key === 'Backspace' && !input.value && idx > 0) otpInputs[idx - 1].focus(); 
     });
     input.addEventListener('paste', (e) => {
       e.preventDefault();

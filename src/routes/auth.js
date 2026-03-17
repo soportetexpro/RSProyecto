@@ -1,10 +1,5 @@
 'use strict';
 
- HEAD
-const express  = require('express');
-const jwt      = require('jsonwebtoken');
-const { findByEmail, findById, updateLastLogin } = require('../models/usuario');
-
 /**
  * auth.js — Rutas de autenticación
  *
@@ -18,7 +13,6 @@ const { findByEmail, findById, updateLastLogin } = require('../models/usuario');
 
 const express = require('express');
 const { findByEmail, updateLastLogin, findById } = require('../models/usuario');
-dcb0c2287d95a7244a7c012752b89b40d4ce540
 const { verifyPasswordDjango } = require('../utils/pbkdf2Django');
 const { generarToken }         = require('../utils/jwt');
 const { requireAuth }          = require('../middlewares/requireAuth');
@@ -35,7 +29,6 @@ router.post('/login', async (req, res) => {
     const email    = String(req.body.email    || '').trim().toLowerCase();
     const password = String(req.body.password || '').trim();
 
-    // 1. Validar campos requeridos
     if (!email || !password) {
       return res.status(400).json({
         ok:    false,
@@ -43,22 +36,16 @@ router.post('/login', async (req, res) => {
       });
     }
 
-
-    // 2. Buscar usuario por email en ventas_usuario
-dcb0c2287d95a7244a7c012752b89b40d4ce540
     const usuario = await findByEmail(email);
 
-    // 3. No revelar si el email existe o no (evita enumeración)
     if (!usuario) {
       return res.status(401).json({ ok: false, error: 'Credenciales inválidas' });
     }
 
-    // 4. Verificar que la cuenta esté activa
     if (!usuario.is_active) {
       return res.status(403).json({ ok: false, error: 'Cuenta inactiva. Contacta a soporte.' });
     }
 
-    // 5. Verificar contraseña contra hash PBKDF2-SHA256 de Django
     let isValid = false;
     try {
       isValid = verifyPasswordDjango(password, usuario.password);
@@ -70,17 +57,14 @@ dcb0c2287d95a7244a7c012752b89b40d4ce540
       return res.status(401).json({ ok: false, error: 'Credenciales inválidas' });
     }
 
-    // 6. Actualizar last_login
     await updateLastLogin(usuario.id);
 
-    // 7. Generar JWT
     const token = generarToken({
       id:       usuario.id,
       email:    usuario.email,
       is_admin: usuario.is_admin
     });
 
-    // 8. Respuesta — solo datos básicos del usuario, sin password ni relaciones
     return res.status(200).json({
       ok:        true,
       message:   'Login correcto',
