@@ -60,8 +60,8 @@
     if (!pass) {
       setFieldError('password', 'La contraseña es requerida.');
       valid = false;
-    } else if (pass.length < 4) {
-      setFieldError('password', 'Mínimo 4 caracteres.');
+    } else if (pass.length < 3) {
+      setFieldError('password', 'Mínimo 3 caracteres.');
       valid = false;
     }
 
