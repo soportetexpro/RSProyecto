@@ -25,6 +25,11 @@ const config = {
   password: process.env.SOFTLAND_DB_PASSWORD,
   database: process.env.SOFTLAND_DB_NAME,
   options: {
+    // TLS / encryption options. Use env vars to allow flexibility across
+    // environments (some SQL Server instances require encryption + trusting
+    // the server certificate when using self-signed certs).
+    encrypt: process.env.SOFTLAND_DB_ENCRYPT ? process.env.SOFTLAND_DB_ENCRYPT === 'true' : true,
+    trustServerCertificate: process.env.SOFTLAND_DB_TRUST_SERVER_CERT ? process.env.SOFTLAND_DB_TRUST_SERVER_CERT === 'true' : true,
 
     connectTimeout:         15000,
     requestTimeout:         30000
