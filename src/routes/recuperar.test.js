@@ -104,4 +104,4 @@ describe('POST /api/auth/nueva-password', () => {
 });
 
 afterAll(() => jest.clearAllMocks());
->>>>>>> origin/main
+
