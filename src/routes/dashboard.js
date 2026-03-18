@@ -47,8 +47,8 @@ router.get('/resumen', async (req, res) => {
     const metaMes   = metaAnual > 0 ? Math.round(metaAnual / 12) : 0;
 
     if (!codigos.length) {
-      return res.json({ ok: true, totalVentas: 0, meta: metaMes, progreso: 0, to
-talDescuento: 0 });                                                                 }
+      return res.json({ ok: true, totalVentas: 0, meta: metaMes, progreso: 0, totalDescuento: 0 });
+    }
 
     // 2. Total ventas + descuento del mes (Softland)
     const pool = await getSoftlandPool();
@@ -67,10 +67,9 @@ talDescuento: 0 });                                                             
     const row           = result.recordset[0] || {};
     const totalVentas   = Number(row.totalVentas)   || 0;
     const totalDescuento= Number(row.totalDescuento) || 0;
-    const progreso      = metaMes > 0 ? Math.min(Math.round((totalVentas / metaM
-es) * 100), 999) : 0;                                                           
-    res.json({ ok: true, totalVentas, meta: metaMes, progreso, totalDescuento })
-;                                                                                 } catch (err) {
+    const progreso = metaMes > 0 ? Math.min(Math.round((totalVentas / metaMes) * 100), 999) : 0;
+    res.json({ ok: true, totalVentas, meta: metaMes, progreso, totalDescuento });
+  } catch (err) {
     console.error('[GET /api/dashboard/resumen]', err.message);
     res.status(500).json({ ok: false, error: 'Error al obtener resumen' });     
   }
@@ -86,15 +85,15 @@ router.get('/evolucion', async (req, res) => {
   try {
     // Meta anual (bdtexpro)
     const [metaRows] = await db.query(
-      `SELECT meta FROM vendedor_meta WHERE usuario_id = ? AND YEAR(fecha) = ? L
-IMIT 1`,                                                                              [usuario.id, anio]
+      `SELECT meta FROM vendedor_meta WHERE usuario_id = ? AND YEAR(fecha) = ? LIMIT 1`,
+      [usuario.id, anio]
     );
     const metaAnual = metaRows.length ? Number(metaRows[0].meta) : 0;
     const metaMes   = metaAnual > 0 ? Math.round(metaAnual / 12) : 0;
 
     if (!codigos.length) {
-      const meses = Array.from({length:12},(_,i)=>({mes:i+1,ventas:0,meta:metaMe
-s}));                                                                                return res.json({ ok: true, evolucion: meses });
+      const meses = Array.from({ length: 12 }, (_, i) => ({ mes: i + 1, ventas: 0, meta: metaMes }));
+      return res.json({ ok: true, evolucion: meses });
     }
 
     // Ventas por mes del año (Softland)
@@ -194,8 +193,8 @@ router.get('/ventas-mes', async (req, res) => {
     res.json({ ok: true, ventas: result.recordset });
   } catch (err) {
     console.error('[GET /api/dashboard/ventas-mes]', err.message);
-    res.status(500).json({ ok: false, error: 'Error al obtener ventas del mes' }
-);                                                                                }
+    res.status(500).json({ ok: false, error: 'Error al obtener ventas del mes' });
+  }
 });
 
 // ── GET /api/dashboard/detalle/:folio ─────────────────────────────────────── 
@@ -219,8 +218,8 @@ router.get('/detalle/:folio', async (req, res) => {
     res.json({ ok: true, folio, detalle: result.recordset });
   } catch (err) {
     console.error('[GET /api/dashboard/detalle]', err.message);
-    res.status(500).json({ ok: false, error: 'Error al obtener detalle del folio
-' });                                                                             }
+    res.status(500).json({ ok: false, error: 'Error al obtener detalle del folio' });
+  }
 });
 
 module.exports = router;
