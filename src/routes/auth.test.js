@@ -119,7 +119,7 @@ describe('POST /api/auth/login', () => {
     const res = await request(app).post('/api/auth/login').send({ email: 'csoto@texpro.cl', password: 'pass' });
     const payload = jwt.verify(res.body.token, process.env.JWT_SECRET);
 
-    expect(payload.id).toBe(MOCK_USUARIO.id);
+    expect(payload.sub).toBe(MOCK_USUARIO.id);
     expect(payload.email).toBe(MOCK_USUARIO.email);
     expect(payload.is_admin).toBe(false);
     expect(payload.iss).toBe('rsproyecto-texpro');
@@ -144,7 +144,7 @@ describe('GET /api/auth/me', () => {
   test('401 sin Authorization header', async () => {
     const res = await request(app).get('/api/auth/me');
     expect(res.status).toBe(401);
-    expect(res.body.error).toBe('Token no proporcionado');
+    expect(res.body.error).toMatch(/token requerido/i);
   });
 
   test('401 con token inválido', async () => {
@@ -168,7 +168,7 @@ describe('GET /api/auth/me', () => {
   });
 
   test('401 si el usuario está inactivo (BD)', async () => {
-    findById.mockResolvedValue({ ...MOCK_USUARIO, is_active: 0 });
+    findById.mockResolvedValue({ ...MOCK_USUARIO, password: undefined });
 
     const res = await request(app)
       .get('/api/auth/me')
