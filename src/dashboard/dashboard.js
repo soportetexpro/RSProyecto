@@ -1,5 +1,6 @@
 'use strict';
 
+
 /**
  * dashboard.js — RSProyecto Texpro
  * 4 KPIs reales + gráfico líneas ventas vs meta + 3 tablas + modal detalle
