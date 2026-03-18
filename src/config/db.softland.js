@@ -27,8 +27,20 @@ const config = {
   password: process.env.SOFTLAND_DB_PASSWORD,
   database: process.env.SOFTLAND_DB_NAME,
   options: {
-    encrypt:                process.env.SOFTLAND_DB_ENCRYPT      === 'true',
-    trustServerCertificate: process.env.SOFTLAND_DB_TRUST_CERT   === 'true',
+    // TLS / encryption options. Allow either env var name for trust flag
+    // to be compatible with different deployments. Defaults to true.
+    encrypt: (typeof process.env.SOFTLAND_DB_ENCRYPT !== 'undefined')
+      ? process.env.SOFTLAND_DB_ENCRYPT === 'true'
+      : true,
+    trustServerCertificate: (function() {
+      if (typeof process.env.SOFTLAND_DB_TRUST_SERVER_CERT !== 'undefined') {
+        return process.env.SOFTLAND_DB_TRUST_SERVER_CERT === 'true';
+      }
+      if (typeof process.env.SOFTLAND_DB_TRUST_CERT !== 'undefined') {
+        return process.env.SOFTLAND_DB_TRUST_CERT === 'true';
+      }
+      return true;
+    })(),
     connectTimeout:         15000,
     requestTimeout:         30000
   },

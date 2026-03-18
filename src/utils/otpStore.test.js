@@ -1,4 +1,4 @@
-'use strict';
+"use strict";
 
 /**
  * otpStore.test.js — Tests unitarios para crearOtp y verificarOtp
@@ -50,3 +50,4 @@ describe('verificarOtp', () => {
 });
 
 afterAll(() => jest.clearAllMocks());
+

@@ -1,4 +1,4 @@
-'use strict';
+"use strict";
 
 /**
  * ventas.test.js — Tests unitarios para rutas de ventas
@@ -94,15 +94,19 @@ describe('GET /api/ventas/detalle/:folio', () => {
 
 describe('Ventas sin vendedores asignados', () => {
   it('GET /api/ventas retorna array vacio si no hay vendedores', async () => {
-    const { requireAuth } = require('../middlewares/requireAuth');
-    requireAuth.mockImplementationOnce((req, _res, next) => {
-      req.usuario = { sub: 2, email: 'novend@texpro.cl', vendedores: [] };
-      next();
-    });
-    const res = await request(app).get('/api/ventas');
+    jest.resetModules();
+    jest.doMock('../middlewares/requireAuth', () => ({
+      requireAuth: (req, _res, next) => {
+        req.usuario = { sub: 2, email: 'novend@texpro.cl', vendedores: [] };
+        next();
+      }
+    }));
+    const appSinVend = require('../server');
+    const res = await request(appSinVend).get('/api/ventas');
     expect(res.status).toBe(200);
     expect(res.body.ventas).toEqual([]);
   });
 });
 
 afterAll(() => jest.clearAllMocks());
+

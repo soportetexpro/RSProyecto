@@ -1,4 +1,4 @@
-'use strict';
+"use strict";
 
 /**
  * recuperar.test.js — Tests para flujo OTP de recuperación de contraseña
@@ -104,3 +104,4 @@ describe('POST /api/auth/nueva-password', () => {
 });
 
 afterAll(() => jest.clearAllMocks());
+

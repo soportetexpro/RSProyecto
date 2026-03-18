@@ -23,7 +23,7 @@ function requireAuth(req, res, next) {
 
     if (!token) {
       return res.status(401).json({
-        ok:    false,
+        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ok:    false,
         error: 'Token requerido. Incluye Authorization: Bearer <token>'
       });
     }
