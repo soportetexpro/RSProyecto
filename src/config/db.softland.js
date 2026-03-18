@@ -4,15 +4,17 @@
  * db.softland.js — Conexión a Softland Cloud (SQL Server)
  *
  * Tipo de conexión: SQL Server directo (réplica de lectura)
- * Driver: mssql (npm install mssql)
+ * Driver: mssql
  * Puerto: 1433 por defecto
  *
  * Variables de entorno requeridas en .env:
  *   SOFTLAND_DB_HOST
- *   SOFTLAND_DB_PORT     (default: 1433)
+ *   SOFTLAND_DB_PORT         (default: 1433)
  *   SOFTLAND_DB_USER
  *   SOFTLAND_DB_PASSWORD
  *   SOFTLAND_DB_NAME
+ *   SOFTLAND_DB_ENCRYPT      (default: false — true en Azure/producción)
+ *   SOFTLAND_DB_TRUST_CERT   (default: false — true solo en dev con cert autofirmado)
  */
 
 const sql  = require('mssql');
@@ -25,17 +27,24 @@ const config = {
   password: process.env.SOFTLAND_DB_PASSWORD,
   database: process.env.SOFTLAND_DB_NAME,
   options: {
-    // TLS / encryption options. Use env vars to allow flexibility across
-    // environments (some SQL Server instances require encryption + trusting
-    // the server certificate when using self-signed certs).
-    encrypt: process.env.SOFTLAND_DB_ENCRYPT ? process.env.SOFTLAND_DB_ENCRYPT === 'true' : true,
-    trustServerCertificate: process.env.SOFTLAND_DB_TRUST_SERVER_CERT ? process.env.SOFTLAND_DB_TRUST_SERVER_CERT === 'true' : true,
-
+    // TLS / encryption options. Allow either env var name for trust flag
+    // to be compatible with different deployments. Defaults to true.
+    encrypt: (typeof process.env.SOFTLAND_DB_ENCRYPT !== 'undefined')
+      ? process.env.SOFTLAND_DB_ENCRYPT === 'true'
+      : true,
+    trustServerCertificate: (function() {
+      if (typeof process.env.SOFTLAND_DB_TRUST_SERVER_CERT !== 'undefined') {
+        return process.env.SOFTLAND_DB_TRUST_SERVER_CERT === 'true';
+      }
+      if (typeof process.env.SOFTLAND_DB_TRUST_CERT !== 'undefined') {
+        return process.env.SOFTLAND_DB_TRUST_CERT === 'true';
+      }
+      return true;
+    })(),
     connectTimeout:         15000,
     requestTimeout:         30000
   },
   pool: {
-
     idleTimeoutMillis: 30000
   }
 };
