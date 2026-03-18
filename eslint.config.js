@@ -13,7 +13,8 @@ module.exports = defineConfig([
       globals: {
         ...globals.node,
         ...globals.browser,
-        ...globals.jest
+        ...globals.jest,
+        Chart: 'readonly'
       }
     },
     rules: {
