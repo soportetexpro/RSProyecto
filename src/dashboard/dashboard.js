@@ -3,275 +3,361 @@
 
 /**
  * dashboard.js — RSProyecto Texpro
- *
- * Responsabilidades:
- *   1. Guard de sesión — redirige a login si no hay sesión activa
- *   2. Carga datos del usuario desde sessionStorage
- *   3. Renderiza sidebar con módulos según área del usuario
- *   4. Renderiza tarjetas de módulos disponibles
- *   5. Cierre de sesión
+ * 4 KPIs reales + gráfico líneas ventas vs meta + 3 tablas + modal detalle
  */
 
 (function () {
 
-  // ── 1. GUARD DE SESIÓN ────────────────────────────────────────
-  const raw = sessionStorage.getItem('texpro_user');
-  if (!raw) {
-    window.location.replace('../login/index.html');
-    return;
+  const API  = '/api/dashboard';
+  const token = () => localStorage.getItem('token');
+
+  let graficoEvolucion = null;
+  let ventasMes        = [];
+
+  // ── Formato CLP ───────────────────────────────────────────────
+  function formatCLP(v) {
+    if (v == null || v === '') return '—';
+    return new Intl.NumberFormat('es-CL', {
+      style: 'currency', currency: 'CLP', maximumFractionDigits: 0
+    }).format(Number(v));
   }
 
-  let user;
-  try {
-    user = JSON.parse(raw);
-  } catch {
-    sessionStorage.removeItem('texpro_user');
-    window.location.replace('../login/index.html');
-    return;
+  // ── Auth ──────────────────────────────────────────────────────
+  async function verificarSesion() {
+    if (!token()) { window.location.href = '../login/index.html'; return null; }
+    try {
+      const res  = await fetch('/api/auth/me', { headers: { Authorization: `Bearer ${token()}` } });
+      const data = await res.json();
+      if (!res.ok || !data.ok) { window.location.href = '../login/index.html'; return null; }
+      return data.user;
+    } catch { window.location.href = '../login/index.html'; return null; }
   }
 
-  // ── 2. DEFINICIÓN DE MÓDULOS ──────────────────────────────────
-  // areas: ['all'] = acceso universal, ['admin'] = solo admins
+  // ── Sidebar ───────────────────────────────────────────────────
   const MODULOS = [
-    {
-      id:     'ventas',
-      nombre: 'Ventas',
-      desc:   'Seguimiento de ventas y metas por vendedor',
-      icon:   '📊',
-      color:  '#E8F5E9',
-      areas:  ['ventas', 'gerencia'],
-      url:    '../ventas/index.html',
-      estado: 'dev'
-    },
-    {
-      id:     'facturacion',
-      nombre: 'Facturación',
-      desc:   'Gestión de facturas y documentos tributarios',
-      icon:   '🧾',
-      color:  '#E3F2FD',
-      areas:  ['facturacion', 'contabilidad', 'gerencia'],
-      url:    '../facturacion/index.html',
-      estado: 'planned'
-    },
-    {
-      id:     'bodega',
-      nombre: 'Bodega',
-      desc:   'Control de inventario y stock',
-      icon:   '🏭',
-      color:  '#FFF3E0',
-      areas:  ['bodega', 'produccion', 'gerencia'],
-      url:    '../bodega/index.html',
-      estado: 'planned'
-    },
-    {
-      id:     'produccion',
-      nombre: 'Producción',
-      desc:   'Órdenes de producción y planificación',
-      icon:   '⚙️',
-      color:  '#F3E5F5',
-      areas:  ['produccion', 'gerencia'],
-      url:    '../produccion/index.html',
-      estado: 'planned'
-    },
-    {
-      id:     'laboratorio',
-      nombre: 'Laboratorio',
-      desc:   'Control de calidad y análisis',
-      icon:   '🧪',
-      color:  '#E0F7FA',
-      areas:  ['laboratorio', 'gerencia'],
-      url:    '../laboratorio/index.html',
-      estado: 'planned'
-    },
-    {
-      id:     'cobranza',
-      nombre: 'Cobranza',
-      desc:   'Seguimiento de cuentas por cobrar',
-      icon:   '💰',
-      color:  '#FFF8E1',
-      areas:  ['cobranza', 'contabilidad', 'gerencia'],
-      url:    '../cobranza/index.html',
-      estado: 'planned'
-    },
-    {
-      id:     'rrhh',
-      nombre: 'RRHH',
-      desc:   'Recursos humanos y personal',
-      icon:   '👥',
-      color:  '#FCE4EC',
-      areas:  ['rrhh', 'gerencia'],
-      url:    '../rrhh/index.html',
-      estado: 'planned'
-    },
-    {
-      id:     'contabilidad',
-      nombre: 'Contabilidad',
-      desc:   'Estados financieros y reportes',
-      icon:   '📜',
-      color:  '#E8EAF6',
-      areas:  ['contabilidad', 'gerencia'],
-      url:    '../contabilidad/index.html',
-      estado: 'planned'
-    },
-    {
-      id:     'admin',
-      nombre: 'Administración',
-      desc:   'Gestión de usuarios y configuración del sistema',
-      icon:   '🔧',
-      color:  '#ECEFF1',
-      areas:  ['admin'],
-      url:    '../admin/index.html',
-      estado: 'planned'
-    }
+    { nombre:'Ventas',        icon:'📊', url:'../ventas/index.html',       area:['ventas','gerencia'] },
+    { nombre:'Facturación',   icon:'🧾', url:'../facturacion/index.html',  area:['facturacion','contabilidad','gerencia'] },
+    { nombre:'Bodega',        icon:'🏭', url:'../bodega/index.html',       area:['bodega','produccion','gerencia'] },
+    { nombre:'Producción',    icon:'⚙️', url:'../produccion/index.html',   area:['produccion','gerencia'] },
+    { nombre:'Laboratorio',   icon:'🧪', url:'../laboratorio/index.html',  area:['laboratorio','gerencia'] },
+    { nombre:'Cobranza',      icon:'💰', url:'../cobranza/index.html',     area:['cobranza','contabilidad','gerencia'] },
+    { nombre:'RRHH',          icon:'👥', url:'../rrhh/index.html',         area:['rrhh','gerencia'] },
+    { nombre:'Contabilidad',  icon:'📜', url:'../contabilidad/index.html', area:['contabilidad','gerencia'] },
+    { nombre:'Administración',icon:'🔧', url:'../admin/index.html',        area:['admin'] },
   ];
 
-  // ── Filtrar módulos según área y permisos ────────────────────────
-  function getModulosVisibles(u) {
-    return MODULOS.filter(m => {
-      if (m.areas.includes('admin')) return u.is_admin === true;
-      return u.is_admin === true || m.areas.includes(u.area);
-    });
-  }
+  function cargarSidebar(usuario) {
+    const ini = (usuario.nombre||'U').split(' ').slice(0,2).map(p=>p[0]).join('').toUpperCase();
+    document.getElementById('userName').textContent  = usuario.nombre  || usuario.email;
+    document.getElementById('userArea').textContent   = usuario.area    || '';
+    document.getElementById('userAvatar').textContent = ini;
+    document.getElementById('chipAvatar').textContent = ini;
+    document.getElementById('chipName').textContent   = (usuario.nombre||usuario.email).split(' ')[0];
+    document.getElementById('headerDate').textContent = new Date().toLocaleDateString('es-CL',
+      { weekday:'long', year:'numeric', month:'long', day:'numeric' });
 
-  // ── 3. INICIALIZAR UI ────────────────────────────────────────
-  function initUI() {
-    const iniciales = getIniciales(user.nombre);
-    const areaNombre = capitalize(user.area || 'sistema');
+    document.getElementById('welcomeTitle').textContent    = `Hola, ${(usuario.nombre||usuario.email).split(' ')[0]} 👋`;
+    document.getElementById('welcomeSubtitle').textContent = `Área: ${usuario.area||'Sistema'} — Texpro`;
 
-    // Header
-    document.getElementById('headerTitle').textContent = 'Dashboard';
-    document.getElementById('headerDate').textContent  = getFechaHoy();
-    document.getElementById('chipAvatar').textContent  = iniciales;
-    document.getElementById('chipName').textContent    = user.nombre.split(' ')[0];
-
-    // Sidebar usuario
-    document.getElementById('userName').textContent    = user.nombre;
-    document.getElementById('userArea').textContent    = areaNombre;
-    document.getElementById('userAvatar').textContent  = iniciales;
-
-    // Welcome
-    document.getElementById('welcomeTitle').textContent    = `Hola, ${user.nombre.split(' ')[0]} 👋`;
-    document.getElementById('welcomeSubtitle').textContent = `Área: ${areaNombre} — Sistema de Gestión Interna Texpro`;
-    document.getElementById('welcomeBadge').textContent    = getAreaEmoji(user.area);
-
-    // Sidebar nav
-    renderSidebarNav();
-
-    // Módulos
-    renderModulos();
-
-    // Eventos
-    bindEvents();
-  }
-
-  // ── Sidebar nav ───────────────────────────────────────────────
-  function renderSidebarNav() {
-    const nav = document.getElementById('sidebarNav');
-    const modulos = getModulosVisibles(user);
-
-    const items = [
-      { label: 'Dashboard', icon: iconHome(), url: '#', active: true }
-    ];
-
-    modulos.forEach(m => {
-      items.push({ label: m.nombre, icon: `<span style="font-size:1rem">${m.icon}</span>`, url: m.url, active: false });
-    });
-
-    nav.innerHTML = [
-      `<span class="nav-section-title">NAVEGACIÓN</span>`,
-      ...items.map(item => `
-        <a class="nav-item${item.active ? ' active' : ''}" href="${item.url}">
-          ${item.icon}
-          <span class="nav-label">${item.label}</span>
-        </a>
-      `)
-    ].join('');
-  }
-
-  // ── Tarjetas de módulos ────────────────────────────────────────
-  function renderModulos() {
-    const grid = document.getElementById('modulesGrid');
-    const modulos = getModulosVisibles(user);
-
-    if (!modulos.length) {
-      grid.innerHTML = `<p style="color:var(--color-gray-dark);font-size:var(--text-sm)">No hay módulos asignados a tu área. Contacta al administrador.</p>`;
-      return;
-    }
-
-    const badgeLabels = { ready: 'Disponible', dev: 'En desarrollo', planned: 'Próximamente' };
-    const badgeClasses = { ready: 'badge-ready', dev: 'badge-dev', planned: 'badge-planned' };
-
-    grid.innerHTML = modulos.map(m => `
-      <a class="module-card${m.estado !== 'ready' ? ' disabled' : ''}" href="${m.estado === 'ready' ? m.url : '#'}" title="${m.nombre}">
-        <div class="module-icon" style="background:${m.color}">${m.icon}</div>
-        <span class="module-name">${m.nombre}</span>
-        <span class="module-desc">${m.desc}</span>
-        <span class="module-badge ${badgeClasses[m.estado]}">${badgeLabels[m.estado]}</span>
+    // Nav
+    const nav     = document.getElementById('sidebarNav');
+    const visibles = MODULOS.filter(m =>
+      usuario.is_admin || m.area.includes('admin') ? usuario.is_admin : m.area.includes(usuario.area)
+    );
+    nav.innerHTML = `<span class="nav-section-title">NAVEGACIÓN</span>
+      <a class="nav-item active" href="#">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        <span class="nav-label">Dashboard</span>
       </a>
-    `).join('');
-  }
+      ${visibles.map(m=>`<a class="nav-item" href="${m.url}"><span style="font-size:1rem">${m.icon}</span><span class="nav-label">${m.nombre}</span></a>`).join('')}`;
 
-  // ── Eventos ──────────────────────────────────────────────────
-  function bindEvents() {
-    // Colapsar sidebar
-    document.getElementById('sidebarToggle').addEventListener('click', () => {
-      const sidebar = document.getElementById('sidebar');
-      const wrapper = document.getElementById('mainWrapper');
-      sidebar.classList.toggle('collapsed');
-      wrapper.classList.toggle('sidebar-collapsed');
+    document.getElementById('btnLogout').addEventListener('click', () => {
+      localStorage.removeItem('token'); localStorage.removeItem('user');
+      window.location.href = '../login/index.html';
     });
-
-    // Menú móvil
+    document.getElementById('sidebarToggle').addEventListener('click', () => {
+      document.getElementById('sidebar').classList.toggle('sidebar--collapsed');
+      document.getElementById('mainWrapper').classList.toggle('main-wrapper--expanded');
+    });
     document.getElementById('headerMenuBtn').addEventListener('click', () => {
       document.getElementById('sidebar').classList.toggle('mobile-open');
     });
+  }
 
-    // Cerrar sesión
-    document.getElementById('btnLogout').addEventListener('click', () => {
-      sessionStorage.removeItem('texpro_user');
-      window.location.replace('../login/index.html');
+  // ── Selectores mes/año ────────────────────────────────────────
+  function initSelectores() {
+    const hoy   = new Date();
+    const meses = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
+                   'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+    const selMes = document.getElementById('filtroMes');
+    meses.forEach((m, i) => {
+      const o = document.createElement('option');
+      o.value = i + 1; o.textContent = m;
+      if (i + 1 === hoy.getMonth() + 1) o.selected = true;
+      selMes.appendChild(o);
     });
+    const selAnio = document.getElementById('filtroAnio');
+    for (let y = hoy.getFullYear(); y >= 2022; y--) {
+      const o = document.createElement('option');
+      o.value = y; o.textContent = y;
+      if (y === hoy.getFullYear()) o.selected = true;
+      selAnio.appendChild(o);
+    }
   }
 
-  // ── Helpers ────────────────────────────────────────────────
-  function getIniciales(nombre) {
-    return (nombre || 'U').split(' ').slice(0, 2).map(p => p[0]).join('').toUpperCase();
-  }
-
-  function capitalize(str) {
-    return str.charAt(0).toUpperCase() + str.slice(1);
-  }
-
-  function getFechaHoy() {
-    return new Date().toLocaleDateString('es-CL', {
-      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
-    });
-  }
-
-  function getAreaEmoji(area) {
-    const map = {
-      ventas:       '📊',
-      facturacion:  '🧾',
-      bodega:       '🏭',
-      produccion:   '⚙️',
-      laboratorio:  '🧪',
-      cobranza:     '💰',
-      rrhh:         '👥',
-      contabilidad: '📜',
-      gerencia:     '🏆'
+  function getParams() {
+    return {
+      mes:  document.getElementById('filtroMes').value,
+      anio: document.getElementById('filtroAnio').value,
     };
-    return map[area] || '🏢';
   }
 
-  function iconHome() {
-    return `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>`;
+  // ── KPIs ──────────────────────────────────────────────────────
+  async function cargarResumen() {
+    try {
+      const res  = await fetch(`${API}/resumen?${new URLSearchParams(getParams())}`,
+        { headers: { Authorization: `Bearer ${token()}` } });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error);
+
+      const { totalVentas, meta, progreso, totalDescuento } = data;
+      document.getElementById('kpiTotalVentas').textContent = formatCLP(totalVentas);
+      document.getElementById('kpiMeta').textContent        = formatCLP(meta);
+      document.getElementById('kpiDescuento').textContent   = formatCLP(totalDescuento);
+
+      const pct = Math.min(progreso, 100);
+      document.getElementById('kpiProgresoPct').textContent = `${progreso}%`;
+      const fill = document.getElementById('progresoFill');
+      fill.style.width = `${pct}%`;
+      fill.style.background = progreso >= 100 ? 'var(--color-primary)'
+                            : progreso >= 70  ? 'var(--color-accent)'
+                            : 'var(--color-danger)';
+    } catch (err) {
+      console.error('[cargarResumen]', err);
+    }
   }
 
-  // ── ARRANQUE ─────────────────────────────────────────────────
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initUI);
-  } else {
-    initUI();
+  // ── Gráfico de líneas ─────────────────────────────────────────
+  const MESES_LABEL = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+
+  async function cargarGrafico() {
+    try {
+      const res  = await fetch(`${API}/evolucion?${new URLSearchParams({ anio: getParams().anio })}`,
+        { headers: { Authorization: `Bearer ${token()}` } });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error);
+
+      const labels  = data.evolucion.map(e => MESES_LABEL[e.mes - 1]);
+      const ventas  = data.evolucion.map(e => e.ventas);
+      const meta    = data.evolucion.map(e => e.meta);
+
+      const ctx = document.getElementById('graficoEvolucion').getContext('2d');
+
+      if (graficoEvolucion) graficoEvolucion.destroy();
+
+      graficoEvolucion = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [
+            {
+              label: 'Ventas',
+              data: ventas,
+              borderColor: '#00E2A7',
+              backgroundColor: 'rgba(0,226,167,0.08)',
+              tension: 0.4,
+              fill: true,
+              pointRadius: 5,
+              pointHoverRadius: 7,
+              borderWidth: 2.5,
+            },
+            {
+              label: 'Meta',
+              data: meta,
+              borderColor: '#F5A623',
+              backgroundColor: 'transparent',
+              borderDash: [6, 4],
+              tension: 0,
+              fill: false,
+              pointRadius: 0,
+              borderWidth: 2,
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: { position: 'top', labels: { font: { family:'Montserrat', size:12 }, usePointStyle: true } },
+            tooltip: {
+              callbacks: {
+                label: ctx => {
+                  const v = ctx.parsed.y;
+                  return ` ${ctx.dataset.label}: ${new Intl.NumberFormat('es-CL',{style:'currency',currency:'CLP',maximumFractionDigits:0}).format(v)}`;
+                }
+              }
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: {
+                font: { family:'Open Sans', size:11 },
+                callback: v => new Intl.NumberFormat('es-CL',{notation:'compact',compactDisplay:'short'}).format(v)
+              },
+              grid: { color: 'rgba(0,0,0,0.05)' }
+            },
+            x: {
+              ticks: { font: { family:'Open Sans', size:11 } },
+              grid: { display: false }
+            }
+          }
+        }
+      });
+    } catch (err) {
+      console.error('[cargarGrafico]', err);
+    }
   }
+
+  // ── Tabla 1: vendedores ───────────────────────────────────────
+  async function cargarVendedores() {
+    try {
+      const res  = await fetch(`${API}/vendedores?${new URLSearchParams(getParams())}`,
+        { headers: { Authorization: `Bearer ${token()}` } });
+      const data = await res.json();
+      const tbody = document.getElementById('tbodyVendedores');
+      if (!data.ok || !data.vendedores.length) {
+        tbody.innerHTML = '<tr class="tabla-empty"><td colspan="3">Sin datos</td></tr>'; return;
+      }
+      tbody.innerHTML = data.vendedores.map(v => `
+        <tr>
+          <td><strong>${v.codVendedor}</strong></td>
+          <td>${v.folios}</td>
+          <td style="text-align:right">${formatCLP(v.totalVentas)}</td>
+        </tr>
+      `).join('');
+    } catch (err) { console.error('[cargarVendedores]', err); }
+  }
+
+  // ── Tabla 2: ventas del mes ───────────────────────────────────
+  async function cargarVentasMes() {
+    try {
+      const res  = await fetch(`${API}/ventas-mes?${new URLSearchParams(getParams())}`,
+        { headers: { Authorization: `Bearer ${token()}` } });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error);
+      ventasMes = data.ventas || [];
+      renderVentasMes(ventasMes);
+    } catch (err) { console.error('[cargarVentasMes]', err); }
+  }
+
+  function renderVentasMes(lista) {
+    const tbody = document.getElementById('tbodyVentasMes');
+    document.getElementById('totalVentasMes').textContent = `${lista.length.toLocaleString('es-CL')} registros`;
+    if (!lista.length) {
+      tbody.innerHTML = '<tr class="tabla-empty"><td colspan="7">Sin registros</td></tr>'; return;
+    }
+    tbody.innerHTML = lista.map(v => `
+      <tr>
+        <td><strong>${v.Folio||'—'}</strong></td>
+        <td>${v.fecha_formato||'—'}</td>
+        <td>${v.cliente||'—'}</td>
+        <td>${v.CodVendedor||'—'}</td>
+        <td style="text-align:right">${formatCLP(v.monto)}</td>
+        <td style="text-align:right">${formatCLP(v.descuento)}</td>
+        <td style="text-align:center">
+          <button class="btn-detalle" data-folio="${v.Folio}" title="Ver detalle">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </td>
+      </tr>
+    `).join('');
+    tbody.querySelectorAll('.btn-detalle').forEach(btn =>
+      btn.addEventListener('click', () => abrirDetalle(btn.dataset.folio))
+    );
+  }
+
+  // ── Modal detalle ─────────────────────────────────────────────
+  async function abrirDetalle(folio) {
+    const overlay = document.getElementById('modalOverlay');
+    const tbody   = document.getElementById('modalTbody');
+    document.getElementById('modalTitulo').textContent = `Folio N° ${folio}`;
+    const venta = ventasMes.find(v => String(v.Folio) === String(folio));
+    document.getElementById('modalSubtitulo').textContent = venta ? `${venta.cliente||''} • ${venta.fecha_formato||''}` : '';
+    document.getElementById('modalTotalValor').textContent = '—';
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:2rem">Cargando...</td></tr>';
+    overlay.classList.add('modal-overlay--visible');
+    overlay.setAttribute('aria-hidden','false');
+    document.body.style.overflow = 'hidden';
+
+    try {
+      const res  = await fetch(`${API}/detalle/${folio}`, { headers: { Authorization: `Bearer ${token()}` } });
+      const data = await res.json();
+      if (!data.ok || !data.detalle?.length) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--color-gray-mid)">Sin líneas de detalle</td></tr>';
+        return;
+      }
+      const total = data.detalle.reduce((s,l)=>s+(Number(l.Total)||0),0);
+      tbody.innerHTML = data.detalle.map(l=>`
+        <tr>
+          <td><code>${l.CodProd||'—'}</code></td>
+          <td>${l.DesProd||'—'}</td>
+          <td style="text-align:center">${l.CantFacturada??'—'}</td>
+          <td style="text-align:right">${formatCLP(l.PrecioUnitario)}</td>
+          <td style="text-align:right"><strong>${formatCLP(l.Total)}</strong></td>
+        </tr>
+      `).join('');
+      document.getElementById('modalTotalValor').textContent = formatCLP(total);
+    } catch(err) {
+      console.error('[abrirDetalle]', err);
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--color-danger)">⚠️ Error al cargar</td></tr>';
+    }
+  }
+
+  function cerrarModal() {
+    document.getElementById('modalOverlay').classList.remove('modal-overlay--visible');
+    document.getElementById('modalOverlay').setAttribute('aria-hidden','true');
+    document.body.style.overflow = '';
+  }
+
+  // ── Cargar todo ───────────────────────────────────────────────
+  async function cargarTodo() {
+    await Promise.all([ cargarResumen(), cargarGrafico(), cargarVendedores(), cargarVentasMes() ]);
+  }
+
+  // ── Init ──────────────────────────────────────────────────────
+  async function init() {
+    const usuario = await verificarSesion();
+    if (!usuario) return;
+
+    cargarSidebar(usuario);
+    initSelectores();
+
+    // Busqueda en tabla ventas mes
+    document.getElementById('busquedaVentas').addEventListener('input', e => {
+      const q = e.target.value.toLowerCase();
+      renderVentasMes(ventasMes.filter(v =>
+        String(v.Folio||'').toLowerCase().includes(q) ||
+        String(v.cliente||'').toLowerCase().includes(q)
+      ));
+    });
+
+    // Modal
+    document.getElementById('modalCerrar').addEventListener('click', cerrarModal);
+    document.getElementById('modalOverlay').addEventListener('click', e => {
+      if (e.target === e.currentTarget) cerrarModal();
+    });
+    document.addEventListener('keydown', e => { if (e.key==='Escape') cerrarModal(); });
+
+    // Actualizar
+    document.getElementById('btnActualizar').addEventListener('click', cargarTodo);
+
+    // Carga inicial
+    cargarTodo();
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
 
 })();
