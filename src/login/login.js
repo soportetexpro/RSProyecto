@@ -91,19 +91,21 @@
   }
 
   // ── Guardar sesión en sessionStorage ─────────────────────
-  function saveSession(user) {
-    sessionStorage.setItem('texpro_user', JSON.stringify({
-      id:         user.id,
-      nombre:     user.nombre,
-      email:      user.email,
-      area:       user.area,
-      codigo:     user.codigo,
-      tema:       user.tema,
-      is_admin:   user.is_admin,
-      vendedores: user.vendedores || [],
-      metas:      user.metas      || []
-    }));
-  }
+  function saveSession(token, user) {
+  localStorage.setItem('token', token);
+  sessionStorage.setItem('texpro_user', JSON.stringify({
+    id:         user.id,
+    nombre:     user.nombre,
+    email:      user.email,
+    area:       user.area,
+    codigo:     user.codigo,
+    tema:       user.tema,
+    is_admin:   user.is_admin,
+    vendedores: user.vendedores || [],
+    metas:      user.metas      || []
+  }));
+}
+
 
   // ── Submit del formulario ────────────────────────────
   form.addEventListener('submit', async (e) => {
@@ -137,7 +139,7 @@
       }
 
       // ✅ Login exitoso
-      saveSession(data.user);
+      saveSession(data.token, data.user);
       window.location.href = DASHBOARD_URL;
 
     } catch {
