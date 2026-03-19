@@ -2,19 +2,22 @@
 
 /**
  * routes/ventas.js — API REST módulo de ventas
- * Todas las rutas requieren JWT válido.
- *
- * GET /api/ventas                  — lista de folios (query 6)
- * GET /api/ventas/total            — total ventas del mes (query 1)
- * GET /api/ventas/resumen          — resumen por vendedor (query 2)
- * GET /api/ventas/clientes         — clientes por vendedor (query 3)
- * GET /api/ventas/folio/:folio     — monto de un folio (query 7)
- * GET /api/ventas/detalle/:folio   — detalle líneas de un folio (query 10)
+ * GET /api/ventas                    — lista de folios del mes
+ * GET /api/ventas/total              — total ventas del mes
+ * GET /api/ventas/resumen            — resumen por vendedor
+ * GET /api/ventas/resumen-vendedores — ventas agrupadas por cod_vendedor
+ * GET /api/ventas/evolucion          — ventas mes a mes del año (gráfico)
+ * GET /api/ventas/meta               — meta anual/mensual desde bdtexpro
+ * GET /api/ventas/clientes           — clientes por vendedor
+ * GET /api/ventas/folio/:folio       — monto de un folio
+ * GET /api/ventas/detalle/:folio     — detalle líneas de un folio
  */
 
 const express = require('express');
 const router  = express.Router();
-const { requireAuth } = require('../middlewares/requireAuth');
+const { requireAuth }      = require('../middlewares/requireAuth');
+const db                   = require('../config/db');
+const { getSoftlandPool }  = require('../config/db.softland');
 const {
   getTotalVentas,
   getResumenPorVendedor,
@@ -24,15 +27,11 @@ const {
   getDetalleFolio,
 } = require('../models/venta');
 
-// ─── Helper: extrae codigos de vendedor del token ─────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 function getCodigos(req) {
-  // req.usuario viene del middleware requireAuth (JWT payload)
-  // vendedores es un array [{ cod_vendedor: '194', ... }]
-  const vendedores = req.usuario?.vendedores ?? [];
-  return vendedores.map(v => v.cod_vendedor).filter(Boolean);
+  return (req.usuario?.vendedores ?? []).map(v => v.cod_vendedor).filter(Boolean);
 }
 
-// ─── Helper: mes/año actuales por defecto ────────────────────────────────────
 function getMesAnio(query) {
   const hoy  = new Date();
   const mes  = Number(query.mes  ?? hoy.getMonth() + 1);
@@ -40,9 +39,11 @@ function getMesAnio(query) {
   return { mes, anio };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /api/ventas — lista de folios del mes
-// ─────────────────────────────────────────────────────────────────────────────
+function mssqlIn(arr) {
+  return arr.map(v => `'${v}'`).join(',');
+}
+
+// ── GET /api/ventas ───────────────────────────────────────────────────────────
 router.get('/', requireAuth, async (req, res) => {
   try {
     const codigos = getCodigos(req);
@@ -56,9 +57,7 @@ router.get('/', requireAuth, async (req, res) => {
   }
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /api/ventas/total
-// ─────────────────────────────────────────────────────────────────────────────
+// ── GET /api/ventas/total ─────────────────────────────────────────────────────
 router.get('/total', requireAuth, async (req, res) => {
   try {
     const codigos = getCodigos(req);
@@ -72,9 +71,103 @@ router.get('/total', requireAuth, async (req, res) => {
   }
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /api/ventas/resumen
-// ─────────────────────────────────────────────────────────────────────────────
+// ── GET /api/ventas/meta ──────────────────────────────────────────────────────
+router.get('/meta', requireAuth, async (req, res) => {
+  try {
+    const { anio }  = getMesAnio(req.query);
+    const usuarioId = req.usuario?.id;
+    const [rows] = await db.query(
+      `SELECT meta FROM vendedor_meta WHERE usuario_id = ? AND YEAR(fecha) = ? LIMIT 1`,
+      [usuarioId, anio]
+    );
+    const metaAnual = rows.length ? Number(rows[0].meta) : 0;
+    const metaMes   = metaAnual > 0 ? Math.round(metaAnual / 12) : 0;
+    res.json({ ok: true, metaAnual, metaMes });
+  } catch (err) {
+    console.error('[GET /api/ventas/meta]', err.message);
+    res.status(500).json({ ok: false, error: 'Error al obtener meta' });
+  }
+});
+
+// ── GET /api/ventas/resumen-vendedores ────────────────────────────────────────
+router.get('/resumen-vendedores', requireAuth, async (req, res) => {
+  try {
+    const codigos = getCodigos(req);
+    if (!codigos.length) return res.json({ ok: true, vendedores: [] });
+    const { mes, anio } = getMesAnio(req.query);
+    const pool   = await getSoftlandPool();
+    const result = await pool.request().query(`
+      SELECT
+        h.CanCod                  AS codVendedor,
+        COUNT(DISTINCT h.Folio)   AS totalFolios,
+        SUM(h.SubTotal)           AS totalVentas,
+        SUM(ISNULL(h.SubTotal * h.PorDesc / 100, 0)) AS totalDescuento
+      FROM [PRODIN].[softland].[iw_gsaen] h
+      WHERE h.CanCod IN (${mssqlIn(codigos)})
+        AND MONTH(h.FchEmi) = ${mes}
+        AND YEAR(h.FchEmi)  = ${anio}
+        AND h.TipMov IN ('FT','BT')
+        AND h.EstDoc <> 'A'
+      GROUP BY h.CanCod
+      ORDER BY totalVentas DESC
+    `);
+    res.json({ ok: true, vendedores: result.recordset });
+  } catch (err) {
+    console.error('[GET /api/ventas/resumen-vendedores]', err.message);
+    res.status(500).json({ ok: false, error: 'Error al obtener resumen vendedores' });
+  }
+});
+
+// ── GET /api/ventas/evolucion ─────────────────────────────────────────────────
+router.get('/evolucion', requireAuth, async (req, res) => {
+  try {
+    const codigos   = getCodigos(req);
+    const { anio }  = getMesAnio(req.query);
+    const usuarioId = req.usuario?.id;
+
+    const [metaRows] = await db.query(
+      `SELECT meta FROM vendedor_meta WHERE usuario_id = ? AND YEAR(fecha) = ? LIMIT 1`,
+      [usuarioId, anio]
+    );
+    const metaAnual = metaRows.length ? Number(metaRows[0].meta) : 0;
+    const metaMes   = metaAnual > 0 ? Math.round(metaAnual / 12) : 0;
+
+    if (!codigos.length) {
+      const meses = Array.from({ length: 12 }, (_, i) => ({ mes: i + 1, ventas: 0, meta: metaMes }));
+      return res.json({ ok: true, evolucion: meses });
+    }
+
+    const pool   = await getSoftlandPool();
+    const result = await pool.request().query(`
+      SELECT
+        MONTH(h.FchEmi) AS mes,
+        SUM(h.SubTotal) AS ventas
+      FROM [PRODIN].[softland].[iw_gsaen] h
+      WHERE h.CanCod IN (${mssqlIn(codigos)})
+        AND YEAR(h.FchEmi) = ${anio}
+        AND h.TipMov IN ('FT','BT')
+        AND h.EstDoc <> 'A'
+      GROUP BY MONTH(h.FchEmi)
+      ORDER BY mes
+    `);
+
+    const ventasPorMes = {};
+    result.recordset.forEach(r => { ventasPorMes[r.mes] = Number(r.ventas) || 0; });
+
+    const evolucion = Array.from({ length: 12 }, (_, i) => ({
+      mes:    i + 1,
+      ventas: ventasPorMes[i + 1] || 0,
+      meta:   metaMes,
+    }));
+
+    res.json({ ok: true, evolucion });
+  } catch (err) {
+    console.error('[GET /api/ventas/evolucion]', err.message);
+    res.status(500).json({ ok: false, error: 'Error al obtener evolución' });
+  }
+});
+
+// ── GET /api/ventas/resumen ───────────────────────────────────────────────────
 router.get('/resumen', requireAuth, async (req, res) => {
   try {
     const codigos = getCodigos(req);
@@ -88,9 +181,7 @@ router.get('/resumen', requireAuth, async (req, res) => {
   }
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /api/ventas/clientes
-// ─────────────────────────────────────────────────────────────────────────────
+// ── GET /api/ventas/clientes ──────────────────────────────────────────────────
 router.get('/clientes', requireAuth, async (req, res) => {
   try {
     const codigos = getCodigos(req);
@@ -104,9 +195,7 @@ router.get('/clientes', requireAuth, async (req, res) => {
   }
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /api/ventas/folio/:folio — monto total de un folio
-// ─────────────────────────────────────────────────────────────────────────────
+// ── GET /api/ventas/folio/:folio ──────────────────────────────────────────────
 router.get('/folio/:folio', requireAuth, async (req, res) => {
   try {
     const folio = req.params.folio;
@@ -120,12 +209,10 @@ router.get('/folio/:folio', requireAuth, async (req, res) => {
   }
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /api/ventas/detalle/:folio — líneas de detalle de un folio
-// ─────────────────────────────────────────────────────────────────────────────
+// ── GET /api/ventas/detalle/:folio ────────────────────────────────────────────
 router.get('/detalle/:folio', requireAuth, async (req, res) => {
   try {
-    const folio  = req.params.folio;
+    const folio   = req.params.folio;
     const detalle = await getDetalleFolio({ folio });
     res.json({ ok: true, folio, detalle });
   } catch (err) {
