@@ -5,7 +5,7 @@
  * 4 KPIs | 1 Gráfico líneas | 3 Tablas | Modal detalle
  */
 
-/* global Chart */
+
 
 (function () {
 
