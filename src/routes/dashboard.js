@@ -40,7 +40,7 @@ router.get('/resumen', async (req, res) => {
       `SELECT meta FROM vendedor_meta
        WHERE usuario_id = ? AND YEAR(fecha) = ?
        LIMIT 1`,
-      [usuario.id, anio]
+      [usuario.sub, anio]
     );
     const metaAnual = metaRows.length ? Number(metaRows[0].meta) : 0;
     const metaMes = metaAnual > 0 ? Math.round(metaAnual / 12) : 0;
@@ -83,7 +83,7 @@ router.get('/evolucion', async (req, res) => {
   try {
     const [metaRows] = await db.pool.query(
       `SELECT meta FROM vendedor_meta WHERE usuario_id = ? AND YEAR(fecha) = ? LIMIT 1`,
-      [usuario.id, anio]
+      [usuario.sub, anio]
     );
     const metaAnual = metaRows.length ? Number(metaRows[0].meta) : 0;
     const metaMes = metaAnual > 0 ? Math.round(metaAnual / 12) : 0;
