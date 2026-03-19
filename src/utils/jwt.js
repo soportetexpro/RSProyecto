@@ -28,9 +28,11 @@ function generarToken(usuario) {
   if (!SECRET) throw new Error('JWT_SECRET no está definido en .env');
   return jwt.sign(
     {
-      sub:      usuario.id,
-      email:    usuario.email,
-      is_admin: Boolean(usuario.is_admin)
+      sub:       usuario.id,
+      email:     usuario.email,
+      is_admin:  Boolean(usuario.is_admin),
+      vendedores: usuario.vendedores || [],   // ← AGREGAR esta línea
+      area:       usuario.area      || ''     // ← AGREGAR esta línea
     },
     SECRET,
     { expiresIn: EXPIRES_IN }

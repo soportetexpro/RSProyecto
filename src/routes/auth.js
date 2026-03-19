@@ -71,15 +71,17 @@ router.post('/login', async (req, res) => {
       updateLastLogin(usuario.id)
     ]);
 
-    const token = generarToken({
-      id:       usuario.id,
-      email:    usuario.email,
-      is_admin: usuario.is_admin
+   const token = generarToken({
+    id:        usuario.id,
+    email:     usuario.email,
+    is_admin:  usuario.is_admin,
+    vendedores: vendedores,    // ← AGREGAR
+    area:       usuario.area   // ← AGREGAR
     });
 
     return res.status(200).json({
       ok:        true,
-      message:   'Login correcto',
+    message:   'Login correcto',
       token,
       expiresIn: process.env.JWT_EXPIRES_IN || '8h',
       user: {
