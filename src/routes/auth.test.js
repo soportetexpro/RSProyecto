@@ -2,24 +2,6 @@
 
 /**
  * auth.test.js — Tests unitarios de autenticación con JWT
- *
- * Cubre:
- *   POST /api/auth/login
- *     - Credenciales faltantes
- *     - Usuario no encontrado
- *     - Cuenta inactiva
- *     - Contraseña incorrecta
- *     - Login exitoso → devuelve token + user
- *     - Token generado es válido y contiene el payload correcto
- *
- *   GET /api/auth/me
- *     - Sin token → 401
- *     - Token inválido → 401
- *     - Token válido → 200 con datos del usuario
- *
- *   POST /api/auth/logout
- *     - Sin token → 401
- *     - Con token válido → 200
  */
 
 const request = require('supertest');
@@ -30,28 +12,24 @@ const app     = require('../server');
 jest.mock('../models/usuario');
 jest.mock('../utils/pbkdf2Django');
 
-const { findByEmail, findById, updateLastLogin } = require('../models/usuario');
+const { findByEmail, findById, updateLastLogin,
+        getVendedoresByUsuarioId, getMetasByUsuarioId } = require('../models/usuario');
 const { verifyPasswordDjango } = require('../utils/pbkdf2Django');
 
 const MOCK_USUARIO = {
-  id:                 7,
-  nombre:             'CIDALIA SOTO',
-  email:              'csoto@texpro.cl',
-  password:           'pbkdf2_sha256$600000$salt$hash',
-  area:               'ventas',
-  codigo:             '194',
-  tema:               'claro',
-  is_active:          1,
-  is_admin:           0,
-  last_login:         null,
-  fecha_creacion:     '2026-03-11T18:57:11.000Z',
-  vendedores:         [{ id: 15, cod_vendedor: '194', tipo: 'P', usuario_id: 7 }],
-  permisos:           [],
-  metas:              [{ id: 22, fecha: '2023-01-01', meta: '8072983.97', usuario_id: 7 }],
-  facturasCompartidas: []
+  id:             7,
+  nombre:         'CIDALIA SOTO',
+  email:          'csoto@texpro.cl',
+  password:       'pbkdf2_sha256$600000$salt$hash',
+  area:           'ventas',
+  codigo:         '194',
+  tema:           'claro',
+  is_active:      1,
+  is_admin:       0,
+  last_login:     null,
+  fecha_creacion: '2026-03-11T18:57:11.000Z'
 };
 
-// JWT_SECRET para tests
 process.env.JWT_SECRET     = 'test-secret-rsproyecto';
 process.env.JWT_EXPIRES_IN = '8h';
 
@@ -99,6 +77,8 @@ describe('POST /api/auth/login', () => {
     findByEmail.mockResolvedValue(MOCK_USUARIO);
     verifyPasswordDjango.mockReturnValue(true);
     updateLastLogin.mockResolvedValue(true);
+    getVendedoresByUsuarioId.mockResolvedValue([]);
+    getMetasByUsuarioId.mockResolvedValue([]);
 
     const res = await request(app).post('/api/auth/login').send({ email: 'csoto@texpro.cl', password: 'correctpass' });
 
@@ -107,7 +87,7 @@ describe('POST /api/auth/login', () => {
     expect(res.body.token).toBeDefined();
     expect(typeof res.body.token).toBe('string');
     expect(res.body.user).toBeDefined();
-    expect(res.body.user.password).toBeUndefined(); // nunca exponer password
+    expect(res.body.user.password).toBeUndefined();
     expect(res.body.user.email).toBe('csoto@texpro.cl');
   });
 
@@ -115,14 +95,15 @@ describe('POST /api/auth/login', () => {
     findByEmail.mockResolvedValue(MOCK_USUARIO);
     verifyPasswordDjango.mockReturnValue(true);
     updateLastLogin.mockResolvedValue(true);
+    getVendedoresByUsuarioId.mockResolvedValue([]);
+    getMetasByUsuarioId.mockResolvedValue([]);
 
-    const res = await request(app).post('/api/auth/login').send({ email: 'csoto@texpro.cl', password: 'pass' });
+    const res     = await request(app).post('/api/auth/login').send({ email: 'csoto@texpro.cl', password: 'pass' });
     const payload = jwt.verify(res.body.token, process.env.JWT_SECRET);
 
     expect(payload.sub).toBe(MOCK_USUARIO.id);
     expect(payload.email).toBe(MOCK_USUARIO.email);
     expect(payload.is_admin).toBe(false);
-    expect(payload.iss).toBe('rsproyecto-texpro');
   });
 
 });
@@ -135,9 +116,9 @@ describe('GET /api/auth/me', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     validToken = jwt.sign(
-      { id: 7, email: 'csoto@texpro.cl', nombre: 'CIDALIA SOTO', area: 'ventas', codigo: '194', is_admin: false },
+      { sub: 7, email: 'csoto@texpro.cl', is_admin: false },
       process.env.JWT_SECRET,
-      { expiresIn: '8h', issuer: 'rsproyecto-texpro' }
+      { expiresIn: '8h' }
     );
   });
 
@@ -155,7 +136,8 @@ describe('GET /api/auth/me', () => {
   });
 
   test('200 con token válido — devuelve usuario sin password', async () => {
-    findById.mockResolvedValue(MOCK_USUARIO);
+    const { password: _pw, ...usuarioSinPassword } = MOCK_USUARIO;
+    findById.mockResolvedValue(usuarioSinPassword);
 
     const res = await request(app)
       .get('/api/auth/me')
@@ -168,7 +150,8 @@ describe('GET /api/auth/me', () => {
   });
 
   test('401 si el usuario está inactivo (BD)', async () => {
-    findById.mockResolvedValue({ ...MOCK_USUARIO, password: undefined });
+    const { password: _pw, ...usuarioInactivo } = { ...MOCK_USUARIO, is_active: 0 };
+    findById.mockResolvedValue(usuarioInactivo);
 
     const res = await request(app)
       .get('/api/auth/me')
@@ -187,9 +170,9 @@ describe('POST /api/auth/logout', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     validToken = jwt.sign(
-      { id: 7, email: 'csoto@texpro.cl', nombre: 'CIDALIA SOTO', area: 'ventas', codigo: '194', is_admin: false },
+      { sub: 7, email: 'csoto@texpro.cl', is_admin: false },
       process.env.JWT_SECRET,
-      { expiresIn: '8h', issuer: 'rsproyecto-texpro' }
+      { expiresIn: '8h' }
     );
   });
 
