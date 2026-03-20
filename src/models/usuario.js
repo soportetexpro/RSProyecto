@@ -3,6 +3,7 @@
 const { pool } = require('../config/db');
 const { hashPasswordDjango } = require('../utils/pbkdf2Django');
 
+
 async function findByEmail(email) {
   const [rows] = await pool.execute(
     'SELECT * FROM usuarios WHERE email = ? LIMIT 1',
