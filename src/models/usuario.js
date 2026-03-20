@@ -6,7 +6,7 @@ const { hashPasswordDjango } = require('../utils/pbkdf2Django');
 
 async function findByEmail(email) {
   const [rows] = await pool.execute(
-    'SELECT * FROM usuarios WHERE email = ? LIMIT 1',
+    'SELECT * FROM usuario WHERE email = ? LIMIT 1',
     [email]
   );
   return rows[0] ?? null;
@@ -14,7 +14,7 @@ async function findByEmail(email) {
 
 async function findById(id) {
   const [rows] = await pool.execute(
-    'SELECT id, nombre, email, area, codigo, tema, is_active, is_admin, last_login, fecha_creacion FROM usuarios WHERE id = ? LIMIT 1',
+    'SELECT id, nombre, email, area, codigo, tema, is_active, is_admin, last_login, fecha_creacion FROM usuario WHERE id = ? LIMIT 1',
     [id]
   );
   return rows[0] ?? null;
@@ -22,7 +22,7 @@ async function findById(id) {
 
 async function updateLastLogin(id) {
   const [result] = await pool.execute(
-    'UPDATE usuarios SET last_login = NOW() WHERE id = ?',
+    'UPDATE usuario SET last_login = NOW() WHERE id = ?',
     [id]
   );
   return result.affectedRows > 0;
@@ -31,7 +31,7 @@ async function updateLastLogin(id) {
 async function updatePassword(email, nuevaPassword) {
   const hash = hashPasswordDjango(nuevaPassword);
   const [result] = await pool.execute(
-    'UPDATE usuarios SET password = ? WHERE email = ? AND is_active = 1',
+    'UPDATE usuario SET password = ? WHERE email = ? AND is_active = 1',
     [hash, email]
   );
   return result.affectedRows > 0;
@@ -39,7 +39,7 @@ async function updatePassword(email, nuevaPassword) {
 
 async function getVendedoresByUsuarioId(usuarioId) {
   const [rows] = await pool.execute(
-    'SELECT * FROM usuario_vendedores WHERE usuario_id = ?',
+    'SELECT * FROM usuario_vendedor WHERE usuario_id = ?',
     [usuarioId]
   );
   return rows;
@@ -55,7 +55,7 @@ async function getPermisosByUsuarioId(usuarioId) {
 
 async function getMetasByUsuarioId(usuarioId) {
   const [rows] = await pool.execute(
-    'SELECT * FROM usuario_metas WHERE usuario_id = ? ORDER BY fecha DESC',
+    'SELECT * FROM vendedor_meta WHERE usuario_id = ? ORDER BY fecha DESC',
     [usuarioId]
   );
   return rows;
