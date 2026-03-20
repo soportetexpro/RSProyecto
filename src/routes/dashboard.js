@@ -16,6 +16,7 @@ const { requireAuth } = require('../middlewares/requireAuth');
 const db = require('../config/db');
 const { getSoftlandPool } = require('../config/db.softland');
 
+
 router.use(requireAuth);
 
 // ── helpers ─────────────────────────────────────────────────────────────────
@@ -31,7 +32,7 @@ function mssqlIn(arr) {
 router.get('/resumen', async (req, res) => {
   const usuario = req.usuario;
   const codigos = getCodigos(usuario);
-  const hoy = new Date();
+  const hoy  = new Date();
   const mes  = parseInt(req.query.mes)  || hoy.getMonth() + 1;
   const anio = parseInt(req.query.anio) || hoy.getFullYear();
 
@@ -49,23 +50,40 @@ router.get('/resumen', async (req, res) => {
     }
 
     const pool   = await getSoftlandPool();
-    const result = await pool.request().query(`
-      SELECT
-        SUM(SubTotal) AS totalVentas,
-        SUM(SubTotal * ISNULL(PorcDesc01, 0) / 100) AS totalDescuento
-      FROM [PRODIN].[softland].[iw_gsaen]
-      WHERE CodVendedor IN (${mssqlIn(codigos)})
-        AND MONTH(Fecha) = ${mes}
-        AND YEAR(Fecha)  = ${anio}
-        AND Tipo IN ('F','N','D')
-        AND Estado <> 'A'
-    `);
+const result = await pool.request().query(`
+  SELECT
+    SUM(
+      CASE
+        WHEN RTRIM(h.CanCod) = '300' THEN h.SubTotal
+        ELSE ROUND(h.SubTotal * 1.10, 0)
+      END
+    ) AS totalVentas,
+    ROUND(
+      SUM(
+        CASE
+          WHEN m.PreUniMB > 0 AND m.CantFacturada > 0
+          THEN (m.PreUniMB - (m.TotLinea / m.CantFacturada)) / m.PreUniMB * 100
+          ELSE 0
+        END
+      ) / NULLIF(COUNT(m.Linea), 0)
+    , 2) AS pctDescuentoGlobal
+  FROM [PRODIN].[softland].[iw_gsaen] h
+  LEFT JOIN [PRODIN].[softland].[iw_gmovi] m
+    ON m.NroInt = h.NroInt AND m.Tipo = h.Tipo
+  WHERE h.CodVendedor IN (${mssqlIn(codigos)})
+    AND MONTH(h.Fecha) = ${mes}
+    AND YEAR(h.Fecha)  = ${anio}
+    AND h.Tipo IN ('F','N','D')
+    AND h.Estado <> 'A'
+`);
 
-    const row           = result.recordset[0] || {};
-    const totalVentas   = Number(row.totalVentas)   || 0;
-    const totalDescuento = Number(row.totalDescuento) || 0;
-    const progreso      = metaMes > 0 ? Math.min(Math.round((totalVentas / metaMes) * 100), 999) : 0;
-    res.json({ ok: true, totalVentas, meta: metaMes, progreso, totalDescuento });
+const row = result.recordset[0] || {};
+const totalVentas        = Number(row.totalVentas)        || 0;
+const pctDescuentoGlobal = Number(row.pctDescuentoGlobal) || 0;
+const progreso = metaMes > 0 ? Math.min(Math.round((totalVentas / metaMes) * 100), 999) : 0;
+
+res.json({ ok: true, totalVentas, meta: metaMes, progreso, pctDescuentoGlobal });
+
 
   } catch (err) {
     console.error('[GET /api/dashboard/resumen]', err.message);
@@ -93,18 +111,24 @@ router.get('/evolucion', async (req, res) => {
     }
 
     const pool   = await getSoftlandPool();
-    const result = await pool.request().query(`
-      SELECT
-        MONTH(Fecha) AS mes,
-        SUM(SubTotal) AS ventas
-      FROM [PRODIN].[softland].[iw_gsaen]
-      WHERE CodVendedor IN (${mssqlIn(codigos)})
-        AND YEAR(Fecha) = ${anio}
-        AND Tipo IN ('F','N','D')
-        AND Estado <> 'A'
-      GROUP BY MONTH(Fecha)
-      ORDER BY mes
-    `);
+const result = await pool.request().query(`
+  SELECT
+    MONTH(Fecha) AS mes,
+    SUM(
+      CASE
+        WHEN RTRIM(CanCod) = '300' THEN SubTotal
+        ELSE ROUND(SubTotal * 1.10, 0)
+      END
+    ) AS ventas
+  FROM [PRODIN].[softland].[iw_gsaen]
+  WHERE CodVendedor IN (${mssqlIn(codigos)})
+    AND YEAR(Fecha) = ${anio}
+    AND Tipo IN ('F','N','D')
+    AND Estado <> 'A'
+  GROUP BY MONTH(Fecha)
+  ORDER BY mes
+`);
+
 
     const ventasPorMes = {};
     result.recordset.forEach(r => { ventasPorMes[r.mes] = Number(r.ventas) || 0; });
@@ -169,21 +193,38 @@ router.get('/ventas-mes', async (req, res) => {
   try {
     const pool   = await getSoftlandPool();
     const result = await pool.request().query(`
-      SELECT TOP 100
-        Folio,
-        CONVERT(varchar, Fecha, 103) AS fecha_formato,
-        NomAux                       AS cliente,
-        CodVendedor,
-        SubTotal                     AS monto,
-        ISNULL(SubTotal * PorcDesc01 / 100, 0) AS descuento
-      FROM [PRODIN].[softland].[iw_gsaen]
-      WHERE CodVendedor IN (${mssqlIn(codigos)})
-        AND MONTH(Fecha) = ${mes}
-        AND YEAR(Fecha)  = ${anio}
-        AND Tipo IN ('F','N','D')
-        AND Estado <> 'A'
-      ORDER BY Fecha DESC
-    `);
+  SELECT TOP 100
+    h.Folio,
+    CONVERT(varchar, h.Fecha, 103)   AS fecha_formato,
+    c.NomAux                         AS cliente,
+    h.CodVendedor,
+    -- Regla 1: recargo regional por CanCod
+    CASE 
+      WHEN RTRIM(h.CanCod) = '300' THEN h.SubTotal
+      ELSE ROUND(h.SubTotal * 1.10, 0)
+    END                              AS monto,
+    -- Regla 2: descuento % promedio por líneas
+    ROUND(
+      SUM(
+        CASE
+          WHEN m.PreUniMB > 0 AND m.CantFacturada > 0
+          THEN (m.PreUniMB - (m.TotLinea / m.CantFacturada)) / m.PreUniMB * 100
+          ELSE 0
+        END
+      ) / NULLIF(COUNT(m.Linea), 0)
+    , 2)                             AS pct_descuento
+  FROM [PRODIN].[softland].[iw_gsaen] h
+  LEFT JOIN [PRODIN].[softland].[cwtauxi] c  ON c.CodAux = h.CodAux
+  LEFT JOIN [PRODIN].[softland].[iw_gmovi] m ON m.NroInt = h.NroInt AND m.Tipo = h.Tipo
+  WHERE h.CodVendedor IN (${mssqlIn(codigos)})
+    AND MONTH(h.Fecha) = ${mes}
+    AND YEAR(h.Fecha)  = ${anio}
+    AND h.Tipo IN ('F','N','D')
+    AND h.Estado <> 'A'
+  GROUP BY h.Folio, h.Fecha, c.NomAux, h.CodVendedor, h.SubTotal, h.NroInt, h.CanCod
+  ORDER BY h.Fecha DESC
+`);
+
     res.json({ ok: true, ventas: result.recordset });
 
   } catch (err) {
