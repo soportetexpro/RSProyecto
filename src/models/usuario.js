@@ -1,155 +1,18 @@
 'use strict';
 
 /**
- * usuario.js — Modelo de la tabla `usuario`
- *
- * LOGIN: solo findByEmail + updateLastLogin (email + password)
- * Las relaciones (vendedores, metas, permisos, facturas) se cargan
- * en cada módulo que las necesite, no en el login.
- *
- * Tablas:
- *   usuario           — usuarios del sistema (autenticación)
- *   usuario_vendedor  — códigos de vendedor por usuario
- *   usuario_permiso   — permisos adicionales
- *   vendedor_meta     — metas anuales
- *   tasas_descuentos  — tasas de descuento (auxiliar)
+ * usuario.test.js — Tests unitarios del modelo usuario
+ * Cubre: findByEmail, findById, updateLastLogin, updatePassword,
+ *        getVendedoresByUsuarioId, getPermisosByUsuarioId,
+ *        getMetasByUsuarioId, getTasasDescuentos
  */
 
-const crypto   = require('crypto');
-const { pool } = require('../config/db');
+const mockExecute = jest.fn();
+jest.mock('../config/db', () => ({
+  pool: { execute: mockExecute }
+}));
 
-// ───────────────────────────────────────────────────────────────
-// Tabla: usuario
-// ───────────────────────────────────────────────────────────────
-
-/**
- * Busca un usuario por email (incluye password para verificación).
- * Solo para uso interno del login — nunca exponer en respuesta HTTP.
- */
-async function findByEmail(email) {
-  const [rows] = await pool.execute(
-    `SELECT id, password, last_login, nombre, email, area,
-            codigo, tema, is_active, is_admin, fecha_creacion
-     FROM usuario
-     WHERE email = ?
-     LIMIT 1`,
-    [email]
-  );
-  return rows[0] || null;
-}
-
-/**
- * Busca un usuario por ID (sin password).
- * Usado en GET /api/auth/me para refrescar datos de sesión.
- */
-async function findById(id) {
-  const [rows] = await pool.execute(
-    `SELECT id, last_login, nombre, email, area,
-            codigo, tema, is_active, is_admin, fecha_creacion
-     FROM usuario
-     WHERE id = ?
-     LIMIT 1`,
-    [id]
-  );
-  return rows[0] || null;
-}
-
-/**
- * Actualiza el campo last_login al momento del login exitoso.
- */
-async function updateLastLogin(usuarioId) {
-  const [result] = await pool.execute(
-    'UPDATE usuario SET last_login = NOW(6) WHERE id = ?',
-    [usuarioId]
-  );
-  return result.affectedRows > 0;
-}
-
-/**
- * Genera un hash PBKDF2-SHA256 en formato Django y actualiza la
- * contraseña del usuario en la tabla `usuario`.
- *
- * Formato: pbkdf2_sha256$<iter>$<salt>$<hash_b64>
- * Iteraciones: 600000 (mismo que Django 4.x)
- *
- * @param {string} email      — email del usuario
- * @param {string} nuevaPass  — contraseña en texto plano
- * @returns {Promise<boolean>} true si se actualizó, false si no existe
- */
-async function updatePassword(email, nuevaPass) {
-  const ITERATIONS = 600000;
-  const KEYLEN     = 32;
-  const DIGEST     = 'sha256';
-  const salt       = crypto.randomBytes(12).toString('base64url').slice(0, 22);
-
-  const derived = crypto.pbkdf2Sync(
-    Buffer.from(nuevaPass, 'utf8'),
-    Buffer.from(salt, 'utf8'),
-    ITERATIONS,
-    KEYLEN,
-    DIGEST
-  ).toString('base64');
-
-  const hash = `pbkdf2_sha256$${ITERATIONS}$${salt}$${derived}`;
-
-  const [result] = await pool.execute(
-    'UPDATE usuario SET password = ? WHERE email = ? AND is_active = 1',
-    [hash, email]
-  );
-  return result.affectedRows > 0;
-}
-
-// ───────────────────────────────────────────────────────────────
-// Relaciones — disponibles para módulos, NO usadas en login
-// ───────────────────────────────────────────────────────────────
-
-/** Retorna los códigos de vendedor de un usuario (tipo P=Principal, C=Compartido) */
-async function getVendedoresByUsuarioId(usuarioId) {
-  const [rows] = await pool.execute(
-    `SELECT id, cod_vendedor, tipo
-     FROM usuario_vendedor
-     WHERE usuario_id = ?
-     ORDER BY tipo DESC, cod_vendedor ASC`,
-    [usuarioId]
-  );
-  return rows;
-}
-
-/** Retorna los permisos adicionales de un usuario */
-async function getPermisosByUsuarioId(usuarioId) {
-  const [rows] = await pool.execute(
-    `SELECT id, permiso
-     FROM usuario_permiso
-     WHERE usuario_id = ?
-     ORDER BY permiso ASC`,
-    [usuarioId]
-  );
-  return rows;
-}
-
-/** Retorna las metas anuales de un usuario, ordenadas de más reciente a más antigua */
-async function getMetasByUsuarioId(usuarioId) {
-  const [rows] = await pool.execute(
-    `SELECT id, fecha, meta
-     FROM vendedor_meta
-     WHERE usuario_id = ?
-     ORDER BY fecha DESC`,
-    [usuarioId]
-  );
-  return rows;
-}
-
-/** Retorna todas las tasas de descuento (auxiliar, sin filtro por usuario) */
-async function getTasasDescuentos() {
-  const [rows] = await pool.execute(
-    `SELECT id, anio, fecha_corte, porcentaje, orden
-     FROM tasas_descuentos
-     ORDER BY anio DESC`
-  );
-  return rows;
-}
-
-module.exports = {
+const {
   findByEmail,
   findById,
   updateLastLogin,
@@ -158,4 +21,128 @@ module.exports = {
   getPermisosByUsuarioId,
   getMetasByUsuarioId,
   getTasasDescuentos
+} = require('./usuario');
+
+const MOCK_USUARIO = {
+  id: 7, nombre: 'CIDALIA SOTO', email: 'csoto@texpro.cl',
+  area: 'ventas', codigo: '194', tema: 'claro',
+  is_active: 1, is_admin: 0, last_login: null,
+  fecha_creacion: '2026-03-11T18:57:11.000Z'
 };
+
+beforeEach(() => mockExecute.mockReset());
+
+// ── findByEmail ──────────────────────────────────────────────────
+describe('findByEmail', () => {
+  it('retorna usuario si existe', async () => {
+    mockExecute.mockResolvedValueOnce([[MOCK_USUARIO]]);
+    const result = await findByEmail('csoto@texpro.cl');
+    expect(result).toEqual(MOCK_USUARIO);
+  });
+
+  it('retorna null si no existe', async () => {
+    mockExecute.mockResolvedValueOnce([[]]);
+    const result = await findByEmail('noexiste@texpro.cl');
+    expect(result).toBeNull();
+  });
+});
+
+// ── findById ─────────────────────────────────────────────────────
+describe('findById', () => {
+  it('retorna usuario sin password si existe', async () => {
+    mockExecute.mockResolvedValueOnce([[MOCK_USUARIO]]);
+    const result = await findById(7);
+    expect(result).toEqual(MOCK_USUARIO);
+    expect(result.password).toBeUndefined();
+  });
+
+  it('retorna null si no existe', async () => {
+    mockExecute.mockResolvedValueOnce([[]]);
+    const result = await findById(999);
+    expect(result).toBeNull();
+  });
+});
+
+// ── updateLastLogin ──────────────────────────────────────────────
+describe('updateLastLogin', () => {
+  it('retorna true si se actualizó', async () => {
+    mockExecute.mockResolvedValueOnce([{ affectedRows: 1 }]);
+    const result = await updateLastLogin(7);
+    expect(result).toBe(true);
+  });
+
+  it('retorna false si no afectó filas', async () => {
+    mockExecute.mockResolvedValueOnce([{ affectedRows: 0 }]);
+    const result = await updateLastLogin(999);
+    expect(result).toBe(false);
+  });
+});
+
+// ── updatePassword ───────────────────────────────────────────────
+describe('updatePassword', () => {
+  it('retorna true si actualizó contraseña', async () => {
+    mockExecute.mockResolvedValueOnce([{ affectedRows: 1 }]);
+    const result = await updatePassword('csoto@texpro.cl', 'NuevaPass123');
+    expect(result).toBe(true);
+    const callArgs = mockExecute.mock.calls[0];
+    expect(callArgs[1][0]).toMatch(/^pbkdf2_sha256\$600000\$/);
+  });
+
+  it('retorna false si el usuario no existe o está inactivo', async () => {
+    mockExecute.mockResolvedValueOnce([{ affectedRows: 0 }]);
+    const result = await updatePassword('noexiste@texpro.cl', 'Pass1234');
+    expect(result).toBe(false);
+  });
+});
+
+// ── getVendedoresByUsuarioId ─────────────────────────────────────
+describe('getVendedoresByUsuarioId', () => {
+  it('retorna lista de vendedores del usuario', async () => {
+    const mockVend = [{ id: 15, cod_vendedor: '194', tipo: 'P' }];
+    mockExecute.mockResolvedValueOnce([mockVend]);
+    const result = await getVendedoresByUsuarioId(7);
+    expect(result).toEqual(mockVend);
+  });
+
+  it('retorna array vacío si no tiene vendedores', async () => {
+    mockExecute.mockResolvedValueOnce([[]]);
+    const result = await getVendedoresByUsuarioId(7);
+    expect(result).toEqual([]);
+  });
+});
+
+// ── getPermisosByUsuarioId ───────────────────────────────────────
+describe('getPermisosByUsuarioId', () => {
+  it('retorna lista de permisos', async () => {
+    const mockPermisos = [{ id: 1, permiso: 'ver_descuentos' }];
+    mockExecute.mockResolvedValueOnce([mockPermisos]);
+    const result = await getPermisosByUsuarioId(7);
+    expect(result).toEqual(mockPermisos);
+  });
+});
+
+// ── getMetasByUsuarioId ──────────────────────────────────────────
+describe('getMetasByUsuarioId', () => {
+  it('retorna metas del usuario ordenadas por fecha desc', async () => {
+    const mockMetas = [{ id: 22, fecha: '2026-01-01', meta: '8000000.00' }];
+    mockExecute.mockResolvedValueOnce([mockMetas]);
+    const result = await getMetasByUsuarioId(7);
+    expect(result).toEqual(mockMetas);
+  });
+});
+
+// ── getTasasDescuentos ───────────────────────────────────────────
+describe('getTasasDescuentos', () => {
+  it('retorna todas las tasas de descuento', async () => {
+    const mockTasas = [{ id: 1, anio: 2026, fecha_corte: '2026-03-01', porcentaje: '5.00', orden: 1 }];
+    mockExecute.mockResolvedValueOnce([mockTasas]);
+    const result = await getTasasDescuentos();
+    expect(result).toEqual(mockTasas);
+  });
+
+  it('retorna array vacío si no hay tasas', async () => {
+    mockExecute.mockResolvedValueOnce([[]]);
+    const result = await getTasasDescuentos();
+    expect(result).toEqual([]);
+  });
+});
