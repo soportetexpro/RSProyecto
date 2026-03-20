@@ -120,11 +120,12 @@
       const data = await res.json();
       if (!data.ok) throw new Error(data.error);
 
-      const { totalVentas, meta, progreso, totalDescuento } = data;
+      const { totalVentas, meta, progreso, pctDescuentoGlobal } = data;
       document.getElementById('kpiTotalVentas').textContent = formatCLP(totalVentas);
       document.getElementById('kpiMeta').textContent        = formatCLP(meta);
-      document.getElementById('kpiDescuento').textContent   = formatCLP(totalDescuento);
-
+      document.getElementById('kpiDescuento').textContent =
+      pctDescuentoGlobal > 0 ? `${pctDescuentoGlobal}%` : '0%';
+      document.getElementById('kpiDescuento').textContent = pctDescGlobal;
       const pct = Math.min(progreso, 100);
       document.getElementById('kpiProgresoPct').textContent = `${progreso}%`;
       const fill = document.getElementById('progresoFill');
@@ -142,7 +143,7 @@
 
   async function cargarGrafico() {
     try {
-      const res  = await fetch(`${API}/evolucion?${new URLSearchParams({ anio: getParams().anio })}`,
+      const res = await fetch(`${API}/evolucion?${new URLSearchParams(getParams())}`,
         { headers: { Authorization: `Bearer ${token()}` } });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error);
@@ -258,21 +259,24 @@
     if (!lista.length) {
       tbody.innerHTML = '<tr class="tabla-empty"><td colspan="7">Sin registros</td></tr>'; return;
     }
-    tbody.innerHTML = lista.map(v => `
-      <tr>
-        <td><strong>${v.Folio||'—'}</strong></td>
-        <td>${v.fecha_formato||'—'}</td>
-        <td>${v.cliente||'—'}</td>
-        <td>${v.CodVendedor||'—'}</td>
-        <td style="text-align:right">${formatCLP(v.monto)}</td>
-        <td style="text-align:right">${formatCLP(v.descuento)}</td>
-        <td style="text-align:center">
-          <button class="btn-detalle" data-folio="${v.Folio}" title="Ver detalle">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
-          </button>
-        </td>
-      </tr>
-    `).join('');
+    tbody.innerHTML = lista.map(v => {
+  const pctDesc = v.pct_descuento > 0 ? `${v.pct_descuento}%` : '—';
+  return `
+    <tr>
+      <td><strong>${v.Folio||'—'}</strong></td>
+      <td>${v.fecha_formato||'—'}</td>
+      <td>${v.cliente||'—'}</td>
+      <td>${v.CodVendedor||'—'}</td>
+      <td style="text-align:right">${formatCLP(v.monto)}</td>
+      <td style="text-align:right">${pctDesc}</td>
+      <td style="text-align:center">
+        <button class="btn-detalle" data-folio="${v.Folio}" title="Ver detalle">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+        </button>
+      </td>
+    </tr>
+  `;
+}).join('');
     tbody.querySelectorAll('.btn-detalle').forEach(btn =>
       btn.addEventListener('click', () => abrirDetalle(btn.dataset.folio))
     );
