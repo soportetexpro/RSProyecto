@@ -96,7 +96,6 @@ router.get('/evolucion', async (req, res) => {
   const usuario = req.usuario;
   const codigos = getCodigos(usuario);
   const hoy  = new Date();
-  const mes  = parseInt(req.query.mes)  || hoy.getMonth() + 1;
   const anio = parseInt(req.query.anio) || hoy.getFullYear();
 
   try {

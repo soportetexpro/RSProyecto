@@ -136,7 +136,7 @@ describe('GET /api/auth/me', () => {
   });
 
   test('200 con token válido — devuelve usuario sin password', async () => {
-    const { password: _pw, ...usuarioSinPassword } = MOCK_USUARIO;
+    const { password, ...usuarioSinPassword } = MOCK_USUARIO;
     findById.mockResolvedValue(usuarioSinPassword);
 
     const res = await request(app)
@@ -150,7 +150,7 @@ describe('GET /api/auth/me', () => {
   });
 
   test('401 si el usuario está inactivo (BD)', async () => {
-    const { password: _pw, ...usuarioInactivo } = { ...MOCK_USUARIO, is_active: 0 };
+    const { password, ...usuarioInactivo } = { ...MOCK_USUARIO, is_active: 0 };
     findById.mockResolvedValue(usuarioInactivo);
 
     const res = await request(app)

@@ -123,9 +123,8 @@
       const { totalVentas, meta, progreso, pctDescuentoGlobal } = data;
       document.getElementById('kpiTotalVentas').textContent = formatCLP(totalVentas);
       document.getElementById('kpiMeta').textContent        = formatCLP(meta);
-      document.getElementById('kpiDescuento').textContent =
-      pctDescuentoGlobal > 0 ? `${pctDescuentoGlobal}%` : '0%';
-      document.getElementById('kpiDescuento').textContent = pctDescGlobal;
+        document.getElementById('kpiDescuento').textContent =
+        pctDescuentoGlobal > 0 ? `${pctDescuentoGlobal}%` : '0%';
       const pct = Math.min(progreso, 100);
       document.getElementById('kpiProgresoPct').textContent = `${progreso}%`;
       const fill = document.getElementById('progresoFill');

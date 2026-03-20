@@ -234,25 +234,6 @@
   }
 
   // ── Tabla 1: resumen por vendedor ────────────────────────────────────────────
-  async function cargarResumenVendedores() {
-    try {
-      const res  = await fetch(`${API}/resumen-vendedores?${new URLSearchParams(getParams())}`,
-        { headers: { Authorization: `Bearer ${token()}` } });
-      const data = await res.json();
-      const tbody = document.getElementById('tbodyVendedores');
-      if (!data.ok || !data.vendedores.length) {
-        tbody.innerHTML = '<tr class="tabla-empty"><td colspan="4">Sin datos</td></tr>'; return;
-      }
-      tbody.innerHTML = data.vendedores.map(v => `
-        <tr>
-          <td><strong>${v.codVendedor}</strong></td>
-          <td style="text-align:center">${v.totalFolios}</td>
-          <td style="text-align:right">${formatCLP(v.totalVentas)}</td>
-          <td style="text-align:right">${formatCLP(v.totalDescuento)}</td>
-        </tr>
-      `).join('');
-    } catch (err) { console.error('[cargarResumenVendedores]', err); }
-  }
 
   // ── Tabla 2: ventas del mes (paginada) ───────────────────────────────────────
   function sortVentas(arr) {
