@@ -6,7 +6,7 @@
  */
 
 const request = require('supertest');
-const app     = require('../../src/server');
+const app = require('../server');
 
 // ── Mock JWT middleware ──────────────────────────────────────────────────────
 jest.mock('../middlewares/requireAuth', () => ({
