@@ -65,5 +65,17 @@ function verifyPasswordDjango(password, encoded) {
 
   return crypto.timingSafeEqual(bufA, bufB);
 }
+/**
+ * Genera un hash Django PBKDF2-SHA256 compatible con 600.000 iteraciones.
+ * @param {string} password  Contraseña en texto plano
+ * @returns {string}  Hash en formato: pbkdf2_sha256$600000$<salt>$<hash_base64>
+ */
+function hashPasswordDjango(password) {
+  const salt = crypto.randomBytes(12).toString('base64url');
+  const iterations = 600000;
+  const derivedKey = crypto.pbkdf2Sync(password, salt, iterations, 32, 'sha256');
+  const hash = derivedKey.toString('base64');
+  return `pbkdf2_sha256$${iterations}$${salt}$${hash}`;
+}
 
-module.exports = { parseDjangoHash, verifyPasswordDjango };
+module.exports = { parseDjangoHash, verifyPasswordDjango, hashPasswordDjango };
