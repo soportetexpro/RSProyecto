@@ -1,151 +1,72 @@
 'use strict';
 
-/**
- * usuario.test.js — Tests unitarios del modelo usuario
- * Cubre: findByEmail, findById, updateLastLogin, updatePassword,
- *        getVendedoresByUsuarioId, getPermisosByUsuarioId,
- *        getMetasByUsuarioId, getTasasDescuentos
- */
+const { pool } = require('../config/db');
+const { hashPasswordDjango } = require('../utils/pbkdf2Django');
 
-const mockExecute = jest.fn();
-jest.mock('../config/db', () => ({
-  pool: { execute: mockExecute }
-}));
+async function findByEmail(email) {
+  const [rows] = await pool.execute(
+    'SELECT * FROM usuarios WHERE email = ? LIMIT 1',
+    [email]
+  );
+  return rows[0] ?? null;
+}
 
-const {
-  findByEmail,
-  findById,
-  updateLastLogin,
-  updatePassword,
-  getVendedoresByUsuarioId,
-  getPermisosByUsuarioId,
-  getMetasByUsuarioId,
-  getTasasDescuentos
-} = require('./usuario');
+async function findById(id) {
+  const [rows] = await pool.execute(
+    'SELECT id, nombre, email, area, codigo, tema, is_active, is_admin, last_login, fecha_creacion FROM usuarios WHERE id = ? LIMIT 1',
+    [id]
+  );
+  return rows[0] ?? null;
+}
 
-const MOCK_USUARIO = {
-  id: 7, nombre: 'CIDALIA SOTO', email: 'csoto@texpro.cl',
-  area: 'ventas', codigo: '194', tema: 'claro',
-  is_active: 1, is_admin: 0, last_login: null,
-  fecha_creacion: '2026-03-11T18:57:11.000Z'
-};
+async function updateLastLogin(id) {
+  const [result] = await pool.execute(
+    'UPDATE usuarios SET last_login = NOW() WHERE id = ?',
+    [id]
+  );
+  return result.affectedRows > 0;
+}
 
-beforeEach(() => mockExecute.mockReset());
+async function updatePassword(email, nuevaPassword) {
+  const hash = hashPasswordDjango(nuevaPassword);
+  const [result] = await pool.execute(
+    'UPDATE usuarios SET password = ? WHERE email = ? AND is_active = 1',
+    [hash, email]
+  );
+  return result.affectedRows > 0;
+}
 
-// ── findByEmail ──────────────────────────────────────────────────
-describe('findByEmail', () => {
-  it('retorna usuario si existe', async () => {
-    mockExecute.mockResolvedValueOnce([[MOCK_USUARIO]]);
-    const result = await findByEmail('csoto@texpro.cl');
-    expect(result).toEqual(MOCK_USUARIO);
-  });
+async function getVendedoresByUsuarioId(usuarioId) {
+  const [rows] = await pool.execute(
+    'SELECT * FROM usuario_vendedores WHERE usuario_id = ?',
+    [usuarioId]
+  );
+  return rows;
+}
 
-  it('retorna null si no existe', async () => {
-    mockExecute.mockResolvedValueOnce([[]]);
-    const result = await findByEmail('noexiste@texpro.cl');
-    expect(result).toBeNull();
-  });
-});
+async function getPermisosByUsuarioId(usuarioId) {
+  const [rows] = await pool.execute(
+    'SELECT * FROM usuario_permisos WHERE usuario_id = ?',
+    [usuarioId]
+  );
+  return rows;
+}
 
-// ── findById ─────────────────────────────────────────────────────
-describe('findById', () => {
-  it('retorna usuario sin password si existe', async () => {
-    mockExecute.mockResolvedValueOnce([[MOCK_USUARIO]]);
-    const result = await findById(7);
-    expect(result).toEqual(MOCK_USUARIO);
-    expect(result.password).toBeUndefined();
-  });
+async function getMetasByUsuarioId(usuarioId) {
+  const [rows] = await pool.execute(
+    'SELECT * FROM usuario_metas WHERE usuario_id = ? ORDER BY fecha DESC',
+    [usuarioId]
+  );
+  return rows;
+}
 
-  it('retorna null si no existe', async () => {
-    mockExecute.mockResolvedValueOnce([[]]);
-    const result = await findById(999);
-    expect(result).toBeNull();
-  });
-});
+async function getTasasDescuentos() {
+  const [rows] = await pool.execute(
+    'SELECT * FROM tasas_descuentos ORDER BY anio DESC, orden ASC'
+  );
+  return rows;
+}
 
-// ── updateLastLogin ──────────────────────────────────────────────
-describe('updateLastLogin', () => {
-  it('retorna true si se actualizó', async () => {
-    mockExecute.mockResolvedValueOnce([{ affectedRows: 1 }]);
-    const result = await updateLastLogin(7);
-    expect(result).toBe(true);
-  });
-
-  it('retorna false si no afectó filas', async () => {
-    mockExecute.mockResolvedValueOnce([{ affectedRows: 0 }]);
-    const result = await updateLastLogin(999);
-    expect(result).toBe(false);
-  });
-});
-
-// ── updatePassword ───────────────────────────────────────────────
-describe('updatePassword', () => {
-  it('retorna true si actualizó contraseña', async () => {
-    mockExecute.mockResolvedValueOnce([{ affectedRows: 1 }]);
-    const result = await updatePassword('csoto@texpro.cl', 'NuevaPass123');
-    expect(result).toBe(true);
-    const callArgs = mockExecute.mock.calls[0];
-    expect(callArgs[1][0]).toMatch(/^pbkdf2_sha256\$600000\$/);
-  });
-
-  it('retorna false si el usuario no existe o está inactivo', async () => {
-    mockExecute.mockResolvedValueOnce([{ affectedRows: 0 }]);
-    const result = await updatePassword('noexiste@texpro.cl', 'Pass1234');
-    expect(result).toBe(false);
-  });
-});
-
-// ── getVendedoresByUsuarioId ─────────────────────────────────────
-describe('getVendedoresByUsuarioId', () => {
-  it('retorna lista de vendedores del usuario', async () => {
-    const mockVend = [{ id: 15, cod_vendedor: '194', tipo: 'P' }];
-    mockExecute.mockResolvedValueOnce([mockVend]);
-    const result = await getVendedoresByUsuarioId(7);
-    expect(result).toEqual(mockVend);
-  });
-
-  it('retorna array vacío si no tiene vendedores', async () => {
-    mockExecute.mockResolvedValueOnce([[]]);
-    const result = await getVendedoresByUsuarioId(7);
-    expect(result).toEqual([]);
-  });
-});
-
-// ── getPermisosByUsuarioId ───────────────────────────────────────
-describe('getPermisosByUsuarioId', () => {
-  it('retorna lista de permisos', async () => {
-    const mockPermisos = [{ id: 1, permiso: 'ver_descuentos' }];
-    mockExecute.mockResolvedValueOnce([mockPermisos]);
-    const result = await getPermisosByUsuarioId(7);
-    expect(result).toEqual(mockPermisos);
-  });
-});
-
-// ── getMetasByUsuarioId ──────────────────────────────────────────
-describe('getMetasByUsuarioId', () => {
-  it('retorna metas del usuario ordenadas por fecha desc', async () => {
-    const mockMetas = [{ id: 22, fecha: '2026-01-01', meta: '8000000.00' }];
-    mockExecute.mockResolvedValueOnce([mockMetas]);
-    const result = await getMetasByUsuarioId(7);
-    expect(result).toEqual(mockMetas);
-  });
-});
-
-// ── getTasasDescuentos ───────────────────────────────────────────
-describe('getTasasDescuentos', () => {
-  it('retorna todas las tasas de descuento', async () => {
-    const mockTasas = [{ id: 1, anio: 2026, fecha_corte: '2026-03-01', porcentaje: '5.00', orden: 1 }];
-    mockExecute.mockResolvedValueOnce([mockTasas]);
-    const result = await getTasasDescuentos();
-    expect(result).toEqual(mockTasas);
-  });
-
-  it('retorna array vacío si no hay tasas', async () => {
-    mockExecute.mockResolvedValueOnce([[]]);
-    const result = await getTasasDescuentos();
-    expect(result).toEqual([]);
-  });
-});
 module.exports = {
   findByEmail,
   findById,
