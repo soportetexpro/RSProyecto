@@ -120,43 +120,43 @@ async function getClientesPorVendedor({ codigos, mes, anio }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // 6. Ventas Softland — lista de folios para uno o varios códigos de vendedor
 // ─────────────────────────────────────────────────────────────────────────────
-async function getVentas({ codigos, mes, anio }) {
+async function getVentas({ codigos, mes, anio, factor = 1.0 })
+ {
   const pool    = await getSoftlandPool();
   const request = pool.request();
-
+  request.input('factor', sql.Decimal(5,4), Number(factor));
   request.input('mes',  sql.Int, Number(mes));
   request.input('anio', sql.Int, Number(anio));
   const inCods = buildInParams(request, codigos);
 
   const result = await request.query(`
     SELECT
-      gsaen.Folio,
-      CONVERT(VARCHAR(10), gsaen.Fecha, 103)        AS fecha_formato,
-      gsaen.SubTotal                                AS monto,
-      gsaen.CodVendedor,
-      cwtauxi.nomAux                                AS cliente,
-      COALESCE(gsaen.PorDesc, 0)                    AS pct_descuento,
-CASE
-  WHEN COALESCE(gsaen.TotDesc, 0) > 0
-    THEN ROUND(gsaen.TotDesc, 0)
-  WHEN COALESCE(gsaen.PorDesc, 0) > 0
-    THEN ROUND(gsaen.SubTotal * gsaen.PorDesc / 100, 0)
-  ELSE ISNULL((
-    SELECT SUM(ISNULL(gmovi.ValDesc, 0))
-    FROM [PRODIN].[softland].[iw_gmovi] gmovi
-    WHERE gmovi.NroInt = gsaen.NroInt
-      AND gmovi.Tipo   = gsaen.Tipo
-  ), 0)
-END                                           AS descuento
- AS descuento
-    FROM [PRODIN].[softland].[iw_gsaen] gsaen
-    INNER JOIN [PRODIN].[softland].[cwtauxi] cwtauxi
-      ON cwtauxi.codaux = gsaen.codaux
-    WHERE gsaen.CodVendedor IN (${inCods})
-      AND MONTH(gsaen.Fecha) = @mes
-      AND YEAR(gsaen.Fecha)  = @anio
-      AND gsaen.Tipo IN ('F','N','D')
-    ORDER BY gsaen.Fecha DESC
+  gsaen.Folio,
+  CONVERT(VARCHAR(10), gsaen.Fecha, 103)          AS fecha_formato,
+  cwtauxi.nomAux                                  AS cliente,
+  gsaen.CodVendedor,
+  ROUND(SUM(gmovi.TotLinea), 0)                   AS monto,
+
+  ROUND(
+    (SUM((tprod.PrecioVta * @factor) * gmovi.CantFacturada) - SUM(gmovi.TotLinea))
+    / NULLIF(SUM((tprod.PrecioVta * @factor) * gmovi.CantFacturada), 0) * 100
+  , 2)                                            AS pct_descuento
+FROM [PRODIN].[softland].[iw_gmovi] gmovi
+INNER JOIN [PRODIN].[softland].[iw_gsaen] gsaen
+  ON gsaen.NroInt = gmovi.NroInt
+  AND gsaen.Tipo  = gmovi.Tipo
+INNER JOIN [PRODIN].[softland].[iw_tprod] tprod
+  ON tprod.CodProd = gmovi.CodProd
+INNER JOIN [PRODIN].[softland].[cwtauxi] cwtauxi
+  ON cwtauxi.CodAux = gsaen.CodAux
+WHERE gsaen.CodVendedor IN (${inCods})
+  AND MONTH(gsaen.Fecha) = @mes
+  AND YEAR(gsaen.Fecha)  = @anio
+  AND gsaen.Tipo IN ('F','N','D')
+GROUP BY
+  gsaen.Folio, gsaen.Fecha, cwtauxi.nomAux, gsaen.CodVendedor
+ORDER BY gsaen.Fecha DESC
+
   `);
 
   return result.recordset;
@@ -194,11 +194,13 @@ async function getMontoFolio({ folio, anio }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // 10. Detalle completo de una venta por folio (con precio unitario histórico)
 // ─────────────────────────────────────────────────────────────────────────────
-async function getDetalleFolio({ folio }) {
+async function getDetalleFolio({ folio, factor = 1.0 })
+ {
   const pool    = await getSoftlandPool();
   const request = pool.request();
 
   request.input('folio', sql.VarChar(20), String(folio));
+  request.input('factor', sql.Decimal(5,4), Number(factor));
 
   const result = await request.query(`
     SELECT
@@ -216,14 +218,7 @@ async function getDetalleFolio({ folio }) {
         ELSE ROUND(gmovi.TotLinea / gmovi.CantFacturada, 0)
       END AS INT)                                   AS PrecioUnitario,
       /* Precio unitario histórico ajustado por IPC */
-      CAST(ROUND((
-        CASE
-          WHEN gsaen.Fecha < '2023-03-01' THEN (tprod.PrecioVta / (1.05 * 1.07 * 1.07))
-          WHEN gsaen.Fecha < '2024-03-01' THEN  tprod.PrecioVta / (1.07 * 1.07)
-          WHEN gsaen.Fecha < '2025-03-01' THEN  tprod.PrecioVta / 1.07
-          ELSE tprod.PrecioVta
-        END
-      ) * gmovi.CantFacturada, 0) AS INT)           AS PrecioHistorico
+    CAST(ROUND(tprod.PrecioVta * @factor * gmovi.CantFacturada, 0) AS INT) AS PrecioHistorico
     FROM [PRODIN].[softland].[iw_gmovi] gmovi
     INNER JOIN [PRODIN].[softland].[iw_gsaen] gsaen
       ON gsaen.Tipo    = gmovi.Tipo
