@@ -18,6 +18,7 @@ const router  = express.Router();
 const { requireAuth }      = require('../middlewares/requireAuth');
 const db                   = require('../config/db');
 const { getSoftlandPool }  = require('../config/db.softland');
+const { getFactorDescuento } = require('../models/usuario');
 const {
   getTotalVentas,
   getResumenPorVendedor,
@@ -26,6 +27,7 @@ const {
   getMontoFolio,
   getDetalleFolio,
 } = require('../models/venta');
+
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function getCodigos(req) {
@@ -48,14 +50,21 @@ router.get('/', requireAuth, async (req, res) => {
   try {
     const codigos = getCodigos(req);
     if (!codigos.length) return res.json({ ok: true, ventas: [] });
+
     const { mes, anio } = getMesAnio(req.query);
-    const ventas = await getVentas({ codigos, mes, anio });
+
+    // ← NUEVO: verificar si existe tasa en MySQL para ese año/mes
+    const fechaConsulta = `${anio}-${String(mes).padStart(2, '0')}-01`;
+    const factor = await getFactorDescuento(anio, fechaConsulta);
+
+    const ventas = await getVentas({ codigos, mes, anio, factor });
     res.json({ ok: true, ventas });
   } catch (err) {
     console.error('[GET /api/ventas]', err.message);
     res.status(500).json({ ok: false, error: 'Error al obtener ventas' });
   }
 });
+
 
 // ── GET /api/ventas/total ─────────────────────────────────────────────────────
 router.get('/total', requireAuth, async (req, res) => {
@@ -212,13 +221,19 @@ router.get('/folio/:folio', requireAuth, async (req, res) => {
 // ── GET /api/ventas/detalle/:folio ────────────────────────────────────────────
 router.get('/detalle/:folio', requireAuth, async (req, res) => {
   try {
-    const folio   = req.params.folio;
-    const detalle = await getDetalleFolio({ folio });
+    const folio = req.params.folio;
+    const anio  = Number(req.query.anio ?? new Date().getFullYear());
+
+    // ← NUEVO: verificar tasa para el año del folio
+    const factor = await getFactorDescuento(anio, `${anio}-12-31`);
+
+    const detalle = await getDetalleFolio({ folio, factor });
     res.json({ ok: true, folio, detalle });
   } catch (err) {
     console.error('[GET /api/ventas/detalle]', err.message);
     res.status(500).json({ ok: false, error: 'Error al obtener detalle del folio' });
   }
 });
+
 
 module.exports = router;

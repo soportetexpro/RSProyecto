@@ -67,6 +67,21 @@ async function getTasasDescuentos() {
   );
   return rows;
 }
+// Obtiene el factor de precio para un año y fecha específica
+async function getFactorDescuento(anio, fecha) {
+  const [rows] = await pool.execute(
+    `SELECT (1 - porcentaje / 100) AS factor
+     FROM tasas_descuentos
+     WHERE anio = ?
+       AND fecha_corte <= ?
+     ORDER BY fecha_corte DESC
+     LIMIT 1`,
+    [anio, fecha]
+  );
+  // Si no existe tasa para ese año → factor 1.0 (sin descuento)
+  return rows.length ? Number(rows[0].factor) : 1.0;
+}
+
 
 module.exports = {
   findByEmail,
@@ -76,5 +91,7 @@ module.exports = {
   getVendedoresByUsuarioId,
   getPermisosByUsuarioId,
   getMetasByUsuarioId,
-  getTasasDescuentos
+  getTasasDescuentos,
+  getFactorDescuento,   // ← NUEVO
 };
+
