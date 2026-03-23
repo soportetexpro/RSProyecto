@@ -131,11 +131,24 @@ async function getVentas({ codigos, mes, anio }) {
   const result = await request.query(`
     SELECT
       gsaen.Folio,
-      CONVERT(VARCHAR(10), gsaen.Fecha, 103) AS fecha_formato,
-      gsaen.SubTotal                         AS monto,
+      CONVERT(VARCHAR(10), gsaen.Fecha, 103)        AS fecha_formato,
+      gsaen.SubTotal                                AS monto,
       gsaen.CodVendedor,
-      cwtauxi.nomAux                         AS cliente,
-      COALESCE(gsaen.TotDesc, 0)             AS descuento
+      cwtauxi.nomAux                                AS cliente,
+      COALESCE(gsaen.PorDesc, 0)                    AS pct_descuento,
+CASE
+  WHEN COALESCE(gsaen.TotDesc, 0) > 0
+    THEN ROUND(gsaen.TotDesc, 0)
+  WHEN COALESCE(gsaen.PorDesc, 0) > 0
+    THEN ROUND(gsaen.SubTotal * gsaen.PorDesc / 100, 0)
+  ELSE ISNULL((
+    SELECT SUM(ISNULL(gmovi.ValDesc, 0))
+    FROM [PRODIN].[softland].[iw_gmovi] gmovi
+    WHERE gmovi.NroInt = gsaen.NroInt
+      AND gmovi.Tipo   = gsaen.Tipo
+  ), 0)
+END                                           AS descuento
+ AS descuento
     FROM [PRODIN].[softland].[iw_gsaen] gsaen
     INNER JOIN [PRODIN].[softland].[cwtauxi] cwtauxi
       ON cwtauxi.codaux = gsaen.codaux
@@ -162,7 +175,13 @@ async function getMontoFolio({ folio, anio }) {
   const result = await request.query(`
     SELECT
       SubTotal,
-      COALESCE(TotDesc, 0) AS descuento
+      CASE
+        WHEN COALESCE(TotDesc, 0) > 0
+          THEN ROUND(TotDesc, 0)
+        WHEN COALESCE(PorDesc, 0) > 0
+          THEN ROUND(SubTotal * PorDesc / 100, 0)
+        ELSE 0
+      END AS descuento
     FROM [PRODIN].[softland].[iw_gsaen]
     WHERE Folio = @folio
       AND YEAR(Fecha) = @anio
