@@ -156,7 +156,7 @@ async function getMontoFolio({ folio, anio }) {
   const pool    = await getSoftlandPool();
   const request = pool.request();
 
-  request.input('folio', sql.VarChar(20), String(folio));
+  request.input('folio', sql.Int, Number(folio));
   request.input('anio',  sql.Int,         Number(anio));
 
   const result = await request.query(`
@@ -173,51 +173,83 @@ async function getMontoFolio({ folio, anio }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 10. Detalle completo de una venta por folio (con precio unitario histórico)
+// 10. Descuentos por vendedor filtrado por mes/año con precio histórico
 // ─────────────────────────────────────────────────────────────────────────────
 async function getDetalleFolio({ folio }) {
   const pool    = await getSoftlandPool();
   const request = pool.request();
 
-  request.input('folio', sql.VarChar(20), String(folio));
+  request.input('folio', sql.Int, Number(folio));
 
   const result = await request.query(`
+  WITH base AS (
     SELECT
       gsaen.Folio,
-      CONVERT(VARCHAR(10), gsaen.Fecha, 103)        AS Fecha,
+      gsaen.Fecha,
       gsaen.CodVendedor,
       gsaen.CanCod,
+      cwtauxi.nomAux                                          AS Cliente,
       gmovi.CodProd,
-      CAST(ROUND(gmovi.CantFacturada, 0) AS INT)    AS CantFacturada,
-      CAST(ROUND(gmovi.TotLinea, 0) AS INT)         AS Total,
-      CAST(LEFT(tprod.DesProd, 50) AS VARCHAR(50))  AS DesProd,
-      TRY_CAST(tprod.PrecioVta AS DECIMAL(18,2))    AS PrecioHoy,
-      CAST(CASE
-        WHEN gmovi.CantFacturada = 0 THEN 0
-        ELSE ROUND(gmovi.TotLinea / gmovi.CantFacturada, 0)
-      END AS INT)                                   AS PrecioUnitario,
-      /* Precio unitario histórico ajustado por IPC */
-      CAST(ROUND((
-        CASE
-          WHEN gsaen.Fecha < '2023-03-01' THEN (tprod.PrecioVta / (1.05 * 1.07 * 1.07))
-          WHEN gsaen.Fecha < '2024-03-01' THEN  tprod.PrecioVta / (1.07 * 1.07)
-          WHEN gsaen.Fecha < '2025-03-01' THEN  tprod.PrecioVta / 1.07
-          ELSE tprod.PrecioVta
-        END
-      ) * gmovi.CantFacturada, 0) AS INT)           AS PrecioHistorico
+      tprod.DesProd,
+      gmovi.CantFacturada,
+      gmovi.TotLinea,
+      tprod.PrecioVta,
+      CASE
+        WHEN gsaen.Fecha < '2023-03-01' THEN (1.07 * 1.07 * 1.05 * 1.17)
+        WHEN gsaen.Fecha < '2024-03-01' THEN (1.07 * 1.07 * 1.05)
+        WHEN gsaen.Fecha < '2025-03-01' THEN (1.07 * 1.07)
+        WHEN gsaen.Fecha < '2026-03-01' THEN (1.07)
+        ELSE 1.0
+      END                                                     AS divisor_historico,
+      CASE WHEN gsaen.CanCod <> '300' THEN 1.10 ELSE 1.0 END AS factor_canal
     FROM [PRODIN].[softland].[iw_gmovi] gmovi
     INNER JOIN [PRODIN].[softland].[iw_gsaen] gsaen
-      ON gsaen.Tipo    = gmovi.Tipo
-      AND gsaen.NroInt = gmovi.NroInt
+      ON gsaen.NroInt = gmovi.NroInt
+      AND gsaen.Tipo  = gmovi.Tipo
     INNER JOIN [PRODIN].[softland].[iw_tprod] tprod
       ON tprod.CodProd = gmovi.CodProd
+    INNER JOIN [PRODIN].[softland].[cwtauxi] cwtauxi
+      ON cwtauxi.CodAux = gsaen.CodAux
     WHERE gsaen.Tipo IN ('F','N','D')
       AND gsaen.Folio = @folio
-    ORDER BY gmovi.CodProd
-  `);
+  ),
+  calc AS (
+    SELECT *,
+      ROUND(TotLinea / NULLIF(CantFacturada, 0), 4)                        AS precio_unitario_cobrado,
+      ROUND((TotLinea / NULLIF(CantFacturada, 0)) / divisor_historico, 4)  AS precio_unitario_cobrado_hist,
+      ROUND(PrecioVta / divisor_historico, 4)                              AS precio_historico_base,
+      ROUND((PrecioVta / divisor_historico) * factor_canal, 4)             AS precio_historico_ajustado
+    FROM base
+  )
+  SELECT
+    Folio,
+    CONVERT(VARCHAR(10), Fecha, 103)                          AS Fecha,
+    CodVendedor,
+    CanCod,
+    Cliente,
+    CodProd,
+    DesProd,
+    CantFacturada,
+    TotLinea,
+    precio_unitario_cobrado,
+    precio_unitario_cobrado_hist,
+    precio_historico_base,
+    precio_historico_ajustado,
+    ROUND(precio_historico_ajustado - precio_unitario_cobrado_hist, 4)      AS descuento_unitario_pesos,
+    ROUND(
+      (precio_historico_ajustado - precio_unitario_cobrado_hist)
+      / NULLIF(precio_historico_ajustado, 0) * 100
+    , 2)                                                                    AS pct_descuento,
+    ROUND(
+      (precio_historico_ajustado - precio_unitario_cobrado_hist) * CantFacturada
+    , 0)                                                                    AS descuento_total_pesos
+  FROM calc
+  ORDER BY CodProd
+`);
 
-  return result.recordset;
 }
+
+
 
 module.exports = {
   getTotalVentas,

@@ -5,8 +5,6 @@
  * 4 KPIs | 1 Gráfico líneas | 3 Tablas | Modal detalle
  */
 
-
-
 (function () {
 
   const API        = '/api/ventas';
@@ -335,7 +333,7 @@
     const totalEl = document.getElementById('modalTotalValor');
 
     const venta = ventasMes.find(v => String(v.Folio) === String(folio));
-    document.getElementById('modalTitulo').textContent   = `Folio N° ${folio}`;
+    document.getElementById('modalTitulo').textContent    = `Folio N° ${folio}`;
     document.getElementById('modalSubtitulo').textContent = venta
       ? `${venta.cliente || ''} • ${venta.fecha_formato || ''}` : '';
     document.getElementById('modalResumen').innerHTML = venta ? `
@@ -344,7 +342,8 @@
       <div class="modal-chip"><span>Descuento</span><strong>${formatCLP(venta.descuento)}</strong></div>
     ` : '';
 
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem">Cargando...</td></tr>';
+    // ── CAMBIO PASO 2 — colspan 6 → 7 ───────────────────────────────────────
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:2rem">Cargando...</td></tr>';
     totalEl.textContent = '—';
     overlay.classList.add('modal-overlay--visible');
     overlay.setAttribute('aria-hidden', 'false');
@@ -356,26 +355,30 @@
       });
       const data = await res.json();
 
+      // ── CAMBIO PASO 2 — colspan 6 → 7 ─────────────────────────────────────
       if (!data.ok || !data.detalle?.length) {
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--color-gray-mid)">Sin líneas de detalle</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--color-gray-mid)">Sin líneas de detalle</td></tr>';
         return;
       }
 
-      const total = data.detalle.reduce((s, l) => s + (Number(l.Total) || 0), 0);
-      tbody.innerHTML = data.detalle.map(l => `
-        <tr>
-          <td><code>${l.CodProd || '—'}</code></td>
-          <td>${l.DesProd || '—'}</td>
-          <td style="text-align:center">${l.CantFacturada ?? '—'}</td>
-          <td style="text-align:right">${formatCLP(l.PrecioUnitario)}</td>
-          <td style="text-align:right">${formatCLP(l.PrecioHoy)}</td>
-          <td style="text-align:right"><strong>${formatCLP(l.Total)}</strong></td>
-        </tr>
-      `).join('');
+      // ── CAMBIO PASO 2 — columnas nuevas ────────────────────────────────────
+      const total = data.detalle.reduce((s, l) => s + (Number(l.TotLinea) || 0), 0);
+tbody.innerHTML = data.detalle.map(l => `
+  <tr>
+    <td><code>${l.CodProd || '—'}</code></td>
+    <td>${l.DesProd || '—'}</td>
+    <td style="text-align:center">${l.CantFacturada ?? '—'}</td>
+    <td style="text-align:right">${formatCLP(l.precio_unitario_cobrado)}</td>
+    <td style="text-align:right">${formatCLP(l.precio_historico_ajustado)}</td>
+    <td style="text-align:right">${l.pct_descuento != null ? l.pct_descuento + '%' : '—'}</td>
+    <td style="text-align:right"><strong>${formatCLP(l.TotLinea)}</strong></td>
+  </tr>
+`).join('');
       totalEl.textContent = formatCLP(total);
+
     } catch (err) {
       console.error('[abrirDetalle]', err);
-      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--color-danger)">⚠️ Error al cargar detalle</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--color-danger)">⚠️ Error al cargar detalle</td></tr>';
     }
   }
 
@@ -410,14 +413,12 @@
   async function buscar() {
     const params = getParams();
 
-    // Skeleton tabla 2
     document.getElementById('ventasTbody').innerHTML =
       Array(5).fill('<tr>' + Array(7).fill(
         '<td><div class="skeleton" style="height:14px;width:80%"></div></td>'
       ).join('') + '</tr>').join('');
 
     try {
-      // Paralelo: meta + ventas + resumen-vendedores + gráfico
       const [resMeta, resVentas, resVend] = await Promise.all([
         fetch(`${API}/meta?${new URLSearchParams({ anio: params.anio })}`,
           { headers: { Authorization: `Bearer ${token()}` } }),
@@ -431,21 +432,17 @@
         resMeta.json(), resVentas.json(), resVend.json()
       ]);
 
-      // Meta
       const metaMes = dataMeta.ok ? dataMeta.metaMes : 0;
 
-      // Ventas del mes
       ventasMes              = dataVentas.ok ? dataVentas.ventas || [] : [];
       estado.ventas          = ventasMes;
       estado.ventasFiltradas = ventasMes;
       estado.paginaActual    = 1;
 
-      // KPIs desde datos del mes
-      const totalVentas   = ventasMes.reduce((s, v) => s + (Number(v.monto)     || 0), 0);
-      const totalDescuento= ventasMes.reduce((s, v) => s + (Number(v.descuento) || 0), 0);
+      const totalVentas    = ventasMes.reduce((s, v) => s + (Number(v.monto)     || 0), 0);
+      const totalDescuento = ventasMes.reduce((s, v) => s + (Number(v.descuento) || 0), 0);
       renderKpis(totalVentas, metaMes, totalDescuento);
 
-      // Tabla 1
       if (dataVend.ok) {
         const tbody = document.getElementById('tbodyVendedores');
         if (!dataVend.vendedores.length) {
@@ -462,10 +459,7 @@
         }
       }
 
-      // Tabla 2
       renderTabla();
-
-      // Gráfico (independiente)
       cargarGrafico();
 
     } catch (err) {
