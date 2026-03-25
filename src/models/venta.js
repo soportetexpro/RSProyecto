@@ -173,7 +173,7 @@ async function getMontoFolio({ folio, anio }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 10. Descuentos por vendedor filtrado por mes/año con precio histórico
+// 10. Detalle de folio: información de venta por folio
 // ─────────────────────────────────────────────────────────────────────────────
 async function getDetalleFolio({ folio }) {
   const pool    = await getSoftlandPool();
@@ -246,7 +246,7 @@ async function getDetalleFolio({ folio }) {
   FROM calc
   ORDER BY CodProd
 `);
-
+  return result.recordset;
 }
 
 

@@ -1,25 +1,24 @@
-"use strict";
+'use strict';
 
 /**
  * routes/dashboard.js
  * Endpoints para el dashboard principal
- * GET /api/dashboard/resumen  — 4 KPIs + meta del mes
- * GET /api/dashboard/evolucion — últimos 6 meses ventas vs meta
- * GET /api/dashboard/vendedores — ventas por cod vendedor (mes actual)
- * GET /api/dashboard/ventas-mes — folios del mes
+ * GET /api/dashboard/resumen      — 4 KPIs + meta del mes
+ * GET /api/dashboard/evolucion    — últimos 12 meses ventas vs meta
+ * GET /api/dashboard/vendedores   — ventas por cod vendedor (mes actual)
+ * GET /api/dashboard/ventas-mes   — folios del mes
  * GET /api/dashboard/detalle/:folio — líneas de un folio
  */
 
-const express = require('express');
-const router = express.Router();
-const { requireAuth } = require('../middlewares/requireAuth');
-const db = require('../config/db');
+const express          = require('express');
+const router           = express.Router();
+const { requireAuth }  = require('../middlewares/requireAuth');
+const db               = require('../config/db');
 const { getSoftlandPool } = require('../config/db.softland');
-
 
 router.use(requireAuth);
 
-// ── helpers ─────────────────────────────────────────────────────────────────
+// ── helpers ──────────────────────────────────────────────────────────────────
 function getCodigos(usuario) {
   return (usuario.vendedores || []).map(v => v.cod_vendedor);
 }
@@ -50,40 +49,39 @@ router.get('/resumen', async (req, res) => {
     }
 
     const pool   = await getSoftlandPool();
-const result = await pool.request().query(`
-  SELECT
-    SUM(
-      CASE
-        WHEN RTRIM(h.CanCod) = '300' THEN h.SubTotal
-        ELSE ROUND(h.SubTotal * 1.10, 0)
-      END
-    ) AS totalVentas,
-    ROUND(
-      SUM(
-        CASE
-          WHEN m.PreUniMB > 0 AND m.CantFacturada > 0
-          THEN (m.PreUniMB - (m.TotLinea / m.CantFacturada)) / m.PreUniMB * 100
-          ELSE 0
-        END
-      ) / NULLIF(COUNT(m.Linea), 0)
-    , 2) AS pctDescuentoGlobal
-  FROM [PRODIN].[softland].[iw_gsaen] h
-  LEFT JOIN [PRODIN].[softland].[iw_gmovi] m
-    ON m.NroInt = h.NroInt AND m.Tipo = h.Tipo
-  WHERE h.CodVendedor IN (${mssqlIn(codigos)})
-    AND MONTH(h.Fecha) = ${mes}
-    AND YEAR(h.Fecha)  = ${anio}
-    AND h.Tipo IN ('F','N','D')
-    AND h.Estado <> 'A'
-`);
+    const result = await pool.request().query(`
+      SELECT
+        SUM(
+          CASE
+            WHEN RTRIM(h.CanCod) = '300' THEN h.SubTotal
+            ELSE ROUND(h.SubTotal * 1.10, 0)
+          END
+        ) AS totalVentas,
+        ROUND(
+          SUM(
+            CASE
+              WHEN m.PreUniMB > 0 AND m.CantFacturada > 0
+              THEN (m.PreUniMB - (m.TotLinea / m.CantFacturada)) / m.PreUniMB * 100
+              ELSE 0
+            END
+          ) / NULLIF(COUNT(m.Linea), 0)
+        , 2) AS pctDescuentoGlobal
+      FROM [PRODIN].[softland].[iw_gsaen] h
+      LEFT JOIN [PRODIN].[softland].[iw_gmovi] m
+        ON m.NroInt = h.NroInt AND m.Tipo = h.Tipo
+      WHERE h.CodVendedor IN (${mssqlIn(codigos)})
+        AND MONTH(h.Fecha) = ${mes}
+        AND YEAR(h.Fecha)  = ${anio}
+        AND h.Tipo IN ('F','N','D')
+        AND h.Estado <> 'A'
+    `);
 
-const row = result.recordset[0] || {};
-const totalVentas        = Number(row.totalVentas)        || 0;
-const pctDescuentoGlobal = Number(row.pctDescuentoGlobal) || 0;
-const progreso = metaMes > 0 ? Math.min(Math.round((totalVentas / metaMes) * 100), 999) : 0;
+    const row                = result.recordset[0] || {};
+    const totalVentas        = Number(row.totalVentas)        || 0;
+    const pctDescuentoGlobal = Number(row.pctDescuentoGlobal) || 0;
+    const progreso = metaMes > 0 ? Math.min(Math.round((totalVentas / metaMes) * 100), 999) : 0;
 
-res.json({ ok: true, totalVentas, meta: metaMes, progreso, pctDescuentoGlobal });
-
+    res.json({ ok: true, totalVentas, meta: metaMes, progreso, pctDescuentoGlobal });
 
   } catch (err) {
     console.error('[GET /api/dashboard/resumen]', err.message);
@@ -111,24 +109,23 @@ router.get('/evolucion', async (req, res) => {
     }
 
     const pool   = await getSoftlandPool();
-const result = await pool.request().query(`
-  SELECT
-    MONTH(Fecha) AS mes,
-    SUM(
-      CASE
-        WHEN RTRIM(CanCod) = '300' THEN SubTotal
-        ELSE ROUND(SubTotal * 1.10, 0)
-      END
-    ) AS ventas
-  FROM [PRODIN].[softland].[iw_gsaen]
-  WHERE CodVendedor IN (${mssqlIn(codigos)})
-    AND YEAR(Fecha) = ${anio}
-    AND Tipo IN ('F','N','D')
-    AND Estado <> 'A'
-  GROUP BY MONTH(Fecha)
-  ORDER BY mes
-`);
-
+    const result = await pool.request().query(`
+      SELECT
+        MONTH(Fecha) AS mes,
+        SUM(
+          CASE
+            WHEN RTRIM(CanCod) = '300' THEN SubTotal
+            ELSE ROUND(SubTotal * 1.10, 0)
+          END
+        ) AS ventas
+      FROM [PRODIN].[softland].[iw_gsaen]
+      WHERE CodVendedor IN (${mssqlIn(codigos)})
+        AND YEAR(Fecha) = ${anio}
+        AND Tipo IN ('F','N','D')
+        AND Estado <> 'A'
+      GROUP BY MONTH(Fecha)
+      ORDER BY mes
+    `);
 
     const ventasPorMes = {};
     result.recordset.forEach(r => { ventasPorMes[r.mes] = Number(r.ventas) || 0; });
@@ -193,37 +190,35 @@ router.get('/ventas-mes', async (req, res) => {
   try {
     const pool   = await getSoftlandPool();
     const result = await pool.request().query(`
-  SELECT TOP 100
-    h.Folio,
-    CONVERT(varchar, h.Fecha, 103)   AS fecha_formato,
-    c.NomAux                         AS cliente,
-    h.CodVendedor,
-    -- Regla 1: recargo regional por CanCod
-    CASE 
-      WHEN RTRIM(h.CanCod) = '300' THEN h.SubTotal
-      ELSE ROUND(h.SubTotal * 1.10, 0)
-    END                              AS monto,
-    -- Regla 2: descuento % promedio por líneas
-    ROUND(
-      SUM(
+      SELECT TOP 100
+        h.Folio,
+        CONVERT(varchar, h.Fecha, 103)   AS fecha_formato,
+        c.NomAux                         AS cliente,
+        h.CodVendedor,
         CASE
-          WHEN m.PreUniMB > 0 AND m.CantFacturada > 0
-          THEN (m.PreUniMB - (m.TotLinea / m.CantFacturada)) / m.PreUniMB * 100
-          ELSE 0
-        END
-      ) / NULLIF(COUNT(m.Linea), 0)
-    , 2)                             AS pct_descuento
-  FROM [PRODIN].[softland].[iw_gsaen] h
-  LEFT JOIN [PRODIN].[softland].[cwtauxi] c  ON c.CodAux = h.CodAux
-  LEFT JOIN [PRODIN].[softland].[iw_gmovi] m ON m.NroInt = h.NroInt AND m.Tipo = h.Tipo
-  WHERE h.CodVendedor IN (${mssqlIn(codigos)})
-    AND MONTH(h.Fecha) = ${mes}
-    AND YEAR(h.Fecha)  = ${anio}
-    AND h.Tipo IN ('F','N','D')
-    AND h.Estado <> 'A'
-  GROUP BY h.Folio, h.Fecha, c.NomAux, h.CodVendedor, h.SubTotal, h.NroInt, h.CanCod
-  ORDER BY h.Fecha DESC
-`);
+          WHEN RTRIM(h.CanCod) = '300' THEN h.SubTotal
+          ELSE ROUND(h.SubTotal * 1.10, 0)
+        END                              AS monto,
+        ROUND(
+          SUM(
+            CASE
+              WHEN m.PreUniMB > 0 AND m.CantFacturada > 0
+              THEN (m.PreUniMB - (m.TotLinea / m.CantFacturada)) / m.PreUniMB * 100
+              ELSE 0
+            END
+          ) / NULLIF(COUNT(m.Linea), 0)
+        , 2)                             AS pct_descuento
+      FROM [PRODIN].[softland].[iw_gsaen] h
+      LEFT JOIN [PRODIN].[softland].[cwtauxi] c  ON c.CodAux = h.CodAux
+      LEFT JOIN [PRODIN].[softland].[iw_gmovi] m ON m.NroInt = h.NroInt AND m.Tipo = h.Tipo
+      WHERE h.CodVendedor IN (${mssqlIn(codigos)})
+        AND MONTH(h.Fecha) = ${mes}
+        AND YEAR(h.Fecha)  = ${anio}
+        AND h.Tipo IN ('F','N','D')
+        AND h.Estado <> 'A'
+      GROUP BY h.Folio, h.Fecha, c.NomAux, h.CodVendedor, h.SubTotal, h.NroInt, h.CanCod
+      ORDER BY h.Fecha DESC
+    `);
 
     res.json({ ok: true, ventas: result.recordset });
 
@@ -233,7 +228,7 @@ router.get('/ventas-mes', async (req, res) => {
   }
 });
 
-// ── GET /api/dashboard/detalle/:folio ───────────────────────────────────────
+// ── GET /api/dashboard/detalle/:folio ────────────────────────────────────────
 router.get('/detalle/:folio', async (req, res) => {
   const folio = parseInt(req.params.folio);
   if (!folio) return res.status(400).json({ ok: false, error: 'Folio inválido' });
@@ -241,15 +236,66 @@ router.get('/detalle/:folio', async (req, res) => {
   try {
     const pool   = await getSoftlandPool();
     const result = await pool.request().query(`
+      WITH base AS (
+        SELECT
+          gsaen.Folio,
+          gsaen.Fecha,
+          gsaen.CodVendedor,
+          gsaen.CanCod,
+          cwtauxi.nomAux                                          AS Cliente,
+          gmovi.CodProd,
+          tprod.DesProd,
+          gmovi.CantFacturada,
+          gmovi.TotLinea,
+          tprod.PrecioVta,
+          CASE
+            WHEN gsaen.Fecha < '2023-03-01' THEN (1.07 * 1.07 * 1.05 * 1.17)
+            WHEN gsaen.Fecha < '2024-03-01' THEN (1.07 * 1.07 * 1.05)
+            WHEN gsaen.Fecha < '2025-03-01' THEN (1.07 * 1.07)
+            WHEN gsaen.Fecha < '2026-03-01' THEN (1.07)
+            ELSE 1.0
+          END                                                     AS divisor_historico,
+          CASE WHEN gsaen.CanCod <> '300' THEN 1.10 ELSE 1.0 END AS factor_canal
+        FROM [PRODIN].[softland].[iw_gmovi] gmovi
+        INNER JOIN [PRODIN].[softland].[iw_gsaen] gsaen
+          ON gsaen.NroInt = gmovi.NroInt
+          AND gsaen.Tipo  = gmovi.Tipo
+        INNER JOIN [PRODIN].[softland].[iw_tprod] tprod
+          ON tprod.CodProd = gmovi.CodProd
+        INNER JOIN [PRODIN].[softland].[cwtauxi] cwtauxi
+          ON cwtauxi.CodAux = gsaen.CodAux
+        WHERE gsaen.Tipo IN ('F','N','D')
+          AND gsaen.Folio = ${folio}
+      ),
+      calc AS (
+        SELECT *,
+          ROUND(TotLinea / NULLIF(CantFacturada, 0), 4)                        AS precio_unitario_cobrado,
+          ROUND((TotLinea / NULLIF(CantFacturada, 0)) / divisor_historico, 4)  AS precio_unitario_cobrado_hist,
+          ROUND(PrecioVta / divisor_historico, 4)                              AS precio_historico_base,
+          ROUND((PrecioVta / divisor_historico) * factor_canal, 4)             AS precio_historico_ajustado
+        FROM base
+      )
       SELECT
-        d.CodProd,
-        d.DesProd,
-        d.CantFac   AS CantFacturada,
-        d.PrcVtaUni AS PrecioUnitario,
-        d.LinTot    AS Total
-      FROM [PRODIN].[softland].[iw_gmovi] d
-      WHERE d.Folio = ${folio}
-      ORDER BY d.LinNum
+        Folio,
+        CONVERT(VARCHAR(10), Fecha, 103)                          AS Fecha,
+        CodVendedor,
+        CanCod,
+        Cliente,
+        CodProd,
+        DesProd,
+        CantFacturada,
+        TotLinea,
+        precio_unitario_cobrado,
+        precio_historico_ajustado,
+        ROUND(
+          (precio_historico_ajustado - precio_unitario_cobrado_hist)
+          / NULLIF(precio_historico_ajustado, 0) * 100
+        , 2)                                                                    AS pct_descuento,
+        ROUND(
+          (precio_historico_ajustado - precio_unitario_cobrado_hist) * CantFacturada
+        , 0)                                                                    AS descuento_total_pesos
+      FROM calc
+      ORDER BY CodProd
     `);
     res.json({ ok: true, folio, detalle: result.recordset });
 

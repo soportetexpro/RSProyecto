@@ -1,6 +1,5 @@
 'use strict';
 
-
 /**
  * dashboard.js — RSProyecto Texpro
  * 4 KPIs reales + gráfico líneas ventas vs meta + 3 tablas + modal detalle
@@ -59,8 +58,7 @@
     document.getElementById('welcomeTitle').textContent    = `Hola, ${(usuario.nombre||usuario.email).split(' ')[0]} 👋`;
     document.getElementById('welcomeSubtitle').textContent = `Área: ${usuario.area||'Sistema'} — Texpro`;
 
-    // Nav
-    const nav     = document.getElementById('sidebarNav');
+    const nav      = document.getElementById('sidebarNav');
     const visibles = MODULOS.filter(m =>
       usuario.is_admin || m.area.includes('admin') ? usuario.is_admin : m.area.includes(usuario.area)
     );
@@ -123,8 +121,7 @@
       const { totalVentas, meta, progreso, pctDescuentoGlobal } = data;
       document.getElementById('kpiTotalVentas').textContent = formatCLP(totalVentas);
       document.getElementById('kpiMeta').textContent        = formatCLP(meta);
-        document.getElementById('kpiDescuento').textContent =
-        pctDescuentoGlobal > 0 ? `${pctDescuentoGlobal}%` : '0%';
+      document.getElementById('kpiDescuento').textContent   = pctDescuentoGlobal > 0 ? `${pctDescuentoGlobal}%` : '0%';
       const pct = Math.min(progreso, 100);
       document.getElementById('kpiProgresoPct').textContent = `${progreso}%`;
       const fill = document.getElementById('progresoFill');
@@ -147,12 +144,11 @@
       const data = await res.json();
       if (!data.ok) throw new Error(data.error);
 
-      const labels  = data.evolucion.map(e => MESES_LABEL[e.mes - 1]);
-      const ventas  = data.evolucion.map(e => e.ventas);
-      const meta    = data.evolucion.map(e => e.meta);
+      const labels = data.evolucion.map(e => MESES_LABEL[e.mes - 1]);
+      const ventas = data.evolucion.map(e => e.ventas);
+      const meta   = data.evolucion.map(e => e.meta);
 
       const ctx = document.getElementById('graficoEvolucion').getContext('2d');
-
       if (graficoEvolucion) graficoEvolucion.destroy();
 
       graficoEvolucion = new Chart(ctx, {
@@ -259,23 +255,23 @@
       tbody.innerHTML = '<tr class="tabla-empty"><td colspan="7">Sin registros</td></tr>'; return;
     }
     tbody.innerHTML = lista.map(v => {
-  const pctDesc = v.pct_descuento > 0 ? `${v.pct_descuento}%` : '—';
-  return `
-    <tr>
-      <td><strong>${v.Folio||'—'}</strong></td>
-      <td>${v.fecha_formato||'—'}</td>
-      <td>${v.cliente||'—'}</td>
-      <td>${v.CodVendedor||'—'}</td>
-      <td style="text-align:right">${formatCLP(v.monto)}</td>
-      <td style="text-align:right">${pctDesc}</td>
-      <td style="text-align:center">
-        <button class="btn-detalle" data-folio="${v.Folio}" title="Ver detalle">
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
-        </button>
-      </td>
-    </tr>
-  `;
-}).join('');
+      const pctDesc = v.pct_descuento > 0 ? `${v.pct_descuento}%` : '—';
+      return `
+        <tr>
+          <td><strong>${v.Folio||'—'}</strong></td>
+          <td>${v.fecha_formato||'—'}</td>
+          <td>${v.cliente||'—'}</td>
+          <td>${v.CodVendedor||'—'}</td>
+          <td style="text-align:right">${formatCLP(v.monto)}</td>
+          <td style="text-align:right">${pctDesc}</td>
+          <td style="text-align:center">
+            <button class="btn-detalle" data-folio="${v.Folio}" title="Ver detalle">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </td>
+        </tr>
+      `;
+    }).join('');
     tbody.querySelectorAll('.btn-detalle').forEach(btn =>
       btn.addEventListener('click', () => abrirDetalle(btn.dataset.folio))
     );
@@ -291,28 +287,35 @@
     document.getElementById('modalTotalValor').textContent = '—';
     tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:2rem">Cargando...</td></tr>';
     overlay.classList.add('modal-overlay--visible');
-    overlay.setAttribute('aria-hidden','false');
+    overlay.setAttribute('aria-hidden', 'false');
     document.body.style.overflow = 'hidden';
 
     try {
       const res  = await fetch(`${API}/detalle/${folio}`, { headers: { Authorization: `Bearer ${token()}` } });
       const data = await res.json();
-      if (!data.ok || !data.detalle?.length) {
+
+      if (!res.ok || !data.ok) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--color-danger)">⚠️ Error al cargar detalle</td></tr>';
+        return;
+      }
+      if (!data.detalle?.length) {
         tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--color-gray-mid)">Sin líneas de detalle</td></tr>';
         return;
       }
-      const total = data.detalle.reduce((s,l)=>s+(Number(l.Total)||0),0);
-      tbody.innerHTML = data.detalle.map(l=>`
+
+      const total = data.detalle.reduce((s, l) => s + (Number(l.TotLinea) || 0), 0);
+      tbody.innerHTML = data.detalle.map(l => `
         <tr>
-          <td><code>${l.CodProd||'—'}</code></td>
-          <td>${l.DesProd||'—'}</td>
-          <td style="text-align:center">${l.CantFacturada??'—'}</td>
-          <td style="text-align:right">${formatCLP(l.PrecioUnitario)}</td>
-          <td style="text-align:right"><strong>${formatCLP(l.Total)}</strong></td>
+          <td><code>${l.CodProd || '—'}</code></td>
+          <td>${l.DesProd || '—'}</td>
+          <td style="text-align:center">${l.CantFacturada ?? '—'}</td>
+          <td style="text-align:right">${formatCLP(l.precio_unitario_cobrado)}</td>
+          <td style="text-align:right"><strong>${formatCLP(l.TotLinea)}</strong></td>
         </tr>
       `).join('');
-      document.getElementById('modalTotalValor').textContent = formatCLP(total);
-    } catch(err) {
+      document.getElementById('modalTotalValor').textContent = formatCLP(total); // ← FIX: era totalEl.textContent
+
+    } catch (err) {
       console.error('[abrirDetalle]', err);
       tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--color-danger)">⚠️ Error al cargar</td></tr>';
     }
@@ -320,7 +323,7 @@
 
   function cerrarModal() {
     document.getElementById('modalOverlay').classList.remove('modal-overlay--visible');
-    document.getElementById('modalOverlay').setAttribute('aria-hidden','true');
+    document.getElementById('modalOverlay').setAttribute('aria-hidden', 'true');
     document.body.style.overflow = '';
   }
 
@@ -337,7 +340,6 @@
     cargarSidebar(usuario);
     initSelectores();
 
-    // Busqueda en tabla ventas mes
     document.getElementById('busquedaVentas').addEventListener('input', e => {
       const q = e.target.value.toLowerCase();
       renderVentasMes(ventasMes.filter(v =>
@@ -346,17 +348,14 @@
       ));
     });
 
-    // Modal
     document.getElementById('modalCerrar').addEventListener('click', cerrarModal);
     document.getElementById('modalOverlay').addEventListener('click', e => {
       if (e.target === e.currentTarget) cerrarModal();
     });
-    document.addEventListener('keydown', e => { if (e.key==='Escape') cerrarModal(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') cerrarModal(); });
 
-    // Actualizar
     document.getElementById('btnActualizar').addEventListener('click', cargarTodo);
 
-    // Carga inicial
     cargarTodo();
   }
 
