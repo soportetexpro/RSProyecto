@@ -101,7 +101,7 @@ describe('POST /api/auth/login', () => {
     const res     = await request(app).post('/api/auth/login').send({ email: 'csoto@texpro.cl', password: 'pass' });
     const payload = jwt.verify(res.body.token, process.env.JWT_SECRET);
 
-    expect(payload.sub).toBe(MOCK_USUARIO.id);
+    expect(payload.sub).toBe(MOCK_USUARIO.id);   // sub = usuario.id
     expect(payload.email).toBe(MOCK_USUARIO.email);
     expect(payload.is_admin).toBe(false);
   });
@@ -138,6 +138,7 @@ describe('GET /api/auth/me', () => {
   test('200 con token válido — devuelve usuario sin password', async () => {
     const { password, ...usuarioSinPassword } = MOCK_USUARIO;
     findById.mockResolvedValue(usuarioSinPassword);
+    getVendedoresByUsuarioId.mockResolvedValue([{ cod_vendedor: 'V01', tipo: 'V' }]);
 
     const res = await request(app)
       .get('/api/auth/me')
@@ -147,11 +148,14 @@ describe('GET /api/auth/me', () => {
     expect(res.body.ok).toBe(true);
     expect(res.body.user.id).toBe(7);
     expect(res.body.user.password).toBeUndefined();
+    expect(res.body.user.vendedores).toBeDefined();
+    expect(Array.isArray(res.body.user.vendedores)).toBe(true);
   });
 
   test('401 si el usuario está inactivo (BD)', async () => {
     const { password, ...usuarioInactivo } = { ...MOCK_USUARIO, is_active: 0 };
     findById.mockResolvedValue(usuarioInactivo);
+    getVendedoresByUsuarioId.mockResolvedValue([]);
 
     const res = await request(app)
       .get('/api/auth/me')
