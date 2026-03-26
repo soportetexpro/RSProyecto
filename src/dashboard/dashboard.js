@@ -224,7 +224,7 @@
       const data = await res.json();
       const tbody = document.getElementById('tbodyVendedores');
       if (!data.ok || !data.vendedores.length) {
-        tbody.innerHTML = '<tr class="tabla-empty"><td colspan="3">Sin datos</td></tr>'; return;
+        tbody.innerHTML = '<tr class="tabla-empty"><td colspan="4">Sin datos</td></tr>'; return;
       }
       tbody.innerHTML = data.vendedores.map(v => `
   <tr>
@@ -233,10 +233,10 @@
     <td>${v.folios}</td>
     <td style="text-align:right">${formatCLP(v.totalVentas)}</td>
   </tr>
-`).join('');
+`).join('');    
     } catch (err) { console.error('[cargarVendedores]', err); }
   }
-
+    
   // ── Tabla 2: ventas del mes ───────────────────────────────────
   async function cargarVentasMes() {
     try {
