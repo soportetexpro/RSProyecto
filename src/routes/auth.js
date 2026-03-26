@@ -6,10 +6,6 @@
  * POST /api/auth/login   — login con email + password, retorna JWT
  * GET  /api/auth/me      — datos del usuario autenticado (requiere JWT)
  * POST /api/auth/logout  — logout (el cliente descarta el token)
- *
- * Relaciones cargadas en el login (para evitar requests extras en el dashboard):
- *   - vendedores  (códigos de vendedor del usuario)
- *   - metas       (metas anuales de venta)
  */
 
 const express = require('express');
@@ -26,62 +22,42 @@ const { requireAuth }          = require('../middlewares/requireAuth');
 
 const router = express.Router();
 
-// ─────────────────────────────────────────────────────────────────
-// POST /api/auth/login
-// Body: { email: string, password: string }
-// Respuesta: { ok, token, expiresIn, user: { datos básicos + vendedores + metas } }
-// ─────────────────────────────────────────────────────────────────
+// ── POST /api/auth/login ──────────────────────────────────────────────────────
 router.post('/login', async (req, res) => {
   try {
     const email    = String(req.body.email    || '').trim().toLowerCase();
     const password = String(req.body.password || '').trim();
 
     if (!email || !password) {
-      return res.status(400).json({
-        ok:    false,
-        error: 'Email y contraseña son requeridos'
-      });
+      return res.status(400).json({ ok: false, error: 'Email y contraseña son requeridos' });
     }
 
     const usuario = await findByEmail(email);
-
-    if (!usuario) {
-      return res.status(401).json({ ok: false, error: 'Credenciales inválidas' });
-    }
-
-    if (!usuario.is_active) {
-      return res.status(403).json({ ok: false, error: 'Cuenta inactiva. Contacta a soporte.' });
-    }
+    if (!usuario) return res.status(401).json({ ok: false, error: 'Credenciales inválidas' });
+    if (!usuario.is_active) return res.status(403).json({ ok: false, error: 'Cuenta inactiva. Contacta a soporte.' });
 
     let isValid = false;
-    try {
-      isValid = verifyPasswordDjango(password, usuario.password);
-    } catch {
-      return res.status(401).json({ ok: false, error: 'Credenciales inválidas' });
-    }
+    try { isValid = verifyPasswordDjango(password, usuario.password); }
+    catch { return res.status(401).json({ ok: false, error: 'Credenciales inválidas' }); }
+    if (!isValid) return res.status(401).json({ ok: false, error: 'Credenciales inválidas' });
 
-    if (!isValid) {
-      return res.status(401).json({ ok: false, error: 'Credenciales inválidas' });
-    }
-
-    // Ejecutar en paralelo: last_login + relaciones del usuario
     const [vendedores, metas] = await Promise.all([
       getVendedoresByUsuarioId(usuario.id),
       getMetasByUsuarioId(usuario.id),
       updateLastLogin(usuario.id)
     ]);
 
-   const token = generarToken({
-    id:        usuario.id,
-    email:     usuario.email,
-    is_admin:  usuario.is_admin,
-    vendedores: vendedores,    // ← AGREGAR
-    area:       usuario.area   // ← AGREGAR
+    const token = generarToken({
+      sub:       usuario.id,
+      email:     usuario.email,
+      is_admin:  usuario.is_admin,
+      vendedores,
+      area:      usuario.area
     });
 
     return res.status(200).json({
       ok:        true,
-    message:   'Login correcto',
+      message:   'Login correcto',
       token,
       expiresIn: process.env.JWT_EXPIRES_IN || '8h',
       user: {
@@ -106,28 +82,26 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// ─────────────────────────────────────────────────────────────────
-// GET /api/auth/me   — ruta protegida
-// Header: Authorization: Bearer <token>
-// Retorna datos básicos actualizados del usuario autenticado
-// ─────────────────────────────────────────────────────────────────
+// ── GET /api/auth/me ──────────────────────────────────────────────────────────
+// Reconstruye vendedores desde MySQL para tener tipo actualizado en cada request
 router.get('/me', requireAuth, async (req, res) => {
   try {
     const usuario = await findById(req.usuario.sub);
     if (!usuario || !usuario.is_active) {
       return res.status(401).json({ ok: false, error: 'Sesión inválida.' });
     }
-    return res.status(200).json({ ok: true, user: usuario });
+    const vendedores = await getVendedoresByUsuarioId(usuario.id);
+    return res.status(200).json({
+      ok: true,
+      user: { ...usuario, vendedores }
+    });
   } catch (err) {
     console.error('[auth/me]', err);
     return res.status(500).json({ ok: false, error: 'Error al obtener usuario.' });
   }
 });
 
-// ─────────────────────────────────────────────────────────────────
-// POST /api/auth/logout   — ruta protegida
-// El JWT es stateless: el cliente descarta el token.
-// ─────────────────────────────────────────────────────────────────
+// ── POST /api/auth/logout ─────────────────────────────────────────────────────
 router.post('/logout', requireAuth, (_req, res) => {
   return res.status(200).json({ ok: true, message: 'Sesión cerrada correctamente.' });
 });
