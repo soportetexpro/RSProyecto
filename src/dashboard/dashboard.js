@@ -227,12 +227,13 @@
         tbody.innerHTML = '<tr class="tabla-empty"><td colspan="3">Sin datos</td></tr>'; return;
       }
       tbody.innerHTML = data.vendedores.map(v => `
-        <tr>
-          <td><strong>${v.codVendedor}</strong></td>
-          <td>${v.folios}</td>
-          <td style="text-align:right">${formatCLP(v.totalVentas)}</td>
-        </tr>
-      `).join('');
+  <tr>
+    <td><strong>${v.codVendedor}</strong></td>
+    <td>${v.nombreVendedor || '—'}</td>
+    <td>${v.folios}</td>
+    <td style="text-align:right">${formatCLP(v.totalVentas)}</td>
+  </tr>
+`).join('');
     } catch (err) { console.error('[cargarVendedores]', err); }
   }
 

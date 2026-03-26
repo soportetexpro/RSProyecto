@@ -45,29 +45,42 @@ router.get('/resumen', async (req, res) => {
     const metaMes = metaRows.length ? Number(metaRows[0].meta) : 0;
 
     if (!codigos.length) {
-      return res.json({ ok: true, totalVentas: 0, meta: metaMes, progreso: 0, totalDescuento: 0 });
+      return res.json({ ok: true, totalVentas: 0, meta: metaMes, progreso: 0, pctDescuentoGlobal: 0 });
     }
 
-    const pool   = await getSoftlandPool();
-    const result = await pool.request().query(`
+    const pool = await getSoftlandPool();
+
+    // ── totalVentas: SIN JOIN para no inflar SubTotal por múltiples líneas ──
+    const resultVentas = await pool.request().query(`
       SELECT
         SUM(
           CASE
             WHEN RTRIM(h.CanCod) = '300' THEN h.SubTotal
             ELSE ROUND(h.SubTotal * 1.10, 0)
           END
-        ) AS totalVentas,
+        ) AS totalVentas
+      FROM [PRODIN].[softland].[iw_gsaen] h
+      WHERE h.CodVendedor IN (${mssqlIn(codigos)})
+        AND MONTH(h.Fecha) = ${mes}
+        AND YEAR(h.Fecha)  = ${anio}
+        AND h.Tipo IN ('F','N','D')
+        AND h.Estado <> 'A'
+    `);
+
+    // ── pctDescuento: JOIN solo para calcular descuento por línea ───────────
+    const resultDesc = await pool.request().query(`
+      SELECT
         ROUND(
-          SUM(
+          AVG(
             CASE
               WHEN m.PreUniMB > 0 AND m.CantFacturada > 0
               THEN (m.PreUniMB - (m.TotLinea / m.CantFacturada)) / m.PreUniMB * 100
               ELSE 0
             END
-          ) / NULLIF(COUNT(m.Linea), 0)
+          )
         , 2) AS pctDescuentoGlobal
       FROM [PRODIN].[softland].[iw_gsaen] h
-      LEFT JOIN [PRODIN].[softland].[iw_gmovi] m
+      INNER JOIN [PRODIN].[softland].[iw_gmovi] m
         ON m.NroInt = h.NroInt AND m.Tipo = h.Tipo
       WHERE h.CodVendedor IN (${mssqlIn(codigos)})
         AND MONTH(h.Fecha) = ${mes}
@@ -76,9 +89,8 @@ router.get('/resumen', async (req, res) => {
         AND h.Estado <> 'A'
     `);
 
-    const row                = result.recordset[0] || {};
-    const totalVentas        = Number(row.totalVentas)        || 0;
-    const pctDescuentoGlobal = Number(row.pctDescuentoGlobal) || 0;
+    const totalVentas        = Number(resultVentas.recordset[0]?.totalVentas)        || 0;
+    const pctDescuentoGlobal = Number(resultDesc.recordset[0]?.pctDescuentoGlobal)   || 0;
     const progreso = metaMes > 0 ? Math.min(Math.round((totalVentas / metaMes) * 100), 999) : 0;
 
     res.json({ ok: true, totalVentas, meta: metaMes, progreso, pctDescuentoGlobal });
@@ -157,16 +169,24 @@ router.get('/vendedores', async (req, res) => {
     const pool   = await getSoftlandPool();
     const result = await pool.request().query(`
       SELECT
-        CodVendedor AS codVendedor,
-        COUNT(Folio) AS folios,
-        SUM(SubTotal) AS totalVentas
-      FROM [PRODIN].[softland].[iw_gsaen]
-      WHERE CodVendedor IN (${mssqlIn(codigos)})
-        AND MONTH(Fecha) = ${mes}
-        AND YEAR(Fecha)  = ${anio}
-        AND Tipo IN ('F','N','D')
-        AND Estado <> 'A'
-      GROUP BY CodVendedor
+        h.CodVendedor                         AS codVendedor,
+        v.VenDes                              AS nombreVendedor,
+        COUNT(h.Folio)                        AS folios,
+        SUM(
+          CASE
+            WHEN RTRIM(h.CanCod) = '300' THEN h.SubTotal
+            ELSE ROUND(h.SubTotal * 1.10, 0)
+          END
+        )                                     AS totalVentas
+      FROM [PRODIN].[softland].[iw_gsaen] h
+      LEFT JOIN [PRODIN].[softland].[cwtvend] v
+        ON v.VenCod = h.CodVendedor
+      WHERE h.CodVendedor IN (${mssqlIn(codigos)})
+        AND MONTH(h.Fecha) = ${mes}
+        AND YEAR(h.Fecha)  = ${anio}
+        AND h.Tipo IN ('F','N','D')
+        AND h.Estado <> 'A'
+      GROUP BY h.CodVendedor, v.VenDes
       ORDER BY totalVentas DESC
     `);
     res.json({ ok: true, vendedores: result.recordset });
