@@ -3,18 +3,15 @@
 /**
  * requireAuth.js — Middleware de autenticación JWT
  *
- * Uso:
- *   router.get('/ruta-protegida', requireAuth, (req, res) => {
- *     const usuario = req.usuario; // payload del token
- *   });
- *
- * El token debe enviarse en el header Authorization:
- *   Authorization: Bearer <token>
+ * Decodifica el token y luego enriquece req.usuario con los vendedores
+ * frescos desde MySQL, de modo que cambios en usuario_vendedor (tipo, cod_vendedor)
+ * se reflejen sin necesidad de que el usuario vuelva a hacer login.
  */
 
-const { verificarToken } = require('../utils/jwt');
+const { verificarToken }             = require('../utils/jwt');
+const { getVendedoresByUsuarioId }   = require('../models/usuario');
 
-function requireAuth(req, res, next) {
+async function requireAuth(req, res, next) {
   try {
     const authHeader = req.headers['authorization'] || '';
     const token      = authHeader.startsWith('Bearer ')
@@ -23,13 +20,23 @@ function requireAuth(req, res, next) {
 
     if (!token) {
       return res.status(401).json({
-        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ok:    false,
+        ok:    false,
         error: 'Token requerido. Incluye Authorization: Bearer <token>'
       });
     }
 
-    const payload  = verificarToken(token);
-    req.usuario    = payload; // { sub, email, is_admin, iat, exp }
+    const payload = verificarToken(token);
+
+    // Recargar vendedores frescos desde MySQL para que
+    // cambios en usuario_vendedor (tipo C, nuevos códigos, etc.)
+    // sean visibles sin necesidad de re-login.
+    const vendedores = await getVendedoresByUsuarioId(payload.sub);
+
+    req.usuario = {
+      ...payload,
+      vendedores,          // sobreescribe los del JWT con los de la BD
+    };
+
     next();
 
   } catch (err) {
