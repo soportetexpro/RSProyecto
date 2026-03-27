@@ -105,13 +105,11 @@ router.get('/resumen', async (req, res) => {
       return res.json({ ok: true, totalVentas: 0, meta: metaMes, progreso: 0, pctDescuentoGlobal: 0 });
     }
 
-    // Folios compartidos con porcentaje asignado
-    const foliosCompPct = await getFoliosCompartidosConPct(codigos, mes, anio);
+    const foliosCompPct  = await getFoliosCompartidosConPct(codigos, mes, anio);
     const foliosCompNums = foliosCompPct.map(r => r.folio);
 
     const pool = await getSoftlandPool();
 
-    // Ventas propias (CODIGOs del usuario, EXCLUYE folios compartidos para no sumar doble)
     const resultPropias = await pool.request().query(`
       SELECT
         h.Folio,
@@ -128,10 +126,8 @@ router.get('/resumen', async (req, res) => {
         AND h.Estado <> 'A'
     `);
 
-    // Sumar ventas propias
     let totalVentas = resultPropias.recordset.reduce((s, r) => s + (Number(r.monto) || 0), 0);
 
-    // Sumar solo el monto proporcional de cada folio compartido
     if (foliosCompPct.length) {
       const resultComp = await pool.request().query(`
         SELECT
@@ -153,8 +149,7 @@ router.get('/resumen', async (req, res) => {
       }
     }
 
-    // Descuento global
-    const codigosForDesc = codigos;
+    const codigosForDesc  = codigos;
     const extraFoliosDesc = foliosCompNums.length
       ? `OR h.Folio IN (${foliosCompNums.join(',')})`
       : '';
@@ -194,7 +189,6 @@ router.get('/resumen', async (req, res) => {
 });
 
 // ── GET /api/dashboard/evolucion ─────────────────────────────────────────────
-// FIX: ahora incluye folios compartidos proporcionales por mes
 router.get('/evolucion', async (req, res) => {
   const usuario = req.usuario;
   const codigos = getCodigos(usuario);
@@ -213,7 +207,6 @@ router.get('/evolucion', async (req, res) => {
       return res.json({ ok: true, evolucion: meses });
     }
 
-    // Folios compartidos en TODO el año (todos los meses)
     const placeholders = codigos.map(() => '?').join(',');
     const [compRows] = await db.pool.query(
       `SELECT folio, mes, porcentaje
@@ -223,7 +216,7 @@ router.get('/evolucion', async (req, res) => {
          AND rol  = 'compartido'`,
       [...codigos, anio]
     );
-    // Map: mes -> [{ folio, porcentaje }]
+
     const compPorMes = {};
     compRows.forEach(r => {
       const m = Number(r.mes);
@@ -234,7 +227,6 @@ router.get('/evolucion', async (req, res) => {
 
     const pool = await getSoftlandPool();
 
-    // Ventas propias (excluye todos los folios compartidos recibidos para no duplicar)
     const excludeComp = todosLosCompFolios.length
       ? `AND Folio NOT IN (${todosLosCompFolios.join(',')})`
       : '';
@@ -261,7 +253,6 @@ router.get('/evolucion', async (req, res) => {
     const ventasPorMes = {};
     resultPropias.recordset.forEach(r => { ventasPorMes[r.mes] = Number(r.ventas) || 0; });
 
-    // Agregar monto proporcional de folios compartidos por mes
     if (todosLosCompFolios.length) {
       const resultComp = await pool.request().query(`
         SELECT
@@ -351,17 +342,21 @@ router.get('/vendedores', async (req, res) => {
 });
 
 // ── GET /api/dashboard/vendedores-todos ──────────────────────────────────────
-// Retorna TODOS los vendedores activos desde Softland para el select del coordinador
+// FIX: obtiene lista desde iw_gsaen DISTINCT + nombre desde cwtvend
+// Evita depender de columnas como VenAct que pueden no existir o tener formato distinto
 router.get('/vendedores-todos', async (req, res) => {
   try {
     const pool   = await getSoftlandPool();
     const result = await pool.request().query(`
-      SELECT
-        RTRIM(VenCod) AS cod,
-        RTRIM(VenDes) AS nombre
-      FROM [PRODIN].[softland].[cwtvend]
-      WHERE VenAct = 1
-      ORDER BY VenDes
+      SELECT DISTINCT
+        RTRIM(h.CodVendedor)  AS cod,
+        RTRIM(v.VenDes)       AS nombre
+      FROM [PRODIN].[softland].[iw_gsaen] h
+      LEFT JOIN [PRODIN].[softland].[cwtvend] v
+        ON v.VenCod = h.CodVendedor
+      WHERE h.CodVendedor IS NOT NULL
+        AND h.CodVendedor <> ''
+      ORDER BY nombre
     `);
     res.json({ ok: true, vendedores: result.recordset });
   } catch (err) {
@@ -422,7 +417,6 @@ router.get('/ventas-mes', async (req, res) => {
       ORDER BY h.Fecha DESC
     `);
 
-    // Inyectar monto_asignado proporcional para folios compartidos
     const ventas = result.recordset.map(v => {
       if (v.es_compartido) {
         const pctInfo = foliosCompPct.find(r => r.folio === Number(v.Folio));
@@ -643,7 +637,6 @@ router.post('/compartir', async (req, res) => {
 });
 
 // ── PUT /api/dashboard/compartir/:id ─────────────────────────────────────────
-// Editar asignación: cambia vendedor y/o porcentaje, recalcula monto_asignado
 router.put('/compartir/:id', async (req, res) => {
   const usuario      = req.usuario;
   const codigosCoord = getCodigosCoordinador(usuario);
@@ -658,7 +651,6 @@ router.put('/compartir/:id', async (req, res) => {
   }
 
   try {
-    // Verificar que la asignación pertenece al coordinador
     const [rows] = await db.pool.query(
       `SELECT id, monto_neto FROM factura_compartida
        WHERE id = ? AND cod_vendedor_principal IN (${codigosCoord.map(() => '?').join(',')})
@@ -669,16 +661,16 @@ router.put('/compartir/:id', async (req, res) => {
       return res.status(404).json({ ok: false, error: 'Asignación no encontrada' });
     }
 
-    const montoNeto     = Number(rows[0].monto_neto);
-    const montoAsignado = Math.round(montoNeto * Number(porcentaje) / 100);
+    const montoNeto          = Number(rows[0].monto_neto);
+    const montoAsignado      = Math.round(montoNeto * Number(porcentaje) / 100);
     const nombreVendedorComp = await getNombreVendedor(cod_vendedor_compartido);
 
     await db.pool.query(
       `UPDATE factura_compartida
-       SET cod_vendedor_compartido   = ?,
+       SET cod_vendedor_compartido    = ?,
            nombre_vendedor_compartido = ?,
-           porcentaje               = ?,
-           monto_asignado           = ?
+           porcentaje                 = ?,
+           monto_asignado             = ?
        WHERE id = ?`,
       [cod_vendedor_compartido, nombreVendedorComp, Number(porcentaje), montoAsignado, id]
     );
@@ -691,7 +683,6 @@ router.put('/compartir/:id', async (req, res) => {
 });
 
 // ── DELETE /api/dashboard/compartir/:id ──────────────────────────────────────
-// Eliminar asignación → el folio vuelve a estar disponible para asignar
 router.delete('/compartir/:id', async (req, res) => {
   const usuario      = req.usuario;
   const codigosCoord = getCodigosCoordinador(usuario);
