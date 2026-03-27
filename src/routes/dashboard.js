@@ -53,6 +53,27 @@ async function getFoliosCompartidos(codigos, mes, anio) {
   return rows.map(r => Number(r.folio));
 }
 
+/**
+ * Busca el nombre del usuario a partir de su cod_vendedor.
+ * usuario_vendedor no tiene nombre_vendedor — se obtiene haciendo JOIN con usuario.
+ * Retorna el nombre o el propio código si no se encuentra.
+ */
+async function getNombreVendedor(codVendedor) {
+  try {
+    const [rows] = await db.pool.query(
+      `SELECT u.nombre
+       FROM usuario_vendedor uv
+       INNER JOIN usuario u ON u.id = uv.usuario_id
+       WHERE uv.cod_vendedor = ?
+       LIMIT 1`,
+      [codVendedor]
+    );
+    return rows.length ? rows[0].nombre : codVendedor;
+  } catch {
+    return codVendedor;
+  }
+}
+
 // ── GET /api/dashboard/resumen ───────────────────────────────────────────────
 router.get('/resumen', async (req, res) => {
   const usuario = req.usuario;
@@ -430,7 +451,7 @@ router.post('/compartir', async (req, res) => {
   try {
     const pool = await getSoftlandPool();
 
-    // Traer datos del folio — incluir CodVendedor para guardarlo como principal
+    // Traer datos del folio desde Softland
     const resultFolio = await pool.request().query(`
       SELECT TOP 1
         h.Folio,
@@ -456,33 +477,25 @@ router.post('/compartir', async (req, res) => {
     const montoAsignado = Math.round(montoNeto * Number(porcentaje) / 100);
     const fechaFolio    = new Date(f.Fecha);
 
-    // Buscar nombre del vendedor compartido en MySQL
-    const [uvRows] = await db.pool.query(
-      `SELECT nombre_vendedor FROM usuario_vendedor WHERE cod_vendedor = ? LIMIT 1`,
-      [cod_vendedor_compartido]
-    );
-    const nombreVendedorComp = uvRows.length ? uvRows[0].nombre_vendedor : cod_vendedor_compartido;
+    // Obtener nombre del vendedor compartido via JOIN usuario_vendedor -> usuario
+    const nombreVendedorComp = await getNombreVendedor(cod_vendedor_compartido);
 
     await db.pool.query(
       `INSERT INTO factura_compartida
        (folio, anio, mes, fecha, cliente, monto_neto, monto_asignado, porcentaje, rol,
         cod_vendedor_principal, cod_vendedor_compartido, nombre_vendedor_compartido,
         fecha_registro, usuario_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'compartido', ?, ?, ?, NOW(), ?)
-       ON DUPLICATE KEY UPDATE
-         monto_asignado = VALUES(monto_asignado),
-         porcentaje     = VALUES(porcentaje),
-         fecha_registro = NOW()`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'compartido', ?, ?, ?, NOW(), ?)`,
       [
-        f.Folio,
+        String(f.Folio),
         fechaFolio.getFullYear(),
         fechaFolio.getMonth() + 1,
-        fechaFolio,
-        f.cliente,
+        fechaFolio.toISOString().slice(0, 10),
+        f.cliente || '',
         montoNeto,
         montoAsignado,
         Number(porcentaje),
-        f.CodVendedor,          // ✔ código real del vendedor (ej: '437'), NO CanCod
+        f.CodVendedor,           // código real del vendedor coordinador
         cod_vendedor_compartido,
         nombreVendedorComp,
         usuario.sub
@@ -492,7 +505,7 @@ router.post('/compartir', async (req, res) => {
     res.json({ ok: true, message: 'Folio compartido correctamente' });
   } catch (err) {
     console.error('[POST /dashboard/compartir]', err.message);
-    res.status(500).json({ ok: false, error: 'Error al compartir folio' });
+    res.status(500).json({ ok: false, error: err.message });
   }
 });
 
@@ -511,10 +524,11 @@ router.get('/compartidos', async (req, res) => {
     const [rows] = await db.pool.query(`
       SELECT
         fc.*,
-        fc.monto_asignado                    AS monto,
-        COALESCE(uv.nombre_vendedor, fc.cod_vendedor_principal) AS coordinador
+        fc.monto_asignado                              AS monto,
+        COALESCE(u.nombre, fc.cod_vendedor_principal)  AS coordinador
       FROM factura_compartida fc
       LEFT JOIN usuario_vendedor uv ON uv.cod_vendedor = fc.cod_vendedor_principal
+      LEFT JOIN usuario u            ON u.id = uv.usuario_id
       WHERE fc.cod_vendedor_compartido IN (${placeholders})
         AND fc.anio = ?
         AND fc.mes  = ?
