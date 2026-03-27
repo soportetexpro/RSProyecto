@@ -153,7 +153,7 @@ router.get('/resumen', async (req, res) => {
       }
     }
 
-    // Descuento global solo sobre ventas propias
+    // Descuento global
     const codigosForDesc = codigos;
     const extraFoliosDesc = foliosCompNums.length
       ? `OR h.Folio IN (${foliosCompNums.join(',')})`
@@ -194,6 +194,7 @@ router.get('/resumen', async (req, res) => {
 });
 
 // ── GET /api/dashboard/evolucion ─────────────────────────────────────────────
+// FIX: ahora incluye folios compartidos proporcionales por mes
 router.get('/evolucion', async (req, res) => {
   const usuario = req.usuario;
   const codigos = getCodigos(usuario);
@@ -212,8 +213,33 @@ router.get('/evolucion', async (req, res) => {
       return res.json({ ok: true, evolucion: meses });
     }
 
-    const pool   = await getSoftlandPool();
-    const result = await pool.request().query(`
+    // Folios compartidos en TODO el año (todos los meses)
+    const placeholders = codigos.map(() => '?').join(',');
+    const [compRows] = await db.pool.query(
+      `SELECT folio, mes, porcentaje
+       FROM factura_compartida
+       WHERE cod_vendedor_compartido IN (${placeholders})
+         AND anio = ?
+         AND rol  = 'compartido'`,
+      [...codigos, anio]
+    );
+    // Map: mes -> [{ folio, porcentaje }]
+    const compPorMes = {};
+    compRows.forEach(r => {
+      const m = Number(r.mes);
+      if (!compPorMes[m]) compPorMes[m] = [];
+      compPorMes[m].push({ folio: Number(r.folio), porcentaje: Number(r.porcentaje) });
+    });
+    const todosLosCompFolios = [...new Set(compRows.map(r => Number(r.folio)))];
+
+    const pool = await getSoftlandPool();
+
+    // Ventas propias (excluye todos los folios compartidos recibidos para no duplicar)
+    const excludeComp = todosLosCompFolios.length
+      ? `AND Folio NOT IN (${todosLosCompFolios.join(',')})`
+      : '';
+
+    const resultPropias = await pool.request().query(`
       SELECT
         MONTH(Fecha) AS mes,
         SUM(
@@ -227,12 +253,41 @@ router.get('/evolucion', async (req, res) => {
         AND YEAR(Fecha) = ${anio}
         AND Tipo IN ('F','N','D')
         AND Estado <> 'A'
+        ${excludeComp}
       GROUP BY MONTH(Fecha)
       ORDER BY mes
     `);
 
     const ventasPorMes = {};
-    result.recordset.forEach(r => { ventasPorMes[r.mes] = Number(r.ventas) || 0; });
+    resultPropias.recordset.forEach(r => { ventasPorMes[r.mes] = Number(r.ventas) || 0; });
+
+    // Agregar monto proporcional de folios compartidos por mes
+    if (todosLosCompFolios.length) {
+      const resultComp = await pool.request().query(`
+        SELECT
+          MONTH(Fecha) AS mes,
+          Folio,
+          CASE
+            WHEN RTRIM(CanCod) = '300' THEN SubTotal
+            ELSE ROUND(SubTotal * 1.10, 0)
+          END AS monto
+        FROM [PRODIN].[softland].[iw_gsaen]
+        WHERE Folio IN (${todosLosCompFolios.join(',')})
+          AND YEAR(Fecha) = ${anio}
+          AND Tipo IN ('F','N','D')
+          AND Estado <> 'A'
+      `);
+      for (const row of resultComp.recordset) {
+        const mesNum  = Number(row.mes);
+        const lista   = compPorMes[mesNum] || [];
+        const pctInfo = lista.find(r => r.folio === Number(row.Folio));
+        if (pctInfo) {
+          ventasPorMes[mesNum] = (ventasPorMes[mesNum] || 0) +
+            Math.round(Number(row.monto) * pctInfo.porcentaje / 100);
+        }
+      }
+    }
+
     const evolucion = Array.from({ length: 12 }, (_, i) => ({
       mes:    i + 1,
       ventas: ventasPorMes[i + 1] || 0,
@@ -291,6 +346,26 @@ router.get('/vendedores', async (req, res) => {
 
   } catch (err) {
     console.error('[GET /api/dashboard/vendedores]', err.message);
+    res.status(500).json({ ok: false, error: 'Error al obtener vendedores' });
+  }
+});
+
+// ── GET /api/dashboard/vendedores-todos ──────────────────────────────────────
+// Retorna TODOS los vendedores activos desde Softland para el select del coordinador
+router.get('/vendedores-todos', async (req, res) => {
+  try {
+    const pool   = await getSoftlandPool();
+    const result = await pool.request().query(`
+      SELECT
+        RTRIM(VenCod) AS cod,
+        RTRIM(VenDes) AS nombre
+      FROM [PRODIN].[softland].[cwtvend]
+      WHERE VenAct = 1
+      ORDER BY VenDes
+    `);
+    res.json({ ok: true, vendedores: result.recordset });
+  } catch (err) {
+    console.error('[GET /api/dashboard/vendedores-todos]', err.message);
     res.status(500).json({ ok: false, error: 'Error al obtener vendedores' });
   }
 });
@@ -567,8 +642,86 @@ router.post('/compartir', async (req, res) => {
   }
 });
 
+// ── PUT /api/dashboard/compartir/:id ─────────────────────────────────────────
+// Editar asignación: cambia vendedor y/o porcentaje, recalcula monto_asignado
+router.put('/compartir/:id', async (req, res) => {
+  const usuario      = req.usuario;
+  const codigosCoord = getCodigosCoordinador(usuario);
+  const id = parseInt(req.params.id);
+  const { cod_vendedor_compartido, porcentaje } = req.body;
+
+  if (!id || !cod_vendedor_compartido || !porcentaje) {
+    return res.status(400).json({ ok: false, error: 'Faltan parámetros' });
+  }
+  if (!codigosCoord.length) {
+    return res.status(403).json({ ok: false, error: 'No autorizado' });
+  }
+
+  try {
+    // Verificar que la asignación pertenece al coordinador
+    const [rows] = await db.pool.query(
+      `SELECT id, monto_neto FROM factura_compartida
+       WHERE id = ? AND cod_vendedor_principal IN (${codigosCoord.map(() => '?').join(',')})
+       LIMIT 1`,
+      [id, ...codigosCoord]
+    );
+    if (!rows.length) {
+      return res.status(404).json({ ok: false, error: 'Asignación no encontrada' });
+    }
+
+    const montoNeto     = Number(rows[0].monto_neto);
+    const montoAsignado = Math.round(montoNeto * Number(porcentaje) / 100);
+    const nombreVendedorComp = await getNombreVendedor(cod_vendedor_compartido);
+
+    await db.pool.query(
+      `UPDATE factura_compartida
+       SET cod_vendedor_compartido   = ?,
+           nombre_vendedor_compartido = ?,
+           porcentaje               = ?,
+           monto_asignado           = ?
+       WHERE id = ?`,
+      [cod_vendedor_compartido, nombreVendedorComp, Number(porcentaje), montoAsignado, id]
+    );
+
+    res.json({ ok: true, message: 'Asignación actualizada' });
+  } catch (err) {
+    console.error('[PUT /dashboard/compartir/:id]', err.message);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ── DELETE /api/dashboard/compartir/:id ──────────────────────────────────────
+// Eliminar asignación → el folio vuelve a estar disponible para asignar
+router.delete('/compartir/:id', async (req, res) => {
+  const usuario      = req.usuario;
+  const codigosCoord = getCodigosCoordinador(usuario);
+  const id = parseInt(req.params.id);
+
+  if (!id) return res.status(400).json({ ok: false, error: 'ID inválido' });
+  if (!codigosCoord.length) {
+    return res.status(403).json({ ok: false, error: 'No autorizado' });
+  }
+
+  try {
+    const [rows] = await db.pool.query(
+      `SELECT id FROM factura_compartida
+       WHERE id = ? AND cod_vendedor_principal IN (${codigosCoord.map(() => '?').join(',')})
+       LIMIT 1`,
+      [id, ...codigosCoord]
+    );
+    if (!rows.length) {
+      return res.status(404).json({ ok: false, error: 'Asignación no encontrada o sin permiso' });
+    }
+
+    await db.pool.query(`DELETE FROM factura_compartida WHERE id = ?`, [id]);
+    res.json({ ok: true, message: 'Asignación eliminada. El folio está disponible nuevamente.' });
+  } catch (err) {
+    console.error('[DELETE /dashboard/compartir/:id]', err.message);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 // ── GET /api/dashboard/compartidos ───────────────────────────────────────────
-// Retorna folios asignados AL usuario (destinatario: cod_vendedor_compartido)
 router.get('/compartidos', async (req, res) => {
   const usuario = req.usuario;
   const codigos = getCodigos(usuario);
@@ -612,7 +765,6 @@ router.get('/compartidos', async (req, res) => {
 });
 
 // ── GET /api/dashboard/asignados ─────────────────────────────────────────────
-// NUEVO: folios que el COORDINADOR asignó a otros (historial de asignaciones enviadas)
 router.get('/asignados', async (req, res) => {
   const usuario      = req.usuario;
   const codigosCoord = getCodigosCoordinador(usuario);
