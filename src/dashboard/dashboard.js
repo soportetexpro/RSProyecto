@@ -13,7 +13,6 @@
   let graficoEvolucion = null;
   let ventasMes        = [];
 
-  // ── Formato CLP ───────────────────────────────────────────────
   function formatCLP(v) {
     if (v == null || v === '') return '—';
     return new Intl.NumberFormat('es-CL', {
@@ -21,7 +20,6 @@
     }).format(Number(v));
   }
 
-  // ── Auth ──────────────────────────────────────────────────────
   async function verificarSesion() {
     if (!token()) { window.location.href = '../login/index.html'; return null; }
     try {
@@ -32,7 +30,6 @@
     } catch { window.location.href = '../login/index.html'; return null; }
   }
 
-  // ── Detectar si el usuario es coordinador (tipo C) ────────────
   function esCoordinador(usuario) {
     return (usuario.vendedores || []).some(v => v.tipo === 'C');
   }
@@ -86,7 +83,7 @@
     });
   }
 
-  // ── Selectores mes/año ────────────────────────────────────────
+  // ── Filtros mes/año ──────────────────────────────────────────
   function initSelectores() {
     const hoy   = new Date();
     const meses = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
@@ -213,15 +210,21 @@
       tbody.innerHTML = '<tr class="tabla-empty"><td colspan="7">Sin registros</td></tr>'; return;
     }
     tbody.innerHTML = lista.map(v => {
-      const pctDesc    = v.pct_descuento > 0 ? `${v.pct_descuento}%` : '—';
-      const badgeComp  = v.es_compartido ? '<span style="font-size:0.7rem;background:#00E2A7;color:#000;border-radius:4px;padding:1px 5px;margin-left:4px">Compartido</span>' : '';
+      const pctDesc   = v.pct_descuento > 0 ? `${v.pct_descuento}%` : '—';
+      // Para folios compartidos mostrar monto proporcional con badge y pct
+      const montoMostrar = v.es_compartido && v.monto_asignado != null
+        ? v.monto_asignado
+        : v.monto;
+      const badgeComp = v.es_compartido
+        ? `<span style="font-size:0.7rem;background:#00E2A7;color:#000;border-radius:4px;padding:1px 5px;margin-left:4px">Compartido ${v.porcentaje_asignado ? v.porcentaje_asignado + '%' : ''}</span>`
+        : '';
       return `
         <tr>
           <td><strong>${v.Folio||'—'}</strong>${badgeComp}</td>
           <td>${v.fecha_formato||'—'}</td>
           <td>${v.cliente||'—'}</td>
           <td>${v.CodVendedor||'—'}</td>
-          <td style="text-align:right">${formatCLP(v.monto)}</td>
+          <td style="text-align:right">${formatCLP(montoMostrar)}</td>
           <td style="text-align:right">${pctDesc}</td>
           <td style="text-align:center">
             <button class="btn-detalle" data-folio="${v.Folio}" title="Ver detalle">
@@ -280,13 +283,11 @@
     document.body.style.overflow = '';
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // PANEL COORDINADOR — Solo para vendedores tipo C
-  // ═══════════════════════════════════════════════════════════════
+  // ══ PANEL COORDINADOR ═══════════════════════════════════════════════════════════
 
   async function iniciarPanelCoordinador() {
     document.getElementById('panelCoordinador').style.display = 'block';
-    await Promise.all([ cargarFoliosParaCompartir(), cargarFoliosCompartidos() ]);
+    await Promise.all([ cargarFoliosParaCompartir(), cargarFoliosAsignados() ]);
 
     document.getElementById('btnCompartir').addEventListener('click', async () => {
       const folio      = document.getElementById('coordFolio').value;
@@ -315,15 +316,14 @@
         msgEl.textContent = '✅ Folio asignado correctamente';
         msgEl.style.color = 'var(--color-primary)';
 
-        // ── Recargar todo el panel + KPIs tras asignación exitosa ──
+        // Recargar todo tras asignación exitosa
         await Promise.all([
-          cargarFoliosParaCompartir(),  // remueve el folio asignado del select
-          cargarFoliosCompartidos(),    // muestra el nuevo registro en tabla
-          cargarResumen(),              // recalcula KPIs con folio compartido
-          cargarVentasMes(),            // actualiza tabla ventas
+          cargarFoliosParaCompartir(),
+          cargarFoliosAsignados(),
+          cargarResumen(),
+          cargarVentasMes(),
         ]);
 
-        // Limpiar campos del formulario
         document.getElementById('coordVendedor').value   = '';
         document.getElementById('coordPorcentaje').value = '';
 
@@ -351,6 +351,37 @@
     } catch (err) { console.error('[cargarFoliosParaCompartir]', err); }
   }
 
+  /**
+   * Para el COORDINADOR: muestra los folios que él ha asignado a otros.
+   * Usa GET /api/dashboard/asignados
+   */
+  async function cargarFoliosAsignados() {
+    try {
+      const res  = await fetch(`${API}/asignados?${new URLSearchParams(getParams())}`,
+        { headers: { Authorization: `Bearer ${token()}` } });
+      const data = await res.json();
+      const tbody = document.getElementById('tbodyCompartidos');
+      document.getElementById('totalCompartidos').textContent = `${(data.asignados||[]).length} registros`;
+      if (!data.ok || !data.asignados?.length) {
+        tbody.innerHTML = '<tr class="tabla-empty"><td colspan="6">Sin folios asignados este mes</td></tr>';
+        return;
+      }
+      tbody.innerHTML = data.asignados.map(c => `
+        <tr>
+          <td><strong>${c.folio}</strong></td>
+          <td>${c.fecha ? new Date(c.fecha).toLocaleDateString('es-CL') : '—'}</td>
+          <td>${c.cliente||'—'}</td>
+          <td>${c.nombre_vendedor_compartido||c.cod_vendedor_compartido||'—'}</td>
+          <td style="text-align:right">${c.porcentaje}%</td>
+          <td style="text-align:right">${formatCLP(c.monto_asignado)}</td>
+        </tr>`).join('');
+    } catch (err) { console.error('[cargarFoliosAsignados]', err); }
+  }
+
+  /**
+   * Para el VENDEDOR tipo P: muestra los folios que le asignó el coordinador.
+   * Usa GET /api/dashboard/compartidos
+   */
   async function cargarFoliosCompartidos() {
     try {
       const res  = await fetch(`${API}/compartidos?${new URLSearchParams(getParams())}`,
@@ -369,7 +400,7 @@
           <td>${c.cliente||'—'}</td>
           <td>${c.coordinador||c.cod_vendedor_principal||'—'}</td>
           <td style="text-align:right">${c.porcentaje}%</td>
-          <td style="text-align:right">${formatCLP(c.monto)}</td>
+          <td style="text-align:right">${formatCLP(c.monto_asignado)}</td>
         </tr>`).join('');
     } catch (err) { console.error('[cargarFoliosCompartidos]', err); }
   }
@@ -378,7 +409,9 @@
   async function cargarTodo(usuario) {
     const tareas = [ cargarResumen(), cargarGrafico(), cargarVendedores(), cargarVentasMes() ];
     if (esCoordinador(usuario)) {
-      tareas.push(cargarFoliosParaCompartir(), cargarFoliosCompartidos());
+      tareas.push(cargarFoliosParaCompartir(), cargarFoliosAsignados());
+    } else {
+      tareas.push(cargarFoliosCompartidos());
     }
     await Promise.all(tareas);
   }
@@ -391,14 +424,12 @@
     cargarSidebar(usuario);
     initSelectores();
 
-    // Mostrar panel coordinador SOLO si tiene tipo C
     if (esCoordinador(usuario)) {
       await iniciarPanelCoordinador();
-    }
-
-    // Para usuarios tipo P (vendedor): cargar tabla de folios recibidos
-    // La función cargarFoliosCompartidos trae lo que les asignó el coordinador
-    if (!esCoordinador(usuario)) {
+    } else {
+      // Mostrar panel de "Folios que tengo asignados" para vendedor tipo P
+      const panelEl = document.getElementById('panelCoordinador');
+      if (panelEl) panelEl.style.display = 'block';
       cargarFoliosCompartidos();
     }
 

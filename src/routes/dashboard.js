@@ -2,14 +2,6 @@
 
 /**
  * routes/dashboard.js
- * GET /api/dashboard/resumen
- * GET /api/dashboard/evolucion
- * GET /api/dashboard/vendedores
- * GET /api/dashboard/ventas-mes
- * GET /api/dashboard/detalle/:folio
- * GET /api/dashboard/compartir/lista
- * POST /api/dashboard/compartir
- * GET /api/dashboard/compartidos
  */
 
 const express             = require('express');
@@ -22,12 +14,10 @@ router.use(requireAuth);
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
-/** Todos los códigos del usuario (tipo P y C) */
 function getCodigos(usuario) {
   return (usuario.vendedores || []).map(v => v.cod_vendedor);
 }
 
-/** Solo los códigos con tipo = 'C' — coordinador */
 function getCodigosCoordinador(usuario) {
   return (usuario.vendedores || [])
     .filter(v => v.tipo === 'C')
@@ -39,14 +29,14 @@ function mssqlIn(arr) {
 }
 
 /**
- * Retorna array de folios (número) que fueron compartidos al grupo de codigos
- * como destinatario, para el mes/año dado.
+ * Folios que fueron compartidos AL usuario (como destinatario).
+ * Retorna: [{ folio: Number, porcentaje: Number }]
  */
-async function getFoliosCompartidos(codigos, mes, anio) {
+async function getFoliosCompartidosConPct(codigos, mes, anio) {
   if (!codigos.length) return [];
   const placeholders = codigos.map(() => '?').join(',');
   const [rows] = await db.pool.query(
-    `SELECT DISTINCT folio
+    `SELECT folio, porcentaje
      FROM factura_compartida
      WHERE cod_vendedor_compartido IN (${placeholders})
        AND mes  = ?
@@ -54,13 +44,15 @@ async function getFoliosCompartidos(codigos, mes, anio) {
        AND rol  = 'compartido'`,
     [...codigos, mes, anio]
   );
-  return rows.map(r => Number(r.folio));
+  return rows.map(r => ({ folio: Number(r.folio), porcentaje: Number(r.porcentaje) }));
 }
 
-/**
- * Retorna array de folios (número) que el coordinador YA asignó este mes,
- * para excluirlos del selector.
- */
+/** Solo numeros de folio (compatibilidad con otras funciones) */
+async function getFoliosCompartidos(codigos, mes, anio) {
+  const lista = await getFoliosCompartidosConPct(codigos, mes, anio);
+  return lista.map(r => r.folio);
+}
+
 async function getFoliosYaAsignados(codigosCoord, mes, anio) {
   if (!codigosCoord.length) return [];
   const placeholders = codigosCoord.map(() => '?').join(',');
@@ -76,9 +68,6 @@ async function getFoliosYaAsignados(codigosCoord, mes, anio) {
   return rows.map(r => Number(r.folio));
 }
 
-/**
- * Busca el nombre del usuario a partir de su cod_vendedor via JOIN usuario.
- */
 async function getNombreVendedor(codVendedor) {
   try {
     const [rows] = await db.pool.query(
@@ -116,30 +105,59 @@ router.get('/resumen', async (req, res) => {
       return res.json({ ok: true, totalVentas: 0, meta: metaMes, progreso: 0, pctDescuentoGlobal: 0 });
     }
 
-    const foliosComp  = await getFoliosCompartidos(codigos, mes, anio);
-    const extraFolios = foliosComp.length ? `OR h.Folio IN (${foliosComp.join(',')})` : '';
+    // Folios compartidos con porcentaje asignado
+    const foliosCompPct = await getFoliosCompartidosConPct(codigos, mes, anio);
+    const foliosCompNums = foliosCompPct.map(r => r.folio);
 
     const pool = await getSoftlandPool();
 
-    const resultVentas = await pool.request().query(`
+    // Ventas propias (CODIGOs del usuario, EXCLUYE folios compartidos para no sumar doble)
+    const resultPropias = await pool.request().query(`
       SELECT
-        SUM(
-          CASE
-            WHEN RTRIM(h.CanCod) = '300' THEN h.SubTotal
-            ELSE ROUND(h.SubTotal * 1.10, 0)
-          END
-        ) AS totalVentas
+        h.Folio,
+        CASE
+          WHEN RTRIM(h.CanCod) = '300' THEN h.SubTotal
+          ELSE ROUND(h.SubTotal * 1.10, 0)
+        END AS monto
       FROM [PRODIN].[softland].[iw_gsaen] h
-      WHERE (
-        h.CodVendedor IN (${mssqlIn(codigos)})
-        ${extraFolios}
-      )
+      WHERE h.CodVendedor IN (${mssqlIn(codigos)})
+        ${foliosCompNums.length ? `AND h.Folio NOT IN (${foliosCompNums.join(',')})` : ''}
         AND MONTH(h.Fecha) = ${mes}
         AND YEAR(h.Fecha)  = ${anio}
         AND h.Tipo IN ('F','N','D')
         AND h.Estado <> 'A'
     `);
 
+    // Sumar ventas propias
+    let totalVentas = resultPropias.recordset.reduce((s, r) => s + (Number(r.monto) || 0), 0);
+
+    // Sumar solo el monto proporcional de cada folio compartido
+    if (foliosCompPct.length) {
+      const resultComp = await pool.request().query(`
+        SELECT
+          h.Folio,
+          CASE
+            WHEN RTRIM(h.CanCod) = '300' THEN h.SubTotal
+            ELSE ROUND(h.SubTotal * 1.10, 0)
+          END AS monto
+        FROM [PRODIN].[softland].[iw_gsaen] h
+        WHERE h.Folio IN (${foliosCompNums.join(',')})
+          AND h.Tipo IN ('F','N','D')
+          AND h.Estado <> 'A'
+      `);
+      for (const row of resultComp.recordset) {
+        const pctInfo = foliosCompPct.find(r => r.folio === Number(row.Folio));
+        if (pctInfo) {
+          totalVentas += Math.round(Number(row.monto) * pctInfo.porcentaje / 100);
+        }
+      }
+    }
+
+    // Descuento global solo sobre ventas propias
+    const codigosForDesc = codigos;
+    const extraFoliosDesc = foliosCompNums.length
+      ? `OR h.Folio IN (${foliosCompNums.join(',')})`
+      : '';
     const resultDesc = await pool.request().query(`
       SELECT
         ROUND(
@@ -155,8 +173,8 @@ router.get('/resumen', async (req, res) => {
       INNER JOIN [PRODIN].[softland].[iw_gmovi] m
         ON m.NroInt = h.NroInt AND m.Tipo = h.Tipo
       WHERE (
-        h.CodVendedor IN (${mssqlIn(codigos)})
-        ${extraFolios}
+        h.CodVendedor IN (${mssqlIn(codigosForDesc)})
+        ${extraFoliosDesc}
       )
         AND MONTH(h.Fecha) = ${mes}
         AND YEAR(h.Fecha)  = ${anio}
@@ -164,7 +182,6 @@ router.get('/resumen', async (req, res) => {
         AND h.Estado <> 'A'
     `);
 
-    const totalVentas        = Number(resultVentas.recordset[0]?.totalVentas)      || 0;
     const pctDescuentoGlobal = Number(resultDesc.recordset[0]?.pctDescuentoGlobal) || 0;
     const progreso = metaMes > 0 ? Math.min(Math.round((totalVentas / metaMes) * 100), 999) : 0;
 
@@ -289,7 +306,8 @@ router.get('/ventas-mes', async (req, res) => {
   if (!codigos.length) return res.json({ ok: true, ventas: [] });
 
   try {
-    const foliosComp    = await getFoliosCompartidos(codigos, mes, anio);
+    const foliosCompPct = await getFoliosCompartidosConPct(codigos, mes, anio);
+    const foliosComp    = foliosCompPct.map(r => r.folio);
     const extraFolios   = foliosComp.length ? `OR h.Folio IN (${foliosComp.join(',')})` : '';
     const foliosCompSet = foliosComp.length ? `h.Folio IN (${foliosComp.join(',')})` : `1 = 0`;
 
@@ -329,7 +347,22 @@ router.get('/ventas-mes', async (req, res) => {
       ORDER BY h.Fecha DESC
     `);
 
-    res.json({ ok: true, ventas: result.recordset });
+    // Inyectar monto_asignado proporcional para folios compartidos
+    const ventas = result.recordset.map(v => {
+      if (v.es_compartido) {
+        const pctInfo = foliosCompPct.find(r => r.folio === Number(v.Folio));
+        if (pctInfo) {
+          return {
+            ...v,
+            monto_asignado: Math.round(Number(v.monto) * pctInfo.porcentaje / 100),
+            porcentaje_asignado: pctInfo.porcentaje
+          };
+        }
+      }
+      return v;
+    });
+
+    res.json({ ok: true, ventas });
 
   } catch (err) {
     console.error('[GET /api/dashboard/ventas-mes]', err.message);
@@ -415,7 +448,6 @@ router.get('/detalle/:folio', async (req, res) => {
 });
 
 // ── GET /api/dashboard/compartir/lista ───────────────────────────────────────
-// Solo folios tipo C que NO han sido asignados aún este mes
 router.get('/compartir/lista', async (req, res) => {
   const usuario      = req.usuario;
   const codigosCoord = getCodigosCoordinador(usuario);
@@ -428,7 +460,6 @@ router.get('/compartir/lista', async (req, res) => {
   }
 
   try {
-    // Folios que el coordinador ya asignó este mes → excluirlos del selector
     const foliosYaAsignados = await getFoliosYaAsignados(codigosCoord, mes, anio);
     const excludeClause = foliosYaAsignados.length
       ? `AND h.Folio NOT IN (${foliosYaAsignados.join(',')})`
@@ -497,8 +528,11 @@ router.post('/compartir', async (req, res) => {
       return res.status(404).json({ ok: false, error: 'Folio no encontrado o no autorizado' });
     }
 
-    const f             = resultFolio.recordset[0];
-    const montoNeto     = Number(f.SubTotal);
+    const f         = resultFolio.recordset[0];
+    const montoBase = RTRIM(f.CanCod) === '300'
+      ? Number(f.SubTotal)
+      : Math.round(Number(f.SubTotal) * 1.10);
+    const montoNeto     = montoBase;
     const montoAsignado = Math.round(montoNeto * Number(porcentaje) / 100);
     const fechaFolio    = new Date(f.Fecha);
 
@@ -534,11 +568,10 @@ router.post('/compartir', async (req, res) => {
 });
 
 // ── GET /api/dashboard/compartidos ───────────────────────────────────────────
-// Retorna los folios que fueron asignados AL usuario actual (como destinatario)
-// Busca por TODOS los codigos del usuario (tipo P y C)
+// Retorna folios asignados AL usuario (destinatario: cod_vendedor_compartido)
 router.get('/compartidos', async (req, res) => {
   const usuario = req.usuario;
-  const codigos = getCodigos(usuario);  // todos los codigos del usuario
+  const codigos = getCodigos(usuario);
   const hoy  = new Date();
   const mes  = parseInt(req.query.mes)  || hoy.getMonth() + 1;
   const anio = parseInt(req.query.anio) || hoy.getFullYear();
@@ -578,4 +611,48 @@ router.get('/compartidos', async (req, res) => {
   }
 });
 
+// ── GET /api/dashboard/asignados ─────────────────────────────────────────────
+// NUEVO: folios que el COORDINADOR asignó a otros (historial de asignaciones enviadas)
+router.get('/asignados', async (req, res) => {
+  const usuario      = req.usuario;
+  const codigosCoord = getCodigosCoordinador(usuario);
+  const hoy  = new Date();
+  const mes  = parseInt(req.query.mes)  || hoy.getMonth() + 1;
+  const anio = parseInt(req.query.anio) || hoy.getFullYear();
+
+  if (!codigosCoord.length) {
+    return res.json({ ok: true, asignados: [] });
+  }
+
+  try {
+    const placeholders = codigosCoord.map(() => '?').join(',');
+    const [rows] = await db.pool.query(`
+      SELECT
+        fc.id,
+        fc.folio,
+        fc.fecha,
+        fc.cliente,
+        fc.monto_neto,
+        fc.monto_asignado,
+        fc.porcentaje,
+        fc.cod_vendedor_principal,
+        fc.cod_vendedor_compartido,
+        fc.nombre_vendedor_compartido
+      FROM factura_compartida fc
+      WHERE fc.cod_vendedor_principal IN (${placeholders})
+        AND fc.mes  = ?
+        AND fc.anio = ?
+        AND fc.rol  = 'compartido'
+      ORDER BY fc.fecha DESC
+    `, [...codigosCoord, mes, anio]);
+
+    res.json({ ok: true, asignados: rows });
+  } catch (err) {
+    console.error('[GET /dashboard/asignados]', err.message);
+    res.status(500).json({ ok: false, error: 'Error al obtener asignados' });
+  }
+});
+
 module.exports = router;
+
+function RTRIM(s) { return s ? s.toString().trimEnd() : ''; }
