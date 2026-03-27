@@ -2,7 +2,6 @@
 
 /**
  * dashboard.js — RSProyecto Texpro
- * KPIs + gráfico + tablas + panel coordinador (tipo C)
  */
 
 (function () {
@@ -30,11 +29,12 @@
     } catch { window.location.href = '../login/index.html'; return null; }
   }
 
+  /** true solo si el usuario tiene AL MENOS UN codigo con tipo === 'C' en MySQL */
   function esCoordinador(usuario) {
     return (usuario.vendedores || []).some(v => v.tipo === 'C');
   }
 
-  // ── Sidebar ───────────────────────────────────────────────────
+  // ── Sidebar ──────────────────────────────────────────────────────────────
   const MODULOS = [
     { nombre:'Ventas',        icon:'📊', url:'../ventas/index.html',       area:['ventas','gerencia'] },
     { nombre:'Facturación',   icon:'🧾', url:'../facturacion/index.html',  area:['facturacion','contabilidad','gerencia'] },
@@ -83,7 +83,7 @@
     });
   }
 
-  // ── Filtros mes/año ──────────────────────────────────────────
+  // ── Filtros mes/año ──────────────────────────────────────────────────────
   function initSelectores() {
     const hoy   = new Date();
     const meses = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
@@ -111,7 +111,7 @@
     };
   }
 
-  // ── KPIs ──────────────────────────────────────────────────────
+  // ── KPIs ─────────────────────────────────────────────────────────────────
   async function cargarResumen() {
     try {
       const res  = await fetch(`${API}/resumen?${new URLSearchParams(getParams())}`,
@@ -132,7 +132,7 @@
     } catch (err) { console.error('[cargarResumen]', err); }
   }
 
-  // ── Gráfico ───────────────────────────────────────────────────
+  // ── Gráfico ───────────────────────────────────────────────────────────────
   const MESES_LABEL = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 
   async function cargarGrafico() {
@@ -171,7 +171,7 @@
     } catch (err) { console.error('[cargarGrafico]', err); }
   }
 
-  // ── Tabla vendedores ──────────────────────────────────────────
+  // ── Tabla vendedores ───────────────────────────────────────────────────────
   async function cargarVendedores() {
     try {
       const res  = await fetch(`${API}/vendedores?${new URLSearchParams(getParams())}`,
@@ -191,7 +191,7 @@
     } catch (err) { console.error('[cargarVendedores]', err); }
   }
 
-  // ── Tabla ventas del mes ──────────────────────────────────────
+  // ── Tabla ventas del mes ───────────────────────────────────────────────────
   async function cargarVentasMes() {
     try {
       const res  = await fetch(`${API}/ventas-mes?${new URLSearchParams(getParams())}`,
@@ -210,8 +210,7 @@
       tbody.innerHTML = '<tr class="tabla-empty"><td colspan="7">Sin registros</td></tr>'; return;
     }
     tbody.innerHTML = lista.map(v => {
-      const pctDesc   = v.pct_descuento > 0 ? `${v.pct_descuento}%` : '—';
-      // Para folios compartidos mostrar monto proporcional con badge y pct
+      const pctDesc      = v.pct_descuento > 0 ? `${v.pct_descuento}%` : '—';
       const montoMostrar = v.es_compartido && v.monto_asignado != null
         ? v.monto_asignado
         : v.monto;
@@ -238,7 +237,7 @@
     );
   }
 
-  // ── Modal detalle ─────────────────────────────────────────────
+  // ── Modal detalle ──────────────────────────────────────────────────────────
   async function abrirDetalle(folio) {
     const overlay = document.getElementById('modalOverlay');
     const tbody   = document.getElementById('modalTbody');
@@ -283,10 +282,13 @@
     document.body.style.overflow = '';
   }
 
-  // ══ PANEL COORDINADOR ═══════════════════════════════════════════════════════════
+  // ══ PANEL COORDINADOR (tipo C) ═══════════════════════════════════════════
 
   async function iniciarPanelCoordinador() {
+    // Mostrar SOLO el panel coordinador — el de folios recibidos permanece oculto
     document.getElementById('panelCoordinador').style.display = 'block';
+    document.getElementById('panelCompartidos').style.display = 'none';
+
     await Promise.all([ cargarFoliosParaCompartir(), cargarFoliosAsignados() ]);
 
     document.getElementById('btnCompartir').addEventListener('click', async () => {
@@ -316,7 +318,6 @@
         msgEl.textContent = '✅ Folio asignado correctamente';
         msgEl.style.color = 'var(--color-primary)';
 
-        // Recargar todo tras asignación exitosa
         await Promise.all([
           cargarFoliosParaCompartir(),
           cargarFoliosAsignados(),
@@ -351,17 +352,14 @@
     } catch (err) { console.error('[cargarFoliosParaCompartir]', err); }
   }
 
-  /**
-   * Para el COORDINADOR: muestra los folios que él ha asignado a otros.
-   * Usa GET /api/dashboard/asignados
-   */
+  /** Coordinador: historial de folios que asignó a otros */
   async function cargarFoliosAsignados() {
     try {
       const res  = await fetch(`${API}/asignados?${new URLSearchParams(getParams())}`,
         { headers: { Authorization: `Bearer ${token()}` } });
       const data = await res.json();
-      const tbody = document.getElementById('tbodyCompartidos');
-      document.getElementById('totalCompartidos').textContent = `${(data.asignados||[]).length} registros`;
+      const tbody = document.getElementById('tbodyAsignados');
+      document.getElementById('totalAsignados').textContent = `${(data.asignados||[]).length} registros`;
       if (!data.ok || !data.asignados?.length) {
         tbody.innerHTML = '<tr class="tabla-empty"><td colspan="6">Sin folios asignados este mes</td></tr>';
         return;
@@ -378,10 +376,16 @@
     } catch (err) { console.error('[cargarFoliosAsignados]', err); }
   }
 
-  /**
-   * Para el VENDEDOR tipo P: muestra los folios que le asignó el coordinador.
-   * Usa GET /api/dashboard/compartidos
-   */
+  // ══ PANEL FOLIOS RECIBIDOS (tipo P) ══════════════════════════════════════
+
+  async function iniciarPanelCompartidos() {
+    // Mostrar SOLO el panel de folios recibidos — el de coordinador permanece oculto
+    document.getElementById('panelCompartidos').style.display = 'block';
+    document.getElementById('panelCoordinador').style.display = 'none';
+    await cargarFoliosCompartidos();
+  }
+
+  /** Vendedor tipo P: folios que le asignó el coordinador */
   async function cargarFoliosCompartidos() {
     try {
       const res  = await fetch(`${API}/compartidos?${new URLSearchParams(getParams())}`,
@@ -405,7 +409,7 @@
     } catch (err) { console.error('[cargarFoliosCompartidos]', err); }
   }
 
-  // ── Cargar todo ───────────────────────────────────────────────
+  // ── Cargar todo ────────────────────────────────────────────────────────────
   async function cargarTodo(usuario) {
     const tareas = [ cargarResumen(), cargarGrafico(), cargarVendedores(), cargarVentasMes() ];
     if (esCoordinador(usuario)) {
@@ -416,7 +420,7 @@
     await Promise.all(tareas);
   }
 
-  // ── Init ──────────────────────────────────────────────────────
+  // ── Init ───────────────────────────────────────────────────────────────────
   async function init() {
     const usuario = await verificarSesion();
     if (!usuario) return;
@@ -424,13 +428,11 @@
     cargarSidebar(usuario);
     initSelectores();
 
+    // Mostrar el panel correcto según tipo en MySQL
     if (esCoordinador(usuario)) {
-      await iniciarPanelCoordinador();
+      await iniciarPanelCoordinador();   // tipo C → panel asignación
     } else {
-      // Mostrar panel de "Folios que tengo asignados" para vendedor tipo P
-      const panelEl = document.getElementById('panelCoordinador');
-      if (panelEl) panelEl.style.display = 'block';
-      cargarFoliosCompartidos();
+      await iniciarPanelCompartidos();   // tipo P → solo folios recibidos
     }
 
     document.getElementById('busquedaVentas').addEventListener('input', e => {

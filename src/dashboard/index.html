@@ -181,17 +181,18 @@
         </div>
       </section>
 
-      <!-- ═══════════════════════════════════════════════════════════
-           PANEL COORDINADOR — solo visible para vendedores tipo C
-           ═══════════════════════════════════════════════════════════ -->
+      <!-- ═══════════════════════════════════════════════════════════════
+           PANEL COORDINADOR — EXCLUSIVO tipo C
+           Solo visible si el usuario tiene al menos un cod_vendedor tipo C
+           ═══════════════════════════════════════════════════════════════ -->
       <section class="panel-coordinador" id="panelCoordinador" style="display:none">
 
         <div class="panel-coord-header">
           <h2 class="panel-coord-titulo">🔗 Panel Coordinador</h2>
-          <p class="panel-coord-sub">Asigna folios a vendedores de tu equipo y visualiza los que tienes recibidos</p>
+          <p class="panel-coord-sub">Asigna folios a vendedores de tu equipo y visualiza los que has asignado</p>
         </div>
 
-        <!-- Bloque 1: Compartir un folio -->
+        <!-- Formulario: Asignar folio -->
         <div class="tabla-card" style="margin-bottom:1.5rem">
           <div class="tabla-header">
             <h3 class="tabla-titulo">Asignar folio a vendedor</h3>
@@ -222,7 +223,45 @@
           </div>
         </div>
 
-        <!-- Bloque 2: Folios compartidos recibidos -->
+        <!-- Tabla: Folios asignados por el coordinador a otros -->
+        <div class="tabla-card">
+          <div class="tabla-header">
+            <h3 class="tabla-titulo">Folios que he asignado</h3>
+          </div>
+          <div class="tabla-wrapper">
+            <table class="dash-tabla">
+              <thead><tr>
+                <th>Folio</th>
+                <th>Fecha</th>
+                <th>Cliente</th>
+                <th>Vendedor Asignado</th>
+                <th style="text-align:right">% Asignado</th>
+                <th style="text-align:right">Monto Asignado</th>
+              </tr></thead>
+              <tbody id="tbodyAsignados">
+                <tr class="tabla-empty"><td colspan="6">Cargando...</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="tabla-footer">
+            <span class="tabla-total" id="totalAsignados">0 registros</span>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════════════
+           PANEL FOLIOS RECIBIDOS — EXCLUSIVO tipo P (vendedor destino)
+           Solo visible si el usuario tiene folios asignados por coordinador
+           y NO tiene tipo C
+           ═══════════════════════════════════════════════════════════════ -->
+      <section class="panel-coordinador" id="panelCompartidos" style="display:none">
+
+        <div class="panel-coord-header">
+          <h2 class="panel-coord-titulo">📥 Folios Asignados</h2>
+          <p class="panel-coord-sub">Folios que tu coordinador ha asignado a tu gestión este mes</p>
+        </div>
+
         <div class="tabla-card">
           <div class="tabla-header">
             <h3 class="tabla-titulo">Folios que tengo asignados</h3>
