@@ -342,23 +342,20 @@ router.get('/vendedores', async (req, res) => {
 });
 
 // ── GET /api/dashboard/vendedores-todos ──────────────────────────────────────
-// FIX: obtiene lista desde iw_gsaen DISTINCT + nombre desde cwtvend
-// Evita depender de columnas como VenAct que pueden no existir o tener formato distinto
+// Lee desde MySQL: usuarios con rol vendedor registrados en la plataforma
+// Excluye coordinadores (tipo = 'C') ya que no son destino de asignación
 router.get('/vendedores-todos', async (req, res) => {
   try {
-    const pool   = await getSoftlandPool();
-    const result = await pool.request().query(`
-      SELECT DISTINCT
-        RTRIM(h.CodVendedor)  AS cod,
-        RTRIM(v.VenDes)       AS nombre
-      FROM [PRODIN].[softland].[iw_gsaen] h
-      LEFT JOIN [PRODIN].[softland].[cwtvend] v
-        ON v.VenCod = h.CodVendedor
-      WHERE h.CodVendedor IS NOT NULL
-        AND h.CodVendedor <> ''
-      ORDER BY nombre
+    const [rows] = await db.pool.query(`
+      SELECT
+        uv.cod_vendedor  AS cod,
+        u.nombre         AS nombre
+      FROM usuario_vendedor uv
+      INNER JOIN usuario u ON u.id = uv.usuario_id
+      WHERE uv.tipo <> 'C'
+      ORDER BY u.nombre
     `);
-    res.json({ ok: true, vendedores: result.recordset });
+    res.json({ ok: true, vendedores: rows });
   } catch (err) {
     console.error('[GET /api/dashboard/vendedores-todos]', err.message);
     res.status(500).json({ ok: false, error: 'Error al obtener vendedores' });
