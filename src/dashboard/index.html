@@ -14,7 +14,6 @@
 </head>
 <body>
 
-  <!-- SIDEBAR -->
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-header">
       <img src="../assets/images/Isotipo-TEXPRO_fondo_blanco.png" alt="Texpro" class="sidebar-logo" onerror="this.style.display='none'" />
@@ -39,9 +38,7 @@
     </div>
   </aside>
 
-  <!-- LAYOUT PRINCIPAL -->
   <div class="main-wrapper" id="mainWrapper">
-
     <header class="main-header">
       <div class="header-left">
         <button class="header-menu-btn" id="headerMenuBtn" aria-label="Menú móvil">
@@ -76,7 +73,7 @@
         </div>
       </div>
 
-      <!-- 4 KPI CARDS -->
+      <!-- KPIs -->
       <section class="kpis-grid">
         <div class="kpi-card">
           <div class="kpi-icono kpi-icono--verde">
@@ -121,7 +118,7 @@
         </div>
       </section>
 
-      <!-- GRÁFICO LÍNEAS -->
+      <!-- GRÁFICO -->
       <section class="grafico-seccion">
         <div class="grafico-card">
           <div class="grafico-header">
@@ -133,8 +130,8 @@
         </div>
       </section>
 
-      <!-- TABLAS ESTÁNDAR -->
-      <section class="tablas-grid">
+      <!-- TABLA VENTAS POR VENDEDOR (ancho completo, encima de ventas mes) -->
+      <section class="tabla-seccion">
         <div class="tabla-card">
           <div class="tabla-header">
             <h3 class="tabla-titulo">Ventas por Vendedor</h3>
@@ -143,22 +140,23 @@
             <table class="dash-tabla">
               <thead><tr>
                 <th>Cód. Vendedor</th>
+                <th>Nombre</th>
                 <th>Folios</th>
                 <th style="text-align:right">Total Ventas</th>
               </tr></thead>
               <tbody id="tbodyVendedores">
-                <tr class="tabla-empty"><td colspan="3">Cargando...</td></tr>
+                <tr class="tabla-empty"><td colspan="4">Cargando...</td></tr>
               </tbody>
             </table>
           </div>
         </div>
+      </section>
 
-        <!-- Tabla Ventas del Mes: wrapper con clase especial para scroll 10 filas -->
-        <div class="tabla-card tabla-card--wide">
+      <!-- TABLA VENTAS DEL MES (ancho completo, con scroll 10 filas) -->
+      <section class="tabla-seccion">
+        <div class="tabla-card">
           <div class="tabla-header">
-            <div>
-              <h3 class="tabla-titulo">Ventas del Mes</h3>
-            </div>
+            <h3 class="tabla-titulo">Ventas del Mes</h3>
             <input class="tabla-busqueda" type="text" id="busquedaVentas" placeholder="Buscar folio o cliente..." />
           </div>
           <div class="tabla-wrapper tabla-wrapper--ventas-mes">
@@ -183,14 +181,14 @@
         </div>
       </section>
 
-      <!-- ═══════════════════════════════════════════════════════════════
-           PANEL COORDINADOR — EXCLUSIVO tipo C
-           ═══════════════════════════════════════════════════════════════ -->
+      <!-- PANEL COORDINADOR — tipo C — -->
       <section class="panel-coordinador" id="panelCoordinador" style="display:none">
         <div class="panel-coord-header">
           <h2 class="panel-coord-titulo">🔗 Panel Coordinador</h2>
-          <p class="panel-coord-sub">Asigna folios a vendedores de tu equipo y visualiza los que has asignado</p>
+          <p class="panel-coord-sub">Asigna folios a vendedores de tu equipo y administra las asignaciones</p>
         </div>
+
+        <!-- Formulario asignar -->
         <div class="tabla-card" style="margin-bottom:1.5rem">
           <div class="tabla-header">
             <h3 class="tabla-titulo">Asignar folio a vendedor</h3>
@@ -198,14 +196,16 @@
           <div style="padding:1rem 1.25rem">
             <div class="coord-form">
               <div class="coord-form-group">
-                <label class="coord-label" for="coordFolio">Seleccionar folio del mes</label>
+                <label class="coord-label" for="coordFolio">Folio del mes</label>
                 <select class="filtro-select" id="coordFolio" style="width:100%">
                   <option value="">— Cargando folios... —</option>
                 </select>
               </div>
               <div class="coord-form-group">
-                <label class="coord-label" for="coordVendedor">Código vendedor destino</label>
-                <input class="tabla-busqueda" type="text" id="coordVendedor" placeholder="Ej: V02" style="width:100%" />
+                <label class="coord-label" for="coordVendedor">Vendedor destino</label>
+                <select class="filtro-select" id="coordVendedor" style="width:100%">
+                  <option value="">— Selecciona vendedor —</option>
+                </select>
               </div>
               <div class="coord-form-group">
                 <label class="coord-label" for="coordPorcentaje">% a asignar</label>
@@ -218,20 +218,26 @@
             <p class="coord-mensaje" id="coordMensaje"></p>
           </div>
         </div>
+
+        <!-- Tabla CRUD asignaciones -->
         <div class="tabla-card">
           <div class="tabla-header">
-            <h3 class="tabla-titulo">Folios que he asignado</h3>
+            <h3 class="tabla-titulo">Folios asignados este mes</h3>
+            <span class="coord-crud-hint">Puedes editar, guardar o eliminar cada asignación</span>
           </div>
-          <div class="tabla-wrapper">
+          <div class="tabla-wrapper tabla-wrapper--ventas-mes">
             <table class="dash-tabla">
               <thead><tr>
-                <th>Folio</th><th>Fecha</th><th>Cliente</th>
+                <th>Folio</th>
+                <th>Fecha</th>
+                <th>Cliente</th>
                 <th>Vendedor Asignado</th>
-                <th style="text-align:right">% Asignado</th>
+                <th style="text-align:right">%</th>
                 <th style="text-align:right">Monto Asignado</th>
+                <th style="text-align:center">Acciones</th>
               </tr></thead>
               <tbody id="tbodyAsignados">
-                <tr class="tabla-empty"><td colspan="6">Cargando...</td></tr>
+                <tr class="tabla-empty"><td colspan="7">Cargando...</td></tr>
               </tbody>
             </table>
           </div>
@@ -241,9 +247,7 @@
         </div>
       </section>
 
-      <!-- ═══════════════════════════════════════════════════════════════
-           PANEL FOLIOS RECIBIDOS — EXCLUSIVO tipo P
-           ═══════════════════════════════════════════════════════════════ -->
+      <!-- PANEL FOLIOS RECIBIDOS — tipo P — -->
       <section class="panel-coordinador" id="panelCompartidos" style="display:none">
         <div class="panel-coord-header">
           <h2 class="panel-coord-titulo">📥 Folios Asignados</h2>
