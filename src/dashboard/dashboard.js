@@ -303,6 +303,7 @@
       try {
         msgEl.textContent = 'Enviando...';
         msgEl.style.color = 'var(--color-gray-mid)';
+
         const res  = await fetch(`${API}/compartir`, {
           method:  'POST',
           headers: { 'Content-Type':'application/json', Authorization:`Bearer ${token()}` },
@@ -310,10 +311,22 @@
         });
         const data = await res.json();
         if (!data.ok) throw new Error(data.error);
+
         msgEl.textContent = '✅ Folio asignado correctamente';
         msgEl.style.color = 'var(--color-primary)';
-        // recargar tabla de compartidos
-        cargarFoliosCompartidos();
+
+        // ── Recargar todo el panel + KPIs tras asignación exitosa ──
+        await Promise.all([
+          cargarFoliosParaCompartir(),  // remueve el folio asignado del select
+          cargarFoliosCompartidos(),    // muestra el nuevo registro en tabla
+          cargarResumen(),              // recalcula KPIs con folio compartido
+          cargarVentasMes(),            // actualiza tabla ventas
+        ]);
+
+        // Limpiar campos del formulario
+        document.getElementById('coordVendedor').value   = '';
+        document.getElementById('coordPorcentaje').value = '';
+
       } catch (err) {
         msgEl.textContent = `❌ ${err.message}`;
         msgEl.style.color = 'var(--color-danger)';
@@ -381,6 +394,12 @@
     // Mostrar panel coordinador SOLO si tiene tipo C
     if (esCoordinador(usuario)) {
       await iniciarPanelCoordinador();
+    }
+
+    // Para usuarios tipo P (vendedor): cargar tabla de folios recibidos
+    // La función cargarFoliosCompartidos trae lo que les asignó el coordinador
+    if (!esCoordinador(usuario)) {
+      cargarFoliosCompartidos();
     }
 
     document.getElementById('busquedaVentas').addEventListener('input', e => {

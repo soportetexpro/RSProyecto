@@ -22,12 +22,12 @@ router.use(requireAuth);
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
-/** Todos los códigos del usuario (tipo P y C) — para ver sus propias ventas */
+/** Todos los códigos del usuario (tipo P y C) */
 function getCodigos(usuario) {
   return (usuario.vendedores || []).map(v => v.cod_vendedor);
 }
 
-/** Solo los códigos con tipo = 'C' — para compartir folios como coordinador */
+/** Solo los códigos con tipo = 'C' — coordinador */
 function getCodigosCoordinador(usuario) {
   return (usuario.vendedores || [])
     .filter(v => v.tipo === 'C')
@@ -38,6 +38,10 @@ function mssqlIn(arr) {
   return arr.map(v => `'${v}'`).join(',');
 }
 
+/**
+ * Retorna array de folios (número) que fueron compartidos al grupo de codigos
+ * como destinatario, para el mes/año dado.
+ */
 async function getFoliosCompartidos(codigos, mes, anio) {
   if (!codigos.length) return [];
   const placeholders = codigos.map(() => '?').join(',');
@@ -54,9 +58,26 @@ async function getFoliosCompartidos(codigos, mes, anio) {
 }
 
 /**
- * Busca el nombre del usuario a partir de su cod_vendedor.
- * usuario_vendedor no tiene nombre_vendedor — se obtiene haciendo JOIN con usuario.
- * Retorna el nombre o el propio código si no se encuentra.
+ * Retorna array de folios (número) que el coordinador YA asignó este mes,
+ * para excluirlos del selector.
+ */
+async function getFoliosYaAsignados(codigosCoord, mes, anio) {
+  if (!codigosCoord.length) return [];
+  const placeholders = codigosCoord.map(() => '?').join(',');
+  const [rows] = await db.pool.query(
+    `SELECT DISTINCT folio
+     FROM factura_compartida
+     WHERE cod_vendedor_principal IN (${placeholders})
+       AND mes  = ?
+       AND anio = ?
+       AND rol  = 'compartido'`,
+    [...codigosCoord, mes, anio]
+  );
+  return rows.map(r => Number(r.folio));
+}
+
+/**
+ * Busca el nombre del usuario a partir de su cod_vendedor via JOIN usuario.
  */
 async function getNombreVendedor(codVendedor) {
   try {
@@ -394,10 +415,10 @@ router.get('/detalle/:folio', async (req, res) => {
 });
 
 // ── GET /api/dashboard/compartir/lista ───────────────────────────────────────
-// Solo trae folios de los códigos con tipo = 'C' en usuario_vendedor
+// Solo folios tipo C que NO han sido asignados aún este mes
 router.get('/compartir/lista', async (req, res) => {
-  const usuario         = req.usuario;
-  const codigosCoord    = getCodigosCoordinador(usuario);
+  const usuario      = req.usuario;
+  const codigosCoord = getCodigosCoordinador(usuario);
   const hoy  = new Date();
   const mes  = parseInt(req.query.mes)  || hoy.getMonth() + 1;
   const anio = parseInt(req.query.anio) || hoy.getFullYear();
@@ -407,6 +428,12 @@ router.get('/compartir/lista', async (req, res) => {
   }
 
   try {
+    // Folios que el coordinador ya asignó este mes → excluirlos del selector
+    const foliosYaAsignados = await getFoliosYaAsignados(codigosCoord, mes, anio);
+    const excludeClause = foliosYaAsignados.length
+      ? `AND h.Folio NOT IN (${foliosYaAsignados.join(',')})`
+      : '';
+
     const pool = await getSoftlandPool();
     const result = await pool.request().query(`
       SELECT TOP 200
@@ -425,6 +452,7 @@ router.get('/compartir/lista', async (req, res) => {
         AND YEAR(h.Fecha)  = ${anio}
         AND h.Tipo IN ('F','N','D')
         AND h.Estado <> 'A'
+        ${excludeClause}
       ORDER BY h.Fecha DESC
     `);
     res.json({ ok: true, folios: result.recordset });
@@ -443,15 +471,12 @@ router.post('/compartir', async (req, res) => {
   if (!folio || !cod_vendedor_compartido || !porcentaje) {
     return res.status(400).json({ ok: false, error: 'Faltan parámetros requeridos' });
   }
-
   if (!codigosCoord.length) {
     return res.status(403).json({ ok: false, error: 'No autorizado' });
   }
 
   try {
     const pool = await getSoftlandPool();
-
-    // Traer datos del folio desde Softland
     const resultFolio = await pool.request().query(`
       SELECT TOP 1
         h.Folio,
@@ -477,7 +502,6 @@ router.post('/compartir', async (req, res) => {
     const montoAsignado = Math.round(montoNeto * Number(porcentaje) / 100);
     const fechaFolio    = new Date(f.Fecha);
 
-    // Obtener nombre del vendedor compartido via JOIN usuario_vendedor -> usuario
     const nombreVendedorComp = await getNombreVendedor(cod_vendedor_compartido);
 
     await db.pool.query(
@@ -495,7 +519,7 @@ router.post('/compartir', async (req, res) => {
         montoNeto,
         montoAsignado,
         Number(porcentaje),
-        f.CodVendedor,           // código real del vendedor coordinador
+        f.CodVendedor,
         cod_vendedor_compartido,
         nombreVendedorComp,
         usuario.sub
@@ -510,9 +534,11 @@ router.post('/compartir', async (req, res) => {
 });
 
 // ── GET /api/dashboard/compartidos ───────────────────────────────────────────
+// Retorna los folios que fueron asignados AL usuario actual (como destinatario)
+// Busca por TODOS los codigos del usuario (tipo P y C)
 router.get('/compartidos', async (req, res) => {
   const usuario = req.usuario;
-  const codigos = getCodigos(usuario);
+  const codigos = getCodigos(usuario);  // todos los codigos del usuario
   const hoy  = new Date();
   const mes  = parseInt(req.query.mes)  || hoy.getMonth() + 1;
   const anio = parseInt(req.query.anio) || hoy.getFullYear();
@@ -523,18 +549,27 @@ router.get('/compartidos', async (req, res) => {
     const placeholders = codigos.map(() => '?').join(',');
     const [rows] = await db.pool.query(`
       SELECT
-        fc.*,
+        fc.id,
+        fc.folio,
+        fc.fecha,
+        fc.cliente,
+        fc.monto_neto,
+        fc.monto_asignado,
+        fc.porcentaje,
+        fc.cod_vendedor_principal,
+        fc.cod_vendedor_compartido,
+        fc.nombre_vendedor_compartido,
         fc.monto_asignado                              AS monto,
         COALESCE(u.nombre, fc.cod_vendedor_principal)  AS coordinador
       FROM factura_compartida fc
       LEFT JOIN usuario_vendedor uv ON uv.cod_vendedor = fc.cod_vendedor_principal
       LEFT JOIN usuario u            ON u.id = uv.usuario_id
       WHERE fc.cod_vendedor_compartido IN (${placeholders})
-        AND fc.anio = ?
         AND fc.mes  = ?
+        AND fc.anio = ?
         AND fc.rol  = 'compartido'
       ORDER BY fc.fecha DESC
-    `, [...codigos, anio, mes]);
+    `, [...codigos, mes, anio]);
 
     res.json({ ok: true, compartidos: rows });
   } catch (err) {
