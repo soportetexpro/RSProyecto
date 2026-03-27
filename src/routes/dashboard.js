@@ -376,12 +376,11 @@ router.get('/detalle/:folio', async (req, res) => {
 // Solo trae folios de los códigos con tipo = 'C' en usuario_vendedor
 router.get('/compartir/lista', async (req, res) => {
   const usuario         = req.usuario;
-  const codigosCoord    = getCodigosCoordinador(usuario); // solo tipo C
+  const codigosCoord    = getCodigosCoordinador(usuario);
   const hoy  = new Date();
   const mes  = parseInt(req.query.mes)  || hoy.getMonth() + 1;
   const anio = parseInt(req.query.anio) || hoy.getFullYear();
 
-  // Si no tiene ningún código tipo C, no es coordinador
   if (!codigosCoord.length) {
     return res.json({ ok: false, error: 'No autorizado para compartir' });
   }
@@ -417,32 +416,29 @@ router.get('/compartir/lista', async (req, res) => {
 // ── POST /api/dashboard/compartir ────────────────────────────────────────────
 router.post('/compartir', async (req, res) => {
   const usuario      = req.usuario;
-  const codigosCoord = getCodigosCoordinador(usuario); // solo tipo C
+  const codigosCoord = getCodigosCoordinador(usuario);
   const { folio, cod_vendedor_compartido, porcentaje } = req.body;
 
   if (!folio || !cod_vendedor_compartido || !porcentaje) {
     return res.status(400).json({ ok: false, error: 'Faltan parámetros requeridos' });
   }
 
-  // Validar que tiene al menos un código tipo C
   if (!codigosCoord.length) {
     return res.status(403).json({ ok: false, error: 'No autorizado' });
   }
 
   try {
     const pool = await getSoftlandPool();
-    // Verificar que el folio pertenece a uno de sus códigos tipo C
+
+    // Traer datos del folio — incluir CodVendedor para guardarlo como principal
     const resultFolio = await pool.request().query(`
       SELECT TOP 1
         h.Folio,
         h.Fecha,
+        h.CodVendedor,
         c.NomAux  AS cliente,
         h.SubTotal,
-        h.CanCod,
-        CASE
-          WHEN RTRIM(h.CanCod) = '300' THEN h.SubTotal
-          ELSE ROUND(h.SubTotal * 1.10, 0)
-        END AS monto_con_iva
+        h.CanCod
       FROM [PRODIN].[softland].[iw_gsaen] h
       LEFT JOIN [PRODIN].[softland].[cwtauxi] c ON c.CodAux = h.CodAux
       WHERE h.Folio = ${parseInt(folio)}
@@ -460,13 +456,14 @@ router.post('/compartir', async (req, res) => {
     const montoAsignado = Math.round(montoNeto * Number(porcentaje) / 100);
     const fechaFolio    = new Date(f.Fecha);
 
+    // Buscar nombre del vendedor compartido en MySQL
     const [uvRows] = await db.pool.query(
       `SELECT nombre_vendedor FROM usuario_vendedor WHERE cod_vendedor = ? LIMIT 1`,
       [cod_vendedor_compartido]
     );
     const nombreVendedorComp = uvRows.length ? uvRows[0].nombre_vendedor : cod_vendedor_compartido;
 
-    const [rows] = await db.pool.query(
+    await db.pool.query(
       `INSERT INTO factura_compartida
        (folio, anio, mes, fecha, cliente, monto_neto, monto_asignado, porcentaje, rol,
         cod_vendedor_principal, cod_vendedor_compartido, nombre_vendedor_compartido,
@@ -485,14 +482,14 @@ router.post('/compartir', async (req, res) => {
         montoNeto,
         montoAsignado,
         Number(porcentaje),
-        f.CanCod,
+        f.CodVendedor,          // ✔ código real del vendedor (ej: '437'), NO CanCod
         cod_vendedor_compartido,
         nombreVendedorComp,
         usuario.sub
       ]
     );
 
-    res.json({ ok: true, id: rows.insertId, message: 'Folio compartido correctamente' });
+    res.json({ ok: true, message: 'Folio compartido correctamente' });
   } catch (err) {
     console.error('[POST /dashboard/compartir]', err.message);
     res.status(500).json({ ok: false, error: 'Error al compartir folio' });
