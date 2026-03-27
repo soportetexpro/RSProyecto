@@ -383,6 +383,7 @@ router.get('/compartir/lista', async (req, res) => {
 
   try {
     const pool = await getSoftlandPool();
+    // ✔ Filtra por CodVendedor (no CanCod que es el canal de venta)
     const result = await pool.request().query(`
       SELECT TOP 200
         h.Folio,
@@ -392,10 +393,10 @@ router.get('/compartir/lista', async (req, res) => {
           WHEN RTRIM(h.CanCod) = '300' THEN h.SubTotal
           ELSE ROUND(h.SubTotal * 1.10, 0)
         END                             AS monto,
-        h.CanCod                        AS cod_vendedor
+        h.CodVendedor
       FROM [PRODIN].[softland].[iw_gsaen] h
       LEFT JOIN [PRODIN].[softland].[cwtauxi] c ON c.CodAux = h.CodAux
-      WHERE h.CanCod IN (${mssqlIn(codigos)})
+      WHERE h.CodVendedor IN (${mssqlIn(codigos)})
         AND MONTH(h.Fecha) = ${mes}
         AND YEAR(h.Fecha)  = ${anio}
         AND h.Tipo IN ('F','N','D')
@@ -443,7 +444,7 @@ router.post('/compartir', async (req, res) => {
       FROM [PRODIN].[softland].[iw_gsaen] h
       LEFT JOIN [PRODIN].[softland].[cwtauxi] c ON c.CodAux = h.CodAux
       WHERE h.Folio = ${parseInt(folio)}
-        AND h.CanCod IN (${mssqlIn(codigos)})
+        AND h.CodVendedor IN (${mssqlIn(codigos)})
         AND h.Tipo IN ('F','N','D')
         AND h.Estado <> 'A'
     `);
