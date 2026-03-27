@@ -2,7 +2,16 @@
 
 /**
  * requireAuth.test.js — Tests unitarios del middleware JWT
+ *
+ * Tras el refactor, requireAuth llama a getVendedoresByUsuarioId()
+ * en cada request para tener vendedores frescos desde MySQL.
+ * El mock evita conexión real a la BD durante los tests.
  */
+
+// Mock del modelo ANTES de importar el middleware
+jest.mock('../models/usuario', () => ({
+  getVendedoresByUsuarioId: jest.fn().mockResolvedValue([])
+}));
 
 const express          = require('express');
 const request          = require('supertest');
@@ -50,6 +59,16 @@ describe('[requireAuth] Middleware JWT', () => {
     expect(res.status).toBe(200);
     expect(res.body.ok).toBe(true);
     expect(res.body.sub).toBe(USUARIO_NORMAL.id);
+  });
+
+  test('req.usuario.vendedores es array (viene del mock)', async () => {
+    const token = generarToken(USUARIO_NORMAL);
+    const res   = await request(app)
+      .get('/protegida')
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    // el mock retorna [] — confirma que el enriquecimiento funciona
+    expect(Array.isArray(res.body.vendedores ?? [])).toBe(true);
   });
 
   test('rechaza token expirado (401)', async () => {
