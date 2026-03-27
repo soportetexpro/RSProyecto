@@ -201,7 +201,32 @@ html, body { height: 100%; font-family: var(--font-secondary,'Open Sans',sans-se
   border-radius: 8px; font-size: .82rem; width: 210px;
 }
 .tabla-busqueda:focus { outline: none; border-color: var(--color-primary,#00E2A7); }
+
+/* Wrapper genérico — scroll horizontal para tablas anchas */
 .tabla-wrapper { overflow-x: auto; }
+
+/**
+ * Tabla Ventas del Mes — altura fija equivalente a ~10 filas (37px c/u)
+ * thead queda sticky arriba; tbody con scroll vertical interno.
+ */
+.tabla-wrapper--ventas-mes {
+  overflow-x: auto;
+  overflow-y: auto;
+  /* 37px por fila × 10 filas + 41px thead */
+  max-height: calc(37px * 10 + 41px);
+}
+.tabla-wrapper--ventas-mes .dash-tabla thead tr th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--color-gray-light, #F4F6FA);
+}
+/* Scrollbar delgada y sutil */
+.tabla-wrapper--ventas-mes::-webkit-scrollbar { width: 6px; height: 6px; }
+.tabla-wrapper--ventas-mes::-webkit-scrollbar-track { background: transparent; }
+.tabla-wrapper--ventas-mes::-webkit-scrollbar-thumb { background: var(--color-gray-mid,#C7CBD6); border-radius: 10px; }
+.tabla-wrapper--ventas-mes::-webkit-scrollbar-thumb:hover { background: #9CA3AF; }
+
 .tabla-footer { padding: 10px 20px; border-top: 1px solid var(--color-gray-light,#E8EAF0); }
 .tabla-total { font-size: .78rem; color: var(--color-gray-dark,#6B7280); }
 
@@ -220,6 +245,20 @@ html, body { height: 100%; font-family: var(--font-secondary,'Open Sans',sans-se
   cursor: pointer; color: var(--color-gray-dark,#6B7280); transition: all .12s;
 }
 .btn-detalle:hover { background: var(--color-primary,#00E2A7); border-color: var(--color-primary,#00E2A7); color: #000; }
+
+/* ════ PANEL COORDINADOR / COMPARTIDOS ═══════════════════════════════════════ */
+.panel-coordinador { margin-top: 8px; }
+.panel-coord-header { margin-bottom: 20px; }
+.panel-coord-titulo { font-family: var(--font-primary,'Montserrat',sans-serif); font-size: 1.1rem; font-weight: 700; color: var(--color-black,#1A1D23); margin-bottom: 4px; }
+.panel-coord-sub { font-size: .83rem; color: var(--color-gray-dark,#6B7280); }
+
+.coord-form {
+  display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end;
+}
+.coord-form-group { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 160px; }
+.coord-form-group--btn { flex: 0 0 auto; }
+.coord-label { font-size: .78rem; font-weight: 600; color: var(--color-gray-dark,#6B7280); text-transform: uppercase; letter-spacing: .03em; }
+.coord-mensaje { font-size: .83rem; margin-top: 10px; min-height: 1.2em; }
 
 /* ════ MODAL ═════════════════════════════════════════════════════════════════ */
 .modal-overlay {
@@ -286,6 +325,7 @@ html, body { height: 100%; font-family: var(--font-secondary,'Open Sans',sans-se
   .header-menu-btn { display: flex; }
   .kpis-grid { grid-template-columns: 1fr 1fr; }
   .grafico-wrapper { height: 220px; }
+  .tabla-wrapper--ventas-mes { max-height: calc(37px * 8 + 41px); }
 }
 @media (max-width: 480px) {
   .kpis-grid { grid-template-columns: 1fr; }
