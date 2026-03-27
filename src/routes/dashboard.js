@@ -21,8 +21,17 @@ const { getSoftlandPool } = require('../config/db.softland');
 router.use(requireAuth);
 
 // ── helpers ──────────────────────────────────────────────────────────────────
+
+/** Todos los códigos del usuario (tipo P y C) — para ver sus propias ventas */
 function getCodigos(usuario) {
   return (usuario.vendedores || []).map(v => v.cod_vendedor);
+}
+
+/** Solo los códigos con tipo = 'C' — para compartir folios como coordinador */
+function getCodigosCoordinador(usuario) {
+  return (usuario.vendedores || [])
+    .filter(v => v.tipo === 'C')
+    .map(v => v.cod_vendedor);
 }
 
 function mssqlIn(arr) {
@@ -364,26 +373,21 @@ router.get('/detalle/:folio', async (req, res) => {
 });
 
 // ── GET /api/dashboard/compartir/lista ───────────────────────────────────────
+// Solo trae folios de los códigos con tipo = 'C' en usuario_vendedor
 router.get('/compartir/lista', async (req, res) => {
-  const usuario = req.usuario;
-  const codigos = getCodigos(usuario);
+  const usuario         = req.usuario;
+  const codigosCoord    = getCodigosCoordinador(usuario); // solo tipo C
   const hoy  = new Date();
   const mes  = parseInt(req.query.mes)  || hoy.getMonth() + 1;
   const anio = parseInt(req.query.anio) || hoy.getFullYear();
 
-  if (!codigos.length) return res.json({ ok: false, error: 'No autorizado para compartir' });
-
-  const placeholders = codigos.map(() => '?').join(',');
-  const [coordRows] = await db.pool.query(
-    `SELECT id FROM usuario_vendedor
-     WHERE cod_vendedor IN (${placeholders}) AND tipo = 'C'`,
-    codigos
-  );
-  if (!coordRows.length) return res.json({ ok: false, error: 'No autorizado para compartir' });
+  // Si no tiene ningún código tipo C, no es coordinador
+  if (!codigosCoord.length) {
+    return res.json({ ok: false, error: 'No autorizado para compartir' });
+  }
 
   try {
     const pool = await getSoftlandPool();
-    // ✔ Filtra por CodVendedor (no CanCod que es el canal de venta)
     const result = await pool.request().query(`
       SELECT TOP 200
         h.Folio,
@@ -396,7 +400,7 @@ router.get('/compartir/lista', async (req, res) => {
         h.CodVendedor
       FROM [PRODIN].[softland].[iw_gsaen] h
       LEFT JOIN [PRODIN].[softland].[cwtauxi] c ON c.CodAux = h.CodAux
-      WHERE h.CodVendedor IN (${mssqlIn(codigos)})
+      WHERE h.CodVendedor IN (${mssqlIn(codigosCoord)})
         AND MONTH(h.Fecha) = ${mes}
         AND YEAR(h.Fecha)  = ${anio}
         AND h.Tipo IN ('F','N','D')
@@ -412,24 +416,22 @@ router.get('/compartir/lista', async (req, res) => {
 
 // ── POST /api/dashboard/compartir ────────────────────────────────────────────
 router.post('/compartir', async (req, res) => {
-  const usuario = req.usuario;
-  const codigos = getCodigos(usuario);
+  const usuario      = req.usuario;
+  const codigosCoord = getCodigosCoordinador(usuario); // solo tipo C
   const { folio, cod_vendedor_compartido, porcentaje } = req.body;
 
   if (!folio || !cod_vendedor_compartido || !porcentaje) {
     return res.status(400).json({ ok: false, error: 'Faltan parámetros requeridos' });
   }
 
-  const placeholders = codigos.map(() => '?').join(',');
-  const [coordRows] = await db.pool.query(
-    `SELECT id FROM usuario_vendedor
-     WHERE cod_vendedor IN (${placeholders}) AND tipo = 'C'`,
-    codigos
-  );
-  if (!coordRows.length) return res.status(403).json({ ok: false, error: 'No autorizado' });
+  // Validar que tiene al menos un código tipo C
+  if (!codigosCoord.length) {
+    return res.status(403).json({ ok: false, error: 'No autorizado' });
+  }
 
   try {
     const pool = await getSoftlandPool();
+    // Verificar que el folio pertenece a uno de sus códigos tipo C
     const resultFolio = await pool.request().query(`
       SELECT TOP 1
         h.Folio,
@@ -444,7 +446,7 @@ router.post('/compartir', async (req, res) => {
       FROM [PRODIN].[softland].[iw_gsaen] h
       LEFT JOIN [PRODIN].[softland].[cwtauxi] c ON c.CodAux = h.CodAux
       WHERE h.Folio = ${parseInt(folio)}
-        AND h.CodVendedor IN (${mssqlIn(codigos)})
+        AND h.CodVendedor IN (${mssqlIn(codigosCoord)})
         AND h.Tipo IN ('F','N','D')
         AND h.Estado <> 'A'
     `);
