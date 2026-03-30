@@ -4,7 +4,7 @@
 const express      = require('express');
 const router       = express.Router();
 const { requireAuth } = require('../middlewares/requireAuth');
-const requireAdmin    = require('../middlewares/requireAdmin');
+const { requireAdmin } = require('../middlewares/requireAuth');
 const db              = require('../config/db');
 
 
