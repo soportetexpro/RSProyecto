@@ -89,8 +89,13 @@ router.get('/resumen', async (req, res) => {
   const usuario = req.usuario;
   const codigos = getCodigos(usuario);
   const hoy  = new Date();
-  const mes  = parseInt(req.query.mes)  || hoy.getMonth() + 1;
-  const anio = parseInt(req.query.anio) || hoy.getFullYear();
+  const { validarMesAnio } = require('../utils/stringHelpers');
+  let mes, anio;
+  try {
+    ({ mes, anio } = validarMesAnio(req.query.mes ?? (hoy.getMonth() + 1), req.query.anio ?? hoy.getFullYear()));
+  } catch (err) {
+    return res.status(400).json({ ok: false, error: err.message });
+  }
 
   try {
     const [metaRows] = await db.pool.query(
@@ -193,7 +198,13 @@ router.get('/evolucion', async (req, res) => {
   const usuario = req.usuario;
   const codigos = getCodigos(usuario);
   const hoy  = new Date();
-  const anio = parseInt(req.query.anio) || hoy.getFullYear();
+  const { validarMesAnio } = require('../utils/stringHelpers');
+  let anio;
+  try {
+    ({ anio } = validarMesAnio(1, req.query.anio ?? hoy.getFullYear()));
+  } catch (err) {
+    return res.status(400).json({ ok: false, error: err.message });
+  }
 
   try {
     const [metaRows] = await db.pool.query(
@@ -298,8 +309,13 @@ router.get('/vendedores', async (req, res) => {
   const usuario = req.usuario;
   const codigos = getCodigos(usuario);
   const hoy  = new Date();
-  const mes  = parseInt(req.query.mes)  || hoy.getMonth() + 1;
-  const anio = parseInt(req.query.anio) || hoy.getFullYear();
+  const { validarMesAnio } = require('../utils/stringHelpers');
+  let mes, anio;
+  try {
+    ({ mes, anio } = validarMesAnio(req.query.mes ?? (hoy.getMonth() + 1), req.query.anio ?? hoy.getFullYear()));
+  } catch (err) {
+    return res.status(400).json({ ok: false, error: err.message });
+  }
 
   if (!codigos.length) return res.json({ ok: true, vendedores: [] });
 
@@ -367,8 +383,13 @@ router.get('/ventas-mes', async (req, res) => {
   const usuario = req.usuario;
   const codigos = getCodigos(usuario);
   const hoy  = new Date();
-  const mes  = parseInt(req.query.mes)  || hoy.getMonth() + 1;
-  const anio = parseInt(req.query.anio) || hoy.getFullYear();
+  const { validarMesAnio } = require('../utils/stringHelpers');
+  let mes, anio;
+  try {
+    ({ mes, anio } = validarMesAnio(req.query.mes ?? (hoy.getMonth() + 1), req.query.anio ?? hoy.getFullYear()));
+  } catch (err) {
+    return res.status(400).json({ ok: false, error: err.message });
+  }
 
   if (!codigos.length) return res.json({ ok: true, ventas: [] });
 
@@ -518,8 +539,13 @@ router.get('/compartir/lista', async (req, res) => {
   const usuario      = req.usuario;
   const codigosCoord = getCodigosCoordinador(usuario);
   const hoy  = new Date();
-  const mes  = parseInt(req.query.mes)  || hoy.getMonth() + 1;
-  const anio = parseInt(req.query.anio) || hoy.getFullYear();
+  const { validarMesAnio } = require('../utils/stringHelpers');
+  let mes, anio;
+  try {
+    ({ mes, anio } = validarMesAnio(req.query.mes ?? (hoy.getMonth() + 1), req.query.anio ?? hoy.getFullYear()));
+  } catch (err) {
+    return res.status(400).json({ ok: false, error: err.message });
+  }
 
   if (!codigosCoord.length) {
     return res.json({ ok: false, error: 'No autorizado para compartir' });
@@ -714,8 +740,13 @@ router.get('/compartidos', async (req, res) => {
   const usuario = req.usuario;
   const codigos = getCodigos(usuario);
   const hoy  = new Date();
-  const mes  = parseInt(req.query.mes)  || hoy.getMonth() + 1;
-  const anio = parseInt(req.query.anio) || hoy.getFullYear();
+  const { validarMesAnio } = require('../utils/stringHelpers');
+  let mes, anio;
+  try {
+    ({ mes, anio } = validarMesAnio(req.query.mes ?? (hoy.getMonth() + 1), req.query.anio ?? hoy.getFullYear()));
+  } catch (err) {
+    return res.status(400).json({ ok: false, error: err.message });
+  }
 
   if (!codigos.length) return res.json({ ok: true, compartidos: [] });
 
@@ -757,8 +788,13 @@ router.get('/asignados', async (req, res) => {
   const usuario      = req.usuario;
   const codigosCoord = getCodigosCoordinador(usuario);
   const hoy  = new Date();
-  const mes  = parseInt(req.query.mes)  || hoy.getMonth() + 1;
-  const anio = parseInt(req.query.anio) || hoy.getFullYear();
+  const { validarMesAnio } = require('../utils/stringHelpers');
+  let mes, anio;
+  try {
+    ({ mes, anio } = validarMesAnio(req.query.mes ?? (hoy.getMonth() + 1), req.query.anio ?? hoy.getFullYear()));
+  } catch (err) {
+    return res.status(400).json({ ok: false, error: err.message });
+  }
 
   if (!codigosCoord.length) {
     return res.json({ ok: true, asignados: [] });

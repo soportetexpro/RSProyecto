@@ -15,6 +15,7 @@
 
 const express = require('express');
 const router  = express.Router();
+const { getDescuentosVendedor } = require('../models/venta');
 const { requireAuth }      = require('../middlewares/requireAuth');
 const db                   = require('../config/db');
 const { getSoftlandPool }  = require('../config/db.softland');
@@ -26,18 +27,14 @@ const {
   getMontoFolio,
   getDetalleFolio,
 } = require('../models/venta');
+const { validarMesAnio } = require('../utils/stringHelpers');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function getCodigos(req) {
   return (req.usuario?.vendedores ?? []).map(v => v.cod_vendedor).filter(Boolean);
 }
 
-function getMesAnio(query) {
-  const hoy  = new Date();
-  const mes  = Number(query.mes  ?? hoy.getMonth() + 1);
-  const anio = Number(query.anio ?? hoy.getFullYear());
-  return { mes, anio };
-}
+
 
 function mssqlIn(arr) {
   return arr.map(v => `'${v}'`).join(',');
@@ -186,7 +183,12 @@ router.get('/clientes', requireAuth, async (req, res) => {
   try {
     const codigos = getCodigos(req);
     if (!codigos.length) return res.json({ ok: true, clientes: [] });
-    const { mes, anio } = getMesAnio(req.query);
+    let mes, anio;
+    try {
+      ({ mes, anio } = validarMesAnio(req.query.mes, req.query.anio));
+    } catch (err) {
+      return res.status(400).json({ ok: false, error: err.message });
+    }
     const clientes = await getClientesPorVendedor({ codigos, mes, anio });
     res.json({ ok: true, clientes });
   } catch (err) {
@@ -199,7 +201,12 @@ router.get('/clientes', requireAuth, async (req, res) => {
 router.get('/folio/:folio', requireAuth, async (req, res) => {
   try {
     const folio = req.params.folio;
-    const anio  = Number(req.query.anio ?? new Date().getFullYear());
+    let anio;
+    try {
+      ({ anio } = validarMesAnio(1, req.query.anio));
+    } catch (err) {
+      return res.status(400).json({ ok: false, error: err.message });
+    }
     const data  = await getMontoFolio({ folio, anio });
     if (!data) return res.status(404).json({ ok: false, error: 'Folio no encontrado' });
     res.json({ ok: true, ...data });
@@ -209,15 +216,24 @@ router.get('/folio/:folio', requireAuth, async (req, res) => {
   }
 });
 
-// ── GET /api/ventas/detalle/:folio ────────────────────────────────────────────
-router.get('/detalle/:folio', requireAuth, async (req, res) => {
+// GET /ventas/descuentos?mes=3&anio=2026
+router.get('/ventas/descuentos', verificarToken, async (req, res) => {
   try {
-    const folio   = req.params.folio;
-    const detalle = await getDetalleFolio({ folio });
-    res.json({ ok: true, folio, detalle });
+    let mes, anio;
+    try {
+      ({ mes, anio } = validarMesAnio(req.query.mes, req.query.anio));
+    } catch (err) {
+      return res.status(400).json({ ok: false, error: err.message });
+    }
+    const codigos = req.user.codigos;  // array de CodVendedor del JWT
+    const data = await getDescuentosVendedor({
+      codigos,
+      mes,
+      anio
+    });
+    res.json({ ok: true, data });
   } catch (err) {
-    console.error('[GET /api/ventas/detalle]', err.message);
-    res.status(500).json({ ok: false, error: 'Error al obtener detalle del folio' });
+    res.status(500).json({ ok: false, mensaje: err.message });
   }
 });
 
