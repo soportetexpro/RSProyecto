@@ -1,10 +1,18 @@
 'use strict';
 
+ HEAD
 const express              = require('express');
 const router               = express.Router();
 const { requireAuth,
         requireAdmin }     = require('../middleware/requireAuth');
 const db                   = require('../config/db');
+
+const express      = require('express');
+const router       = express.Router();
+const { requireAuth } = require('../middlewares/requireAuth');
+const requireAdmin    = require('../middlewares/requireAdmin');
+const db              = require('../config/db');
+
 
 // Todos los endpoints de admin requieren autenticación + rol admin
 router.use(requireAuth, requireAdmin);
