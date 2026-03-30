@@ -11,14 +11,17 @@
  * GET /api/ventas/clientes           — clientes por vendedor
  * GET /api/ventas/folio/:folio       — monto de un folio
  * GET /api/ventas/detalle/:folio     — detalle líneas de un folio
+ * GET /api/ventas/descuentos         — descuentos por vendedor
  */
 
 const express = require('express');
 const router  = express.Router();
+const sql     = require('mssql');
+
 const { getDescuentosVendedor } = require('../models/venta');
-const { requireAuth }      = require('../middlewares/requireAuth');
-const db                   = require('../config/db');
-const { getSoftlandPool }  = require('../config/db.softland');
+const { requireAuth }           = require('../middlewares/requireAuth');
+const db                        = require('../config/db');
+const { getSoftlandPool }       = require('../config/db.softland');
 const {
   getTotalVentas,
   getResumenPorVendedor,
@@ -34,18 +37,17 @@ function getCodigos(req) {
   return (req.usuario?.vendedores ?? []).map(v => v.cod_vendedor).filter(Boolean);
 }
 
-
-
-function mssqlIn(arr) {
-  return arr.map(v => `'${v}'`).join(',');
-}
-
 // ── GET /api/ventas ───────────────────────────────────────────────────────────
 router.get('/', requireAuth, async (req, res) => {
   try {
     const codigos = getCodigos(req);
     if (!codigos.length) return res.json({ ok: true, ventas: [] });
-    const { mes, anio } = getMesAnio(req.query);
+    let mes, anio;
+    try {
+      ({ mes, anio } = validarMesAnio(req.query.mes, req.query.anio));
+    } catch (err) {
+      return res.status(400).json({ ok: false, error: err.message });
+    }
     const ventas = await getVentas({ codigos, mes, anio });
     res.json({ ok: true, ventas });
   } catch (err) {
@@ -59,7 +61,12 @@ router.get('/total', requireAuth, async (req, res) => {
   try {
     const codigos = getCodigos(req);
     if (!codigos.length) return res.json({ ok: true, total_ventas: 0 });
-    const { mes, anio } = getMesAnio(req.query);
+    let mes, anio;
+    try {
+      ({ mes, anio } = validarMesAnio(req.query.mes, req.query.anio));
+    } catch (err) {
+      return res.status(400).json({ ok: false, error: err.message });
+    }
     const total = await getTotalVentas({ codigos, mes, anio });
     res.json({ ok: true, total_ventas: total });
   } catch (err) {
@@ -71,7 +78,12 @@ router.get('/total', requireAuth, async (req, res) => {
 // ── GET /api/ventas/meta ──────────────────────────────────────────────────────
 router.get('/meta', requireAuth, async (req, res) => {
   try {
-    const { anio }  = getMesAnio(req.query);
+    let anio;
+    try {
+      ({ anio } = validarMesAnio(req.query.mes ?? '1', req.query.anio));
+    } catch (err) {
+      return res.status(400).json({ ok: false, error: err.message });
+    }
     const usuarioId = req.usuario?.id;
     const [rows] = await db.query(
       `SELECT meta FROM vendedor_meta WHERE usuario_id = ? AND YEAR(fecha) = ? LIMIT 1`,
@@ -91,23 +103,31 @@ router.get('/resumen-vendedores', requireAuth, async (req, res) => {
   try {
     const codigos = getCodigos(req);
     if (!codigos.length) return res.json({ ok: true, vendedores: [] });
-    const { mes, anio } = getMesAnio(req.query);
+    let mes, anio;
+    try {
+      ({ mes, anio } = validarMesAnio(req.query.mes, req.query.anio));
+    } catch (err) {
+      return res.status(400).json({ ok: false, error: err.message });
+    }
     const pool   = await getSoftlandPool();
-    const result = await pool.request().query(`
-      SELECT
-        h.CanCod                  AS codVendedor,
-        COUNT(DISTINCT h.Folio)   AS totalFolios,
-        SUM(h.SubTotal)           AS totalVentas,
-        SUM(ISNULL(h.SubTotal * h.PorDesc / 100, 0)) AS totalDescuento
-      FROM [PRODIN].[softland].[iw_gsaen] h
-      WHERE h.CanCod IN (${mssqlIn(codigos)})
-        AND MONTH(h.FchEmi) = ${mes}
-        AND YEAR(h.FchEmi)  = ${anio}
-        AND h.TipMov IN ('FT','BT')
-        AND h.EstDoc <> 'A'
-      GROUP BY h.CanCod
-      ORDER BY totalVentas DESC
-    `);
+    const result = await pool.request()
+      .input('mes',  sql.Int, mes)
+      .input('anio', sql.Int, anio)
+      .query(`
+        SELECT
+          h.CanCod                  AS codVendedor,
+          COUNT(DISTINCT h.Folio)   AS totalFolios,
+          SUM(h.SubTotal)           AS totalVentas,
+          SUM(ISNULL(h.SubTotal * h.PorDesc / 100, 0)) AS totalDescuento
+        FROM [PRODIN].[softland].[iw_gsaen] h
+        WHERE h.CanCod IN (${codigos.map(c => `'${c}'`).join(',')})
+          AND MONTH(h.FchEmi) = @mes
+          AND YEAR(h.FchEmi)  = @anio
+          AND h.TipMov IN ('FT','BT')
+          AND h.EstDoc <> 'A'
+        GROUP BY h.CanCod
+        ORDER BY totalVentas DESC
+      `);
     res.json({ ok: true, vendedores: result.recordset });
   } catch (err) {
     console.error('[GET /api/ventas/resumen-vendedores]', err.message);
@@ -118,8 +138,13 @@ router.get('/resumen-vendedores', requireAuth, async (req, res) => {
 // ── GET /api/ventas/evolucion ─────────────────────────────────────────────────
 router.get('/evolucion', requireAuth, async (req, res) => {
   try {
+    let anio;
+    try {
+      ({ anio } = validarMesAnio(req.query.mes ?? '1', req.query.anio));
+    } catch (err) {
+      return res.status(400).json({ ok: false, error: err.message });
+    }
     const codigos   = getCodigos(req);
-    const { anio }  = getMesAnio(req.query);
     const usuarioId = req.usuario?.id;
 
     const [metaRows] = await db.query(
@@ -135,18 +160,20 @@ router.get('/evolucion', requireAuth, async (req, res) => {
     }
 
     const pool   = await getSoftlandPool();
-    const result = await pool.request().query(`
-      SELECT
-        MONTH(h.FchEmi) AS mes,
-        SUM(h.SubTotal) AS ventas
-      FROM [PRODIN].[softland].[iw_gsaen] h
-      WHERE h.CanCod IN (${mssqlIn(codigos)})
-        AND YEAR(h.FchEmi) = ${anio}
-        AND h.TipMov IN ('FT','BT')
-        AND h.EstDoc <> 'A'
-      GROUP BY MONTH(h.FchEmi)
-      ORDER BY mes
-    `);
+    const result = await pool.request()
+      .input('anio', sql.Int, anio)
+      .query(`
+        SELECT
+          MONTH(h.FchEmi) AS mes,
+          SUM(h.SubTotal) AS ventas
+        FROM [PRODIN].[softland].[iw_gsaen] h
+        WHERE h.CanCod IN (${codigos.map(c => `'${c}'`).join(',')})
+          AND YEAR(h.FchEmi) = @anio
+          AND h.TipMov IN ('FT','BT')
+          AND h.EstDoc <> 'A'
+        GROUP BY MONTH(h.FchEmi)
+        ORDER BY mes
+      `);
 
     const ventasPorMes = {};
     result.recordset.forEach(r => { ventasPorMes[r.mes] = Number(r.ventas) || 0; });
@@ -169,7 +196,12 @@ router.get('/resumen', requireAuth, async (req, res) => {
   try {
     const codigos = getCodigos(req);
     if (!codigos.length) return res.json({ ok: true, resumen: [] });
-    const { mes, anio } = getMesAnio(req.query);
+    let mes, anio;
+    try {
+      ({ mes, anio } = validarMesAnio(req.query.mes, req.query.anio));
+    } catch (err) {
+      return res.status(400).json({ ok: false, error: err.message });
+    }
     const resumen = await getResumenPorVendedor({ codigos, mes, anio });
     res.json({ ok: true, resumen });
   } catch (err) {
@@ -203,11 +235,11 @@ router.get('/folio/:folio', requireAuth, async (req, res) => {
     const folio = req.params.folio;
     let anio;
     try {
-      ({ anio } = validarMesAnio(1, req.query.anio));
+      ({ anio } = validarMesAnio('1', req.query.anio));
     } catch (err) {
       return res.status(400).json({ ok: false, error: err.message });
     }
-    const data  = await getMontoFolio({ folio, anio });
+    const data = await getMontoFolio({ folio, anio });
     if (!data) return res.status(404).json({ ok: false, error: 'Folio no encontrado' });
     res.json({ ok: true, ...data });
   } catch (err) {
@@ -216,8 +248,8 @@ router.get('/folio/:folio', requireAuth, async (req, res) => {
   }
 });
 
-// GET /ventas/descuentos?mes=3&anio=2026
-router.get('/ventas/descuentos', verificarToken, async (req, res) => {
+// ── GET /api/ventas/descuentos ────────────────────────────────────────────────
+router.get('/descuentos', requireAuth, async (req, res) => {
   try {
     let mes, anio;
     try {
@@ -225,15 +257,12 @@ router.get('/ventas/descuentos', verificarToken, async (req, res) => {
     } catch (err) {
       return res.status(400).json({ ok: false, error: err.message });
     }
-    const codigos = req.user.codigos;  // array de CodVendedor del JWT
-    const data = await getDescuentosVendedor({
-      codigos,
-      mes,
-      anio
-    });
+    const codigos = getCodigos(req);
+    const data = await getDescuentosVendedor({ codigos, mes, anio });
     res.json({ ok: true, data });
   } catch (err) {
-    res.status(500).json({ ok: false, mensaje: err.message });
+    console.error('[GET /api/ventas/descuentos]', err.message);
+    res.status(500).json({ ok: false, error: err.message });
   }
 });
 
