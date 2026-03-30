@@ -1,11 +1,5 @@
 'use strict';
 
- HEAD
-const express              = require('express');
-const router               = express.Router();
-const { requireAuth,
-        requireAdmin }     = require('../middleware/requireAuth');
-const db                   = require('../config/db');
 
 const express      = require('express');
 const router       = express.Router();
