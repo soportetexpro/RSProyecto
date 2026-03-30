@@ -32,12 +32,12 @@ const {
 } = require('../models/venta');
 const { validarMesAnio } = require('../utils/stringHelpers');
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Helpers ────────────────────────────────────────────────────────────────────────────────
 function getCodigos(req) {
   return (req.usuario?.vendedores ?? []).map(v => v.cod_vendedor).filter(Boolean);
 }
 
-// ── GET /api/ventas ───────────────────────────────────────────────────────────
+// ── GET /api/ventas ─────────────────────────────────────────────────────────────────────────────
 router.get('/', requireAuth, async (req, res) => {
   try {
     const codigos = getCodigos(req);
@@ -56,7 +56,7 @@ router.get('/', requireAuth, async (req, res) => {
   }
 });
 
-// ── GET /api/ventas/total ─────────────────────────────────────────────────────
+// ── GET /api/ventas/total ──────────────────────────────────────────────────────────────────────────────
 router.get('/total', requireAuth, async (req, res) => {
   try {
     const codigos = getCodigos(req);
@@ -75,7 +75,7 @@ router.get('/total', requireAuth, async (req, res) => {
   }
 });
 
-// ── GET /api/ventas/meta ──────────────────────────────────────────────────────
+// ── GET /api/ventas/meta ──────────────────────────────────────────────────────────────────────────────
 router.get('/meta', requireAuth, async (req, res) => {
   try {
     let anio;
@@ -98,7 +98,7 @@ router.get('/meta', requireAuth, async (req, res) => {
   }
 });
 
-// ── GET /api/ventas/resumen-vendedores ────────────────────────────────────────
+// ── GET /api/ventas/resumen-vendedores ────────────────────────────────────────────────────────────────────────────
 router.get('/resumen-vendedores', requireAuth, async (req, res) => {
   try {
     const codigos = getCodigos(req);
@@ -135,7 +135,7 @@ router.get('/resumen-vendedores', requireAuth, async (req, res) => {
   }
 });
 
-// ── GET /api/ventas/evolucion ─────────────────────────────────────────────────
+// ── GET /api/ventas/evolucion ────────────────────────────────────────────────────────────────────────────────
 router.get('/evolucion', requireAuth, async (req, res) => {
   try {
     let anio;
@@ -191,7 +191,7 @@ router.get('/evolucion', requireAuth, async (req, res) => {
   }
 });
 
-// ── GET /api/ventas/resumen ───────────────────────────────────────────────────
+// ── GET /api/ventas/resumen ────────────────────────────────────────────────────────────────────────────────
 router.get('/resumen', requireAuth, async (req, res) => {
   try {
     const codigos = getCodigos(req);
@@ -210,7 +210,7 @@ router.get('/resumen', requireAuth, async (req, res) => {
   }
 });
 
-// ── GET /api/ventas/clientes ──────────────────────────────────────────────────
+// ── GET /api/ventas/clientes ───────────────────────────────────────────────────────────────────────────────
 router.get('/clientes', requireAuth, async (req, res) => {
   try {
     const codigos = getCodigos(req);
@@ -229,7 +229,7 @@ router.get('/clientes', requireAuth, async (req, res) => {
   }
 });
 
-// ── GET /api/ventas/folio/:folio ──────────────────────────────────────────────
+// ── GET /api/ventas/folio/:folio ──────────────────────────────────────────────────────────────────────────────
 router.get('/folio/:folio', requireAuth, async (req, res) => {
   try {
     const folio = req.params.folio;
@@ -248,7 +248,25 @@ router.get('/folio/:folio', requireAuth, async (req, res) => {
   }
 });
 
-// ── GET /api/ventas/descuentos ────────────────────────────────────────────────
+// ── GET /api/ventas/detalle/:folio ────────────────────────────────────────────────────────────────────────────
+router.get('/detalle/:folio', requireAuth, async (req, res) => {
+  try {
+    const folio = req.params.folio;
+    let anio;
+    try {
+      ({ anio } = validarMesAnio('1', req.query.anio));
+    } catch (err) {
+      return res.status(400).json({ ok: false, error: err.message });
+    }
+    const detalle = await getDetalleFolio({ folio, anio });
+    res.json({ ok: true, detalle });
+  } catch (err) {
+    console.error('[GET /api/ventas/detalle]', err.message);
+    res.status(500).json({ ok: false, error: 'Error al obtener detalle del folio' });
+  }
+});
+
+// ── GET /api/ventas/descuentos ───────────────────────────────────────────────────────────────────────────────
 router.get('/descuentos', requireAuth, async (req, res) => {
   try {
     let mes, anio;
