@@ -115,17 +115,16 @@ router.get('/resumen-vendedores', requireAuth, async (req, res) => {
       .input('anio', sql.Int, anio)
       .query(`
         SELECT
-          h.CanCod                  AS codVendedor,
-          COUNT(DISTINCT h.Folio)   AS totalFolios,
-          SUM(h.SubTotal)           AS totalVentas,
-          SUM(ISNULL(h.SubTotal * h.PorDesc / 100, 0)) AS totalDescuento
+          h.CodVendedor                  AS codVendedor,
+          COUNT(DISTINCT h.Folio)        AS totalFolios,
+          SUM(h.SubTotal)                AS totalVentas,
+          SUM(ISNULL(h.SubTotal * h.TotDesc / 100, 0)) AS totalDescuento
         FROM [PRODIN].[softland].[iw_gsaen] h
-        WHERE h.CanCod IN (${codigos.map(c => `'${c}'`).join(',')})
-          AND MONTH(h.FchEmi) = @mes
-          AND YEAR(h.FchEmi)  = @anio
-          AND h.TipMov IN ('FT','BT')
-          AND h.EstDoc <> 'A'
-        GROUP BY h.CanCod
+        WHERE h.CodVendedor IN (${codigos.map(c => `'${c}'`).join(',')})
+          AND MONTH(h.Fecha) = @mes
+          AND YEAR(h.Fecha)  = @anio
+          AND h.Tipo IN ('F','N','D')
+        GROUP BY h.CodVendedor
         ORDER BY totalVentas DESC
       `);
     res.json({ ok: true, vendedores: result.recordset });
@@ -164,14 +163,13 @@ router.get('/evolucion', requireAuth, async (req, res) => {
       .input('anio', sql.Int, anio)
       .query(`
         SELECT
-          MONTH(h.FchEmi) AS mes,
+          MONTH(h.Fecha) AS mes,
           SUM(h.SubTotal) AS ventas
         FROM [PRODIN].[softland].[iw_gsaen] h
-        WHERE h.CanCod IN (${codigos.map(c => `'${c}'`).join(',')})
-          AND YEAR(h.FchEmi) = @anio
-          AND h.TipMov IN ('FT','BT')
-          AND h.EstDoc <> 'A'
-        GROUP BY MONTH(h.FchEmi)
+        WHERE h.CodVendedor IN (${codigos.map(c => `'${c}'`).join(',')})
+          AND YEAR(h.Fecha) = @anio
+          AND h.Tipo IN ('F','N','D')
+        GROUP BY MONTH(h.Fecha)
         ORDER BY mes
       `);
 

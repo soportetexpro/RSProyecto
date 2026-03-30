@@ -17,7 +17,7 @@ router.use(requireAuth, requireAdmin);
  */
 router.get('/usuarios', async (req, res) => {
   try {
-    const [rows] = await db.query(
+    const [rows] = await db.pool.query(
       `SELECT id, nombre, email, tipo_vendedor, cod_vendedor,
               is_admin, activo, created_at
        FROM usuario
@@ -36,7 +36,7 @@ router.get('/usuarios', async (req, res) => {
  */
 router.get('/usuarios/:id', async (req, res) => {
   try {
-    const [rows] = await db.query(
+    const [rows] = await db.pool.query(
       `SELECT id, nombre, email, tipo_vendedor, cod_vendedor, is_admin, activo
        FROM usuario WHERE id = ?`,
       [req.params.id]
@@ -68,7 +68,7 @@ router.put('/usuarios/:id', async (req, res) => {
   }
 
   try {
-    await db.query(
+    await db.pool.query(
       `UPDATE usuario
        SET activo = ?, tipo_vendedor = ?, is_admin = ?, cod_vendedor = ?
        WHERE id = ?`,
@@ -87,7 +87,7 @@ router.put('/usuarios/:id', async (req, res) => {
  */
 router.post('/usuarios/:id/toggle-activo', async (req, res) => {
   try {
-    const [rows] = await db.query(
+    const [rows] = await db.pool.query(
       'SELECT activo FROM usuario WHERE id = ?',
       [req.params.id]
     );
@@ -95,7 +95,7 @@ router.post('/usuarios/:id/toggle-activo', async (req, res) => {
       return res.status(404).json({ ok: false, error: 'Usuario no encontrado' });
     }
     const nuevoEstado = rows[0].activo ? 0 : 1;
-    await db.query(
+    await db.pool.query(
       'UPDATE usuario SET activo = ? WHERE id = ?',
       [nuevoEstado, req.params.id]
     );

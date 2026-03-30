@@ -251,6 +251,11 @@ async function getDetalleFolio({ folio }) {
 
 
 
+// ...existing code...
+// Asegúrate de definir la función getDescuentosVendedor aquí o impórtala si está en otro archivo
+// Ejemplo:
+// async function getDescuentosVendedor({ codigos, mes, anio }) { ... }
+
 module.exports = {
   getTotalVentas,
   getResumenPorVendedor,
@@ -258,4 +263,5 @@ module.exports = {
   getVentas,
   getMontoFolio,
   getDetalleFolio,
+  getDescuentosVendedor, // Exportación agregada
 };
