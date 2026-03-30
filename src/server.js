@@ -17,7 +17,27 @@ const app  = express();
 const PORT = Number(process.env.PORT || 3000);
 
 // ── Seguridad HTTP headers ──────────────────────────────────────────
-app.use(helmet());
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc:  ["'self'"],
+        scriptSrc:   [
+          "'self'",
+          'https://cdn.jsdelivr.net',   // Chart.js y otras librerías CDN
+          'https://cdnjs.cloudflare.com',
+          'https://unpkg.com',
+        ],
+        styleSrc:    ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com', 'https://cdnjs.cloudflare.com'],
+        fontSrc:     ["'self'", 'https://fonts.gstatic.com', 'data:'],
+        imgSrc:      ["'self'", 'data:', 'blob:'],
+        connectSrc:  ["'self'"],
+        objectSrc:   ["'none'"],
+        frameAncestors: ["'none'"],
+      },
+    },
+  })
+);
 
 // ── CORS ────────────────────────────────────────────────────────────
 app.use((req, res, next) => {
