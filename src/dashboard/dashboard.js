@@ -400,7 +400,6 @@
     tbody.querySelectorAll('.btn-crud--save').forEach(btn => {
       btn.addEventListener('click', async () => {
         const id      = btn.dataset.id;
-        const folio   = btn.dataset.folio;
         const vendSel = document.getElementById(`editVend_${id}`)?.value;
         const pctSel  = document.getElementById(`editPct_${id}`)?.value;
         if (!vendSel || !pctSel) {

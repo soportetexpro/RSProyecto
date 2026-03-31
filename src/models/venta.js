@@ -249,12 +249,41 @@ async function getDetalleFolio({ folio }) {
   return result.recordset;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 11. Descuentos por vendedor: pct promedio y monto total de descuento
+// ─────────────────────────────────────────────────────────────────────────────
+async function getDescuentosVendedor({ codigos, mes, anio }) {
+  const pool    = await getSoftlandPool();
+  const request = pool.request();
 
+  request.input('mes',  sql.Int, Number(mes));
+  request.input('anio', sql.Int, Number(anio));
+  const inCods = buildInParams(request, codigos);
 
-// ...existing code...
-// Asegúrate de definir la función getDescuentosVendedor aquí o impórtala si está en otro archivo
-// Ejemplo:
-// async function getDescuentosVendedor({ codigos, mes, anio }) { ... }
+  const result = await request.query(`
+    SELECT
+      gsaen.CodVendedor                        AS codigo_vendedor,
+      cwtvend.VenDes                           AS nombre_vendedor,
+      COUNT(gsaen.Folio)                       AS cantidad_folios,
+      ROUND(SUM(COALESCE(gsaen.TotDesc, 0)), 0) AS total_descuento,
+      ROUND(SUM(gsaen.SubTotal), 0)             AS total_ventas,
+      ROUND(
+        SUM(COALESCE(gsaen.TotDesc, 0))
+        / NULLIF(SUM(gsaen.SubTotal + COALESCE(gsaen.TotDesc, 0)), 0) * 100
+      , 2)                                      AS pct_descuento_promedio
+    FROM [PRODIN].[softland].[iw_gsaen] gsaen
+    INNER JOIN [PRODIN].[softland].[cwtvend] cwtvend
+      ON cwtvend.VenCod = gsaen.CodVendedor
+    WHERE gsaen.Tipo IN ('F','N','D')
+      AND MONTH(gsaen.Fecha) = @mes
+      AND YEAR(gsaen.Fecha)  = @anio
+      AND gsaen.CodVendedor  IN (${inCods})
+    GROUP BY gsaen.CodVendedor, cwtvend.VenDes
+    ORDER BY pct_descuento_promedio DESC
+  `);
+
+  return result.recordset;
+}
 
 module.exports = {
   getTotalVentas,
@@ -263,5 +292,5 @@ module.exports = {
   getVentas,
   getMontoFolio,
   getDetalleFolio,
-  getDescuentosVendedor, // Exportación agregada
+  getDescuentosVendedor,
 };
