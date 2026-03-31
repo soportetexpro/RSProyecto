@@ -17,30 +17,42 @@ const notificacionesRoutes  = require('./routes/notificaciones');
 const app  = express();
 const PORT = Number(process.env.PORT || 3000);
 
-// ── Seguridad HTTP headers ──────────────────────────────────────────
+// ── Seguridad HTTP headers ────────────────────────────────────
+const CDN_SCRIPTS = [
+  'https://cdn.jsdelivr.net',
+  'https://cdnjs.cloudflare.com',
+  'https://unpkg.com',
+];
+
 app.use(
   helmet({
     contentSecurityPolicy: {
       directives: {
-        defaultSrc:  ["'self'"],
-        scriptSrc:   [
-          "'self'",
-          'https://cdn.jsdelivr.net',
-          'https://cdnjs.cloudflare.com',
-          'https://unpkg.com',
-        ],
-        styleSrc:    ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com', 'https://cdnjs.cloudflare.com'],
-        fontSrc:     ["'self'", 'https://fonts.gstatic.com', 'data:'],
-        imgSrc:      ["'self'", 'data:', 'blob:'],
-        connectSrc:  ["'self'"],
-        objectSrc:   ["'none'"],
+        defaultSrc:     ["'self'"],
+
+        // scriptSrc y scriptSrcElem declarados explícitamente para evitar
+        // el warning "'script-src-elem' was not explicitly set"
+        scriptSrc:      ["'self'", ...CDN_SCRIPTS],
+        scriptSrcElem:  ["'self'", ...CDN_SCRIPTS],
+
+        styleSrc:       ["'self'", "'unsafe-inline'",
+                         'https://fonts.googleapis.com',
+                         'https://cdnjs.cloudflare.com'],
+        fontSrc:        ["'self'", 'https://fonts.gstatic.com', 'data:'],
+        imgSrc:         ["'self'", 'data:', 'blob:'],
+
+        // cdn.jsdelivr.net agregado para que Chart.js pueda cargar
+        // sourcemaps (.map) sin bloqueo
+        connectSrc:     ["'self'", 'https://cdn.jsdelivr.net'],
+
+        objectSrc:      ["'none'"],
         frameAncestors: ["'none'"],
       },
     },
   })
 );
 
-// ── CORS ────────────────────────────────────────────────────────────
+// ── CORS ──────────────────────────────────────────────────────
 app.use((req, res, next) => {
   const allowed = process.env.FRONTEND_URL || 'http://localhost:3000';
   res.setHeader('Access-Control-Allow-Origin', allowed);
@@ -51,7 +63,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// ── Rate limiting — Login ────────────────────────────────────────────
+// ── Rate limiting — Login ──────────────────────────────────────
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
@@ -67,19 +79,19 @@ const loginLimiter = rateLimit({
   }
 });
 
-// ── Archivos estáticos (frontend) ───────────────────────────────────
+// ── Archivos estáticos (frontend) ─────────────────────────────────
 app.use(express.static(path.join(__dirname, '..')));
 
-// ── Middlewares globales ───────────────────────────────────────────
+// ── Middlewares globales ─────────────────────────────────────────
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// ── Ruta raíz → redirige al login ──────────────────────────────────
+// ── Ruta raíz → redirige al login ────────────────────────────────
 app.get('/', (_req, res) => {
   res.redirect('/src/login/index.html');
 });
 
-// ── Healthcheck ─────────────────────────────────────────────────────
+// ── Healthcheck ─────────────────────────────────────────────────
 app.get('/api/health', async (_req, res) => {
   try {
     await testConnection();
@@ -89,7 +101,7 @@ app.get('/api/health', async (_req, res) => {
   }
 });
 
-// ── Rutas API ─────────────────────────────────────────────────────────
+// ── Rutas API ────────────────────────────────────────────────────
 app.use('/api/auth/login',      loginLimiter);
 app.use('/api/auth',            authRoutes);
 app.use('/api/auth',            recuperarRoutes);
@@ -98,7 +110,7 @@ app.use('/api/dashboard',       dashboardRoutes);
 app.use('/api/admin',           adminRoutes);
 app.use('/api/notificaciones',  notificacionesRoutes);
 
-// ── 404 ──────────────────────────────────────────────────────────────
+// ── 404 ───────────────────────────────────────────────────────────────
 app.use((req, res) => {
   res.status(404).json({
     ok: false,
@@ -106,7 +118,7 @@ app.use((req, res) => {
   });
 });
 
-// ── 500 ──────────────────────────────────────────────────────────────
+// ── 500 ───────────────────────────────────────────────────────────────
 app.use((err, _req, res, _next) => {
   console.error('[ERROR]', err.message || err);
   res.status(500).json({ ok: false, error: 'Error interno del servidor' });
