@@ -13,7 +13,10 @@ const notificacionModel   = require('../models/notificacion');
 
 router.use(requireAuth);
 
-// ── helpers ──────────────────────────────────────────────────────────────────
+// ── helpers ──────────────────────────────────────────────────────────────────────────
+
+// Movido al inicio para evitar dependencia de hoisting
+function RTRIM(s) { return s ? s.toString().trimEnd() : ''; }
 
 function getCodigos(usuario) {
   return (usuario.vendedores || []).map(v => v.cod_vendedor);
@@ -85,7 +88,7 @@ async function getNombreVendedor(codVendedor) {
   }
 }
 
-// ── GET /api/dashboard/resumen ───────────────────────────────────────
+// ── GET /api/dashboard/resumen ─────────────────────────────────────
 router.get('/resumen', async (req, res) => {
   const usuario = req.usuario;
   const codigos = getCodigos(usuario);
@@ -186,18 +189,15 @@ router.get('/resumen', async (req, res) => {
     const pctDescuentoGlobal = Number(resultDesc.recordset[0]?.pctDescuentoGlobal) || 0;
     const progreso = metaMes > 0 ? Math.min(Math.round((totalVentas / metaMes) * 100), 999) : 0;
 
-    // ── Notificaciones de meta ────────────────────────────────────────
-    // Solo notificar si el mes consultado es el mes actual
+    // ── Notificaciones de meta ────────────────────────────────────
     const mesActual  = hoy.getMonth() + 1;
     const anioActual = hoy.getFullYear();
     if (mes === mesActual && anio === anioActual && metaMes > 0) {
       if (progreso >= 110) {
-        // Superó la meta con holgura → notificar meta_superada (si no se hizo ya)
         notificacionModel.notificarMetaSuperada({ usuarioId: usuario.sub, mes, anio, progreso }).catch(e => {
           console.error('[notif meta_superada]', e.message);
         });
       } else if (progreso >= 100) {
-        // Exactamente en 100 % → notificar meta_cumplida (si no se hizo ya)
         notificacionModel.notificarMetaCumplida({ usuarioId: usuario.sub, mes, anio }).catch(e => {
           console.error('[notif meta_cumplida]', e.message);
         });
@@ -212,7 +212,7 @@ router.get('/resumen', async (req, res) => {
   }
 });
 
-// ── GET /api/dashboard/evolucion ─────────────────────────────────────
+// ── GET /api/dashboard/evolucion ────────────────────────────────────
 router.get('/evolucion', async (req, res) => {
   const usuario = req.usuario;
   const codigos = getCodigos(usuario);
@@ -395,7 +395,7 @@ router.get('/vendedores-todos', async (req, res) => {
   }
 });
 
-// ── GET /api/dashboard/ventas-mes ────────────────────────────────────
+// ── GET /api/dashboard/ventas-mes ──────────────────────────────────
 router.get('/ventas-mes', async (req, res) => {
   const usuario = req.usuario;
   const codigos = getCodigos(usuario);
@@ -474,7 +474,7 @@ router.get('/ventas-mes', async (req, res) => {
   }
 });
 
-// ── GET /api/dashboard/detalle/:folio ────────────────────────────────
+// ── GET /api/dashboard/detalle/:folio ─────────────────────────────────
 router.get('/detalle/:folio', async (req, res) => {
   const folio = parseInt(req.params.folio);
   if (!folio) return res.status(400).json({ ok: false, error: 'Folio inválido' });
@@ -602,7 +602,7 @@ router.get('/compartir/lista', async (req, res) => {
   }
 });
 
-// ── POST /api/dashboard/compartir ────────────────────────────────────
+// ── POST /api/dashboard/compartir ─────────────────────────────────────
 router.post('/compartir', async (req, res) => {
   const usuario      = req.usuario;
   const codigosCoord = getCodigosCoordinador(usuario);
@@ -673,30 +673,46 @@ router.post('/compartir', async (req, res) => {
     );
 
     // ── Notificaciones de folio compartido ───────────────────────────
-    // Al vendedor receptor
+    // Diagnóstico: loguear qué cod_vendedor llega y qué usuario se resuelve
+    console.log(`[compartir] cod_vendedor_compartido recibido: '${cod_vendedor_compartido}'`);
+
     const usuarioIdReceptor = await notificacionModel.usuarioIdDesdeCodVendedor(cod_vendedor_compartido);
+    console.log(`[compartir] usuarioIdReceptor resuelto: ${usuarioIdReceptor}`);
+
+    // Notificar al receptor (await explícito para ver errores reales)
     if (usuarioIdReceptor) {
-      notificacionModel.notificarFolioRecibido({
-        usuarioIdReceptor,
-        folio:              Number(f.Folio),
-        cliente:            f.cliente || '',
-        monto:              montoAsignado,
-        porcentaje:         Number(porcentaje),
-        nombreCoordinador,
-        mes:                mesF,
-        anio:               anioF,
-      }).catch(e => console.error('[notif folio_recibido]', e.message));
+      try {
+        await notificacionModel.notificarFolioRecibido({
+          usuarioIdReceptor,
+          folio:            Number(f.Folio),
+          cliente:          f.cliente || '',
+          monto:            montoAsignado,
+          porcentaje:       Number(porcentaje),
+          nombreCoordinador,
+          mes:              mesF,
+          anio:             anioF,
+        });
+      } catch (eNotif) {
+        console.error('[compartir] ERROR notificarFolioRecibido:', eNotif.message);
+      }
+    } else {
+      console.warn(`[compartir] ⚠️ No se pudo notificar al receptor: cod_vendedor='${cod_vendedor_compartido}' no tiene usuario_id`);
     }
-    // Al coordinador que asignó
-    notificacionModel.notificarFolioAsignado({
-      usuarioIdCoordinador: usuario.sub,
-      folio:                Number(f.Folio),
-      cliente:              f.cliente || '',
-      nombreVendedor:       nombreVendedorComp,
-      porcentaje:           Number(porcentaje),
-      mes:                  mesF,
-      anio:                 anioF,
-    }).catch(e => console.error('[notif folio_asignado]', e.message));
+
+    // Notificar al coordinador (await explícito para ver errores reales)
+    try {
+      await notificacionModel.notificarFolioAsignado({
+        usuarioIdCoordinador: usuario.sub,
+        folio:                Number(f.Folio),
+        cliente:              f.cliente || '',
+        nombreVendedor:       nombreVendedorComp,
+        porcentaje:           Number(porcentaje),
+        mes:                  mesF,
+        anio:                 anioF,
+      });
+    } catch (eNotif) {
+      console.error('[compartir] ERROR notificarFolioAsignado:', eNotif.message);
+    }
 
     res.json({ ok: true, message: 'Folio compartido correctamente' });
   } catch (err) {
@@ -705,7 +721,7 @@ router.post('/compartir', async (req, res) => {
   }
 });
 
-// ── PUT /api/dashboard/compartir/:id ─────────────────────────────────
+// ── PUT /api/dashboard/compartir/:id ──────────────────────────────────
 router.put('/compartir/:id', async (req, res) => {
   const usuario      = req.usuario;
   const codigosCoord = getCodigosCoordinador(usuario);
@@ -746,29 +762,44 @@ router.put('/compartir/:id', async (req, res) => {
       [cod_vendedor_compartido, nombreVendedorComp, Number(porcentaje), montoAsignado, id]
     );
 
-    // ── Notificaciones de reasignación ────────────────────────────────
+    // ── Notificaciones de reasignación ───────────────────────────────
+    console.log(`[compartir PUT] cod_vendedor_compartido recibido: '${cod_vendedor_compartido}'`);
+
     const usuarioIdReceptor = await notificacionModel.usuarioIdDesdeCodVendedor(cod_vendedor_compartido);
+    console.log(`[compartir PUT] usuarioIdReceptor resuelto: ${usuarioIdReceptor}`);
+
     if (usuarioIdReceptor) {
-      notificacionModel.notificarFolioRecibido({
-        usuarioIdReceptor,
-        folio:              Number(reg.folio),
-        cliente:            reg.cliente || '',
-        monto:              montoAsignado,
-        porcentaje:         Number(porcentaje),
-        nombreCoordinador,
-        mes:                Number(reg.mes),
-        anio:               Number(reg.anio),
-      }).catch(e => console.error('[notif folio_recibido PUT]', e.message));
+      try {
+        await notificacionModel.notificarFolioRecibido({
+          usuarioIdReceptor,
+          folio:            Number(reg.folio),
+          cliente:          reg.cliente || '',
+          monto:            montoAsignado,
+          porcentaje:       Number(porcentaje),
+          nombreCoordinador,
+          mes:              Number(reg.mes),
+          anio:             Number(reg.anio),
+        });
+      } catch (eNotif) {
+        console.error('[compartir PUT] ERROR notificarFolioRecibido:', eNotif.message);
+      }
+    } else {
+      console.warn(`[compartir PUT] ⚠️ No se pudo notificar al receptor: cod_vendedor='${cod_vendedor_compartido}'`);
     }
-    notificacionModel.notificarFolioAsignado({
-      usuarioIdCoordinador: usuario.sub,
-      folio:                Number(reg.folio),
-      cliente:              reg.cliente || '',
-      nombreVendedor:       nombreVendedorComp,
-      porcentaje:           Number(porcentaje),
-      mes:                  Number(reg.mes),
-      anio:                 Number(reg.anio),
-    }).catch(e => console.error('[notif folio_asignado PUT]', e.message));
+
+    try {
+      await notificacionModel.notificarFolioAsignado({
+        usuarioIdCoordinador: usuario.sub,
+        folio:                Number(reg.folio),
+        cliente:              reg.cliente || '',
+        nombreVendedor:       nombreVendedorComp,
+        porcentaje:           Number(porcentaje),
+        mes:                  Number(reg.mes),
+        anio:                 Number(reg.anio),
+      });
+    } catch (eNotif) {
+      console.error('[compartir PUT] ERROR notificarFolioAsignado:', eNotif.message);
+    }
 
     res.json({ ok: true, message: 'Asignación actualizada' });
   } catch (err) {
@@ -777,7 +808,7 @@ router.put('/compartir/:id', async (req, res) => {
   }
 });
 
-// ── DELETE /api/dashboard/compartir/:id ──────────────────────────────
+// ── DELETE /api/dashboard/compartir/:id ───────────────────────────────
 router.delete('/compartir/:id', async (req, res) => {
   const usuario      = req.usuario;
   const codigosCoord = getCodigosCoordinador(usuario);
@@ -855,7 +886,7 @@ router.get('/compartidos', async (req, res) => {
   }
 });
 
-// ── GET /api/dashboard/asignados ─────────────────────────────────────
+// ── GET /api/dashboard/asignados ───────────────────────────────────────
 router.get('/asignados', async (req, res) => {
   const usuario      = req.usuario;
   const codigosCoord = getCodigosCoordinador(usuario);
@@ -902,5 +933,3 @@ router.get('/asignados', async (req, res) => {
 });
 
 module.exports = router;
-
-function RTRIM(s) { return s ? s.toString().trimEnd() : ''; }
