@@ -48,6 +48,33 @@
       </div>
       <div class="header-right">
         <span class="header-date" id="headerDate"></span>
+
+        <!-- ══ CAMPANA DE NOTIFICACIONES ══ -->
+        <div class="notif-wrapper" id="notifWrapper">
+          <button class="notif-btn" id="notifBtn" aria-label="Notificaciones" aria-expanded="false" aria-haspopup="true">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+              <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+            </svg>
+            <span class="notif-badge" id="notifBadge" style="display:none">0</span>
+          </button>
+
+          <!-- Panel dropdown -->
+          <div class="notif-panel" id="notifPanel" role="menu" aria-label="Panel de notificaciones">
+            <div class="notif-panel-header">
+              <span class="notif-panel-title">Notificaciones</span>
+              <button class="notif-leer-todo" id="notifLeerTodo" title="Marcar todas como leídas">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/><path d="m27 6-11 11"/></svg>
+                Marcar todo leído
+              </button>
+            </div>
+            <ul class="notif-lista" id="notifLista" role="list">
+              <li class="notif-empty">Sin notificaciones nuevas</li>
+            </ul>
+          </div>
+        </div>
+        <!-- ══ /CAMPANA ══ -->
+
         <div class="header-user-chip">
           <div class="chip-avatar" id="chipAvatar">?</div>
           <span class="chip-name" id="chipName">...</span>
@@ -130,7 +157,7 @@
         </div>
       </section>
 
-      <!-- TABLA VENTAS POR VENDEDOR (ancho completo, encima de ventas mes) -->
+      <!-- TABLA VENTAS POR VENDEDOR -->
       <section class="tabla-seccion">
         <div class="tabla-card">
           <div class="tabla-header">
@@ -152,7 +179,7 @@
         </div>
       </section>
 
-      <!-- TABLA VENTAS DEL MES (ancho completo, con scroll 10 filas) -->
+      <!-- TABLA VENTAS DEL MES -->
       <section class="tabla-seccion">
         <div class="tabla-card">
           <div class="tabla-header">
@@ -187,8 +214,6 @@
           <h2 class="panel-coord-titulo">🔗 Panel Coordinador</h2>
           <p class="panel-coord-sub">Asigna folios a vendedores de tu equipo y administra las asignaciones</p>
         </div>
-
-        <!-- Formulario asignar -->
         <div class="tabla-card" style="margin-bottom:1.5rem">
           <div class="tabla-header">
             <h3 class="tabla-titulo">Asignar folio a vendedor</h3>
@@ -218,8 +243,6 @@
             <p class="coord-mensaje" id="coordMensaje"></p>
           </div>
         </div>
-
-        <!-- Tabla CRUD asignaciones -->
         <div class="tabla-card">
           <div class="tabla-header">
             <h3 class="tabla-titulo">Folios asignados este mes</h3>
@@ -313,6 +336,9 @@
       </div>
     </div>
   </div>
+
+  <!-- TOAST NOTIFICACIONES -->
+  <div class="notif-toast-container" id="notifToastContainer" aria-live="polite" aria-atomic="false"></div>
 
   <script src="dashboard.js"></script>
 </body>
