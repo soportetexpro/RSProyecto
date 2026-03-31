@@ -9,6 +9,7 @@ const router              = express.Router();
 const { requireAuth }     = require('../middlewares/requireAuth');
 const db                  = require('../config/db');
 const { getSoftlandPool } = require('../config/db.softland');
+const notificacionModel   = require('../models/notificacion');
 
 router.use(requireAuth);
 
@@ -84,7 +85,7 @@ async function getNombreVendedor(codVendedor) {
   }
 }
 
-// ── GET /api/dashboard/resumen ───────────────────────────────────────────────
+// ── GET /api/dashboard/resumen ───────────────────────────────────────
 router.get('/resumen', async (req, res) => {
   const usuario = req.usuario;
   const codigos = getCodigos(usuario);
@@ -185,6 +186,24 @@ router.get('/resumen', async (req, res) => {
     const pctDescuentoGlobal = Number(resultDesc.recordset[0]?.pctDescuentoGlobal) || 0;
     const progreso = metaMes > 0 ? Math.min(Math.round((totalVentas / metaMes) * 100), 999) : 0;
 
+    // ── Notificaciones de meta ────────────────────────────────────────
+    // Solo notificar si el mes consultado es el mes actual
+    const mesActual  = hoy.getMonth() + 1;
+    const anioActual = hoy.getFullYear();
+    if (mes === mesActual && anio === anioActual && metaMes > 0) {
+      if (progreso >= 110) {
+        // Superó la meta con holgura → notificar meta_superada (si no se hizo ya)
+        notificacionModel.notificarMetaSuperada({ usuarioId: usuario.sub, mes, anio, progreso }).catch(e => {
+          console.error('[notif meta_superada]', e.message);
+        });
+      } else if (progreso >= 100) {
+        // Exactamente en 100 % → notificar meta_cumplida (si no se hizo ya)
+        notificacionModel.notificarMetaCumplida({ usuarioId: usuario.sub, mes, anio }).catch(e => {
+          console.error('[notif meta_cumplida]', e.message);
+        });
+      }
+    }
+
     res.json({ ok: true, totalVentas, meta: metaMes, progreso, pctDescuentoGlobal });
 
   } catch (err) {
@@ -193,7 +212,7 @@ router.get('/resumen', async (req, res) => {
   }
 });
 
-// ── GET /api/dashboard/evolucion ─────────────────────────────────────────────
+// ── GET /api/dashboard/evolucion ─────────────────────────────────────
 router.get('/evolucion', async (req, res) => {
   const usuario = req.usuario;
   const codigos = getCodigos(usuario);
@@ -304,7 +323,7 @@ router.get('/evolucion', async (req, res) => {
   }
 });
 
-// ── GET /api/dashboard/vendedores ────────────────────────────────────────────
+// ── GET /api/dashboard/vendedores ────────────────────────────────────
 router.get('/vendedores', async (req, res) => {
   const usuario = req.usuario;
   const codigos = getCodigos(usuario);
@@ -357,9 +376,7 @@ router.get('/vendedores', async (req, res) => {
   }
 });
 
-// ── GET /api/dashboard/vendedores-todos ──────────────────────────────────────
-// Lee desde MySQL: usuarios con rol vendedor registrados en la plataforma
-// Excluye coordinadores (tipo = 'C') ya que no son destino de asignación
+// ── GET /api/dashboard/vendedores-todos ──────────────────────────────
 router.get('/vendedores-todos', async (req, res) => {
   try {
     const [rows] = await db.pool.query(`
@@ -378,7 +395,7 @@ router.get('/vendedores-todos', async (req, res) => {
   }
 });
 
-// ── GET /api/dashboard/ventas-mes ────────────────────────────────────────────
+// ── GET /api/dashboard/ventas-mes ────────────────────────────────────
 router.get('/ventas-mes', async (req, res) => {
   const usuario = req.usuario;
   const codigos = getCodigos(usuario);
@@ -457,7 +474,7 @@ router.get('/ventas-mes', async (req, res) => {
   }
 });
 
-// ── GET /api/dashboard/detalle/:folio ────────────────────────────────────────
+// ── GET /api/dashboard/detalle/:folio ────────────────────────────────
 router.get('/detalle/:folio', async (req, res) => {
   const folio = parseInt(req.params.folio);
   if (!folio) return res.status(400).json({ ok: false, error: 'Folio inválido' });
@@ -534,7 +551,7 @@ router.get('/detalle/:folio', async (req, res) => {
   }
 });
 
-// ── GET /api/dashboard/compartir/lista ───────────────────────────────────────
+// ── GET /api/dashboard/compartir/lista ───────────────────────────────
 router.get('/compartir/lista', async (req, res) => {
   const usuario      = req.usuario;
   const codigosCoord = getCodigosCoordinador(usuario);
@@ -585,7 +602,7 @@ router.get('/compartir/lista', async (req, res) => {
   }
 });
 
-// ── POST /api/dashboard/compartir ────────────────────────────────────────────
+// ── POST /api/dashboard/compartir ────────────────────────────────────
 router.post('/compartir', async (req, res) => {
   const usuario      = req.usuario;
   const codigosCoord = getCodigosCoordinador(usuario);
@@ -627,8 +644,11 @@ router.post('/compartir', async (req, res) => {
     const montoNeto     = montoBase;
     const montoAsignado = Math.round(montoNeto * Number(porcentaje) / 100);
     const fechaFolio    = new Date(f.Fecha);
+    const mesF          = fechaFolio.getMonth() + 1;
+    const anioF         = fechaFolio.getFullYear();
 
     const nombreVendedorComp = await getNombreVendedor(cod_vendedor_compartido);
+    const nombreCoordinador  = usuario.nombre || `Coordinador (${f.CodVendedor})`;
 
     await db.pool.query(
       `INSERT INTO factura_compartida
@@ -638,8 +658,8 @@ router.post('/compartir', async (req, res) => {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'compartido', ?, ?, ?, NOW(), ?)`,
       [
         String(f.Folio),
-        fechaFolio.getFullYear(),
-        fechaFolio.getMonth() + 1,
+        anioF,
+        mesF,
         fechaFolio.toISOString().slice(0, 10),
         f.cliente || '',
         montoNeto,
@@ -652,6 +672,32 @@ router.post('/compartir', async (req, res) => {
       ]
     );
 
+    // ── Notificaciones de folio compartido ───────────────────────────
+    // Al vendedor receptor
+    const usuarioIdReceptor = await notificacionModel.usuarioIdDesdeCodVendedor(cod_vendedor_compartido);
+    if (usuarioIdReceptor) {
+      notificacionModel.notificarFolioRecibido({
+        usuarioIdReceptor,
+        folio:              Number(f.Folio),
+        cliente:            f.cliente || '',
+        monto:              montoAsignado,
+        porcentaje:         Number(porcentaje),
+        nombreCoordinador,
+        mes:                mesF,
+        anio:               anioF,
+      }).catch(e => console.error('[notif folio_recibido]', e.message));
+    }
+    // Al coordinador que asignó
+    notificacionModel.notificarFolioAsignado({
+      usuarioIdCoordinador: usuario.sub,
+      folio:                Number(f.Folio),
+      cliente:              f.cliente || '',
+      nombreVendedor:       nombreVendedorComp,
+      porcentaje:           Number(porcentaje),
+      mes:                  mesF,
+      anio:                 anioF,
+    }).catch(e => console.error('[notif folio_asignado]', e.message));
+
     res.json({ ok: true, message: 'Folio compartido correctamente' });
   } catch (err) {
     console.error('[POST /dashboard/compartir]', err.message);
@@ -659,7 +705,7 @@ router.post('/compartir', async (req, res) => {
   }
 });
 
-// ── PUT /api/dashboard/compartir/:id ─────────────────────────────────────────
+// ── PUT /api/dashboard/compartir/:id ─────────────────────────────────
 router.put('/compartir/:id', async (req, res) => {
   const usuario      = req.usuario;
   const codigosCoord = getCodigosCoordinador(usuario);
@@ -675,7 +721,7 @@ router.put('/compartir/:id', async (req, res) => {
 
   try {
     const [rows] = await db.pool.query(
-      `SELECT id, monto_neto FROM factura_compartida
+      `SELECT id, monto_neto, folio, cliente, mes, anio FROM factura_compartida
        WHERE id = ? AND cod_vendedor_principal IN (${codigosCoord.map(() => '?').join(',')})
        LIMIT 1`,
       [id, ...codigosCoord]
@@ -684,9 +730,11 @@ router.put('/compartir/:id', async (req, res) => {
       return res.status(404).json({ ok: false, error: 'Asignación no encontrada' });
     }
 
-    const montoNeto          = Number(rows[0].monto_neto);
+    const reg                = rows[0];
+    const montoNeto          = Number(reg.monto_neto);
     const montoAsignado      = Math.round(montoNeto * Number(porcentaje) / 100);
     const nombreVendedorComp = await getNombreVendedor(cod_vendedor_compartido);
+    const nombreCoordinador  = usuario.nombre || 'Coordinador';
 
     await db.pool.query(
       `UPDATE factura_compartida
@@ -698,6 +746,30 @@ router.put('/compartir/:id', async (req, res) => {
       [cod_vendedor_compartido, nombreVendedorComp, Number(porcentaje), montoAsignado, id]
     );
 
+    // ── Notificaciones de reasignación ────────────────────────────────
+    const usuarioIdReceptor = await notificacionModel.usuarioIdDesdeCodVendedor(cod_vendedor_compartido);
+    if (usuarioIdReceptor) {
+      notificacionModel.notificarFolioRecibido({
+        usuarioIdReceptor,
+        folio:              Number(reg.folio),
+        cliente:            reg.cliente || '',
+        monto:              montoAsignado,
+        porcentaje:         Number(porcentaje),
+        nombreCoordinador,
+        mes:                Number(reg.mes),
+        anio:               Number(reg.anio),
+      }).catch(e => console.error('[notif folio_recibido PUT]', e.message));
+    }
+    notificacionModel.notificarFolioAsignado({
+      usuarioIdCoordinador: usuario.sub,
+      folio:                Number(reg.folio),
+      cliente:              reg.cliente || '',
+      nombreVendedor:       nombreVendedorComp,
+      porcentaje:           Number(porcentaje),
+      mes:                  Number(reg.mes),
+      anio:                 Number(reg.anio),
+    }).catch(e => console.error('[notif folio_asignado PUT]', e.message));
+
     res.json({ ok: true, message: 'Asignación actualizada' });
   } catch (err) {
     console.error('[PUT /dashboard/compartir/:id]', err.message);
@@ -705,7 +777,7 @@ router.put('/compartir/:id', async (req, res) => {
   }
 });
 
-// ── DELETE /api/dashboard/compartir/:id ──────────────────────────────────────
+// ── DELETE /api/dashboard/compartir/:id ──────────────────────────────
 router.delete('/compartir/:id', async (req, res) => {
   const usuario      = req.usuario;
   const codigosCoord = getCodigosCoordinador(usuario);
@@ -735,7 +807,7 @@ router.delete('/compartir/:id', async (req, res) => {
   }
 });
 
-// ── GET /api/dashboard/compartidos ───────────────────────────────────────────
+// ── GET /api/dashboard/compartidos ───────────────────────────────────
 router.get('/compartidos', async (req, res) => {
   const usuario = req.usuario;
   const codigos = getCodigos(usuario);
@@ -783,7 +855,7 @@ router.get('/compartidos', async (req, res) => {
   }
 });
 
-// ── GET /api/dashboard/asignados ─────────────────────────────────────────────
+// ── GET /api/dashboard/asignados ─────────────────────────────────────
 router.get('/asignados', async (req, res) => {
   const usuario      = req.usuario;
   const codigosCoord = getCodigosCoordinador(usuario);

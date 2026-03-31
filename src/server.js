@@ -6,12 +6,13 @@ const helmet    = require('helmet');
 const rateLimit = require('express-rate-limit');
 require('dotenv').config();
 
-const { testConnection } = require('./config/db');
-const authRoutes         = require('./routes/auth');
-const recuperarRoutes    = require('./routes/recuperar');
-const ventasRoutes       = require('./routes/ventas');
-const dashboardRoutes    = require('./routes/dashboard');
-const adminRoutes        = require('./routes/admin');
+const { testConnection }    = require('./config/db');
+const authRoutes            = require('./routes/auth');
+const recuperarRoutes       = require('./routes/recuperar');
+const ventasRoutes          = require('./routes/ventas');
+const dashboardRoutes       = require('./routes/dashboard');
+const adminRoutes           = require('./routes/admin');
+const notificacionesRoutes  = require('./routes/notificaciones');
 
 const app  = express();
 const PORT = Number(process.env.PORT || 3000);
@@ -24,7 +25,7 @@ app.use(
         defaultSrc:  ["'self'"],
         scriptSrc:   [
           "'self'",
-          'https://cdn.jsdelivr.net',   // Chart.js y otras librerías CDN
+          'https://cdn.jsdelivr.net',
           'https://cdnjs.cloudflare.com',
           'https://unpkg.com',
         ],
@@ -44,7 +45,7 @@ app.use((req, res, next) => {
   const allowed = process.env.FRONTEND_URL || 'http://localhost:3000';
   res.setHeader('Access-Control-Allow-Origin', allowed);
   res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
   if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();
@@ -52,8 +53,8 @@ app.use((req, res, next) => {
 
 // ── Rate limiting — Login ────────────────────────────────────────────
 const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,   // 15 minutos
-  max: 10,                      // máximo 10 intentos por IP
+  windowMs: 15 * 60 * 1000,
+  max: 10,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -89,12 +90,13 @@ app.get('/api/health', async (_req, res) => {
 });
 
 // ── Rutas API ─────────────────────────────────────────────────────────
-app.use('/api/auth/login',  loginLimiter);    // Rate limit aplicado solo al login
-app.use('/api/auth',        authRoutes);
-app.use('/api/auth',        recuperarRoutes);
-app.use('/api/ventas',      ventasRoutes);
-app.use('/api/dashboard',   dashboardRoutes);
-app.use('/api/admin',       adminRoutes);
+app.use('/api/auth/login',      loginLimiter);
+app.use('/api/auth',            authRoutes);
+app.use('/api/auth',            recuperarRoutes);
+app.use('/api/ventas',          ventasRoutes);
+app.use('/api/dashboard',       dashboardRoutes);
+app.use('/api/admin',           adminRoutes);
+app.use('/api/notificaciones',  notificacionesRoutes);
 
 // ── 404 ──────────────────────────────────────────────────────────────
 app.use((req, res) => {
