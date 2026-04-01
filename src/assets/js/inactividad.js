@@ -19,20 +19,20 @@
 
 (function () {
 
-  // ── Constantes globales ───────────────────────────────────────────────────
+  // ── Constantes globales ───────────────────────────────────────
   const MINUTOS_INACTIVIDAD = 10;
   const SEGUNDOS_AVISO      = 60;
   const MS_INACTIVIDAD      = MINUTOS_INACTIVIDAD * 60 * 1000;
   const KEY_ULTIMO_ACT      = 'inac_ultimo_act';   // clave en localStorage
-  const LOGIN_URL           = '/login/index.html'; // ruta absoluta desde raíz
+  const LOGIN_URL           = '/login/index.html'; // ruta absoluta desde raíz (siempre usar esta)
 
-  // ── Estado local de esta pestaña ──────────────────────────────────────────
+  // ── Estado local de esta pestaña ──────────────────────────────────
   let timerChequeo   = null;   // setInterval que chequea el localStorage
   let timerCuenta    = null;   // setInterval cuenta regresiva del aviso
   let cuentaRestante = SEGUNDOS_AVISO;
   let avisando       = false;
 
-  // ── Helpers localStorage ──────────────────────────────────────────────────
+  // ── Helpers localStorage ───────────────────────────────────────────
   function leerUltimaActividad() {
     const val = localStorage.getItem(KEY_ULTIMO_ACT);
     return val ? parseInt(val, 10) : null;
@@ -48,7 +48,7 @@
     return Date.now() - ultima;
   }
 
-  // ── Estilos del aviso (auto-inyectados) ───────────────────────────────────
+  // ── Estilos del aviso (auto-inyectados) ─────────────────────────────
   function inyectarEstilos() {
     if (document.getElementById('inac-style')) return;
     const s = document.createElement('style');
@@ -116,7 +116,7 @@
     document.head.appendChild(s);
   }
 
-  // ── Overlay del aviso ─────────────────────────────────────────────────────
+  // ── Overlay del aviso ───────────────────────────────────────────────
   function crearOverlay() {
     if (document.getElementById('inac-overlay')) return;
     const d = document.createElement('div');
@@ -152,7 +152,7 @@
     document.getElementById('inac-btn-salir').addEventListener('click', cerrarSesion);
   }
 
-  // ── Aviso visual ──────────────────────────────────────────────────────────
+  // ── Aviso visual ─────────────────────────────────────────────────────
   function mostrarAviso() {
     if (avisando) return;
     avisando = true;
@@ -179,7 +179,7 @@
     el.classList.toggle('inac-urgente', cuentaRestante <= 10);
   }
 
-  // ── Extender / cerrar sesión ──────────────────────────────────────────────
+  // ── Extender / cerrar sesión ───────────────────────────────────────────
   function extenderSesion() {
     clearInterval(timerCuenta);
     avisando = false;
@@ -193,10 +193,9 @@
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     localStorage.removeItem(KEY_ULTIMO_ACT);
-    // Redirigir con ruta relativa correcta según la profundidad actual
-    const depth = window.location.pathname.split('/').filter(Boolean).length;
-    const base  = depth > 1 ? '../'.repeat(depth - 1) : '';
-    window.location.href = base + 'login/index.html?razon=inactividad';
+    // Siempre usar la URL absoluta LOGIN_URL para garantizar redirección correcta
+    // sin importar desde qué módulo o ruta se dispare el cierre de sesión
+    window.location.href = LOGIN_URL + '?razon=inactividad';
   }
 
   // ── Registro de actividad del usuario ─────────────────────────────────────
@@ -207,14 +206,14 @@
     escribirActividad();
   }
 
-  // ── Chequeo periódico (cada 5 s) ─────────────────────────────────────────
+  // ── Chequeo periódico (cada 5 s) ───────────────────────────────────────
   // En vez de un setTimeout que se reinicia, chequeamos el valor real del
   // localStorage cada 5 segundos. Así si el usuario navegó a otra página
   // y el timer ya expiró, esta página también lo detecta.
   function chequear() {
     if (!localStorage.getItem('token')) {
-      // Token eliminado (otra pestaña cerró sesión)
-      window.location.href = resolverLoginUrl() + '?razon=inactividad';
+      // Token eliminado (otra pestaña cerró sesión) — ir siempre al login absoluto
+      window.location.href = LOGIN_URL + '?razon=inactividad';
       return;
     }
     const inactivo = tiempoInactivo();
@@ -223,13 +222,7 @@
     }
   }
 
-  function resolverLoginUrl() {
-    const depth = window.location.pathname.split('/').filter(p => p).length;
-    const base  = depth > 1 ? '../'.repeat(depth - 1) : '';
-    return base + 'login/index.html';
-  }
-
-  // ── Inicialización ────────────────────────────────────────────────────────
+  // ── Inicialización ──────────────────────────────────────────────────────────────
   function iniciar() {
     if (!localStorage.getItem('token')) return;   // no logueado, nada que hacer
 
@@ -269,7 +262,7 @@
     else mostrar();
   }
 
-  // ── Punto de entrada ──────────────────────────────────────────────────────
+  // ── Punto de entrada ──────────────────────────────────────────────────────────
   mostrarMensajeLogin();
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar);
   else iniciar();
