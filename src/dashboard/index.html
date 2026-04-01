@@ -340,8 +340,17 @@
   <!-- TOAST NOTIFICACIONES -->
   <div class="notif-toast-container" id="notifToastContainer" aria-live="polite" aria-atomic="false"></div>
 
-  <!-- Scripts: dashboard primero, luego el módulo de notificaciones -->
+  <!-- Scripts: dashboard primero, luego notificaciones, luego cierre por inactividad -->
   <script src="dashboard.js"></script>
   <script src="notificaciones-ui.js"></script>
+  <script>
+    // Configuración del módulo de inactividad para esta página
+    window.INACTIVIDAD_CONFIG = {
+      tiempoInactividad : 15,                      // minutos sin actividad antes del aviso
+      tiempoAviso       : 60,                      // segundos de cuenta regresiva
+      loginUrl          : '../login/index.html'
+    };
+  </script>
+  <script src="../assets/js/inactividad.js"></script>
 </body>
 </html>
