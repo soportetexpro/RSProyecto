@@ -1,6 +1,12 @@
 // recuperar.js - RSProyecto Texpro
 // Flujo de 3 pasos: Email -> Codigo OTP -> Nueva contraseña
 // Conectado con API: /api/auth/recuperar, /verificar-otp, /nueva-password
+//
+// Responsabilidades UI:
+// - Manejar transición de pasos y validaciones visuales
+// - Gestionar inputs OTP (digitación, paste y navegación)
+// - Enviar requests al backend y mostrar feedback de error/éxito
+// - Mantener token temporal de reset solo durante el flujo activo
 
 (function () {
   'use strict';

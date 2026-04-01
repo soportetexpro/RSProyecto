@@ -2,6 +2,18 @@
 
 /**
  * routes/ventas.js — API REST módulo de ventas
+ *
+ * Propósito:
+ *   Exponer datos comerciales para dashboards y tablas del frontend.
+ *
+ * Fuentes de datos:
+ *   - SQL Server Softland (ventas, clientes, folios, detalle)
+ *   - MySQL bdtexpro (meta anual por usuario vendedor)
+ *
+ * Regla de seguridad:
+ *   Todos los endpoints usan requireAuth y filtran por los códigos
+ *   de vendedor asociados al usuario autenticado.
+ *
  * GET /api/ventas                    — lista de folios del mes
  * GET /api/ventas/total              — total ventas del mes
  * GET /api/ventas/resumen            — resumen por vendedor

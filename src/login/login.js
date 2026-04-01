@@ -2,6 +2,16 @@
  * login.js — RSProyecto Texpro
  * Frontend de autenticación conectado con POST /api/auth/login
  *
+ * Entradas:
+ *   - email y password ingresados por el usuario
+ *
+ * Salidas:
+ *   - token JWT en localStorage
+ *   - perfil resumido en sessionStorage (texpro_user)
+ *
+ * Dependencia backend:
+ *   /api/auth/login devuelve { ok, token, user, ... }
+ *
  * Flujo:
  *   1. Valida campos (email + password)
  *   2. Llama a POST /api/auth/login con fetch

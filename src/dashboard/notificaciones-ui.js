@@ -2,6 +2,16 @@
 
 /**
  * notificaciones-ui.js — Módulo de campana 🔔 para el dashboard Texpro
+ *
+ * Responsabilidades:
+ *   - Consultar notificaciones del usuario por polling
+ *   - Renderizar dropdown de campana y badge de no leídas
+ *   - Permitir marcar una/todas como leídas
+ *   - Mostrar toasts para eventos de meta
+ *
+ * Fuente de datos:
+ *   API backend /api/notificaciones (requiere JWT en Authorization).
+ *
  * Polling cada 30 s, dropdown, toasts motivacionales, marcar leída/todas
  */
 

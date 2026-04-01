@@ -1,5 +1,22 @@
 'use strict';
 
+/**
+ * server.js
+ *
+ * Punto de entrada del backend Express.
+ *
+ * Responsabilidades:
+ *   - Inicializar middlewares globales de seguridad y parsing
+ *   - Servir frontend estático
+ *   - Registrar rutas API por dominio funcional
+ *   - Exponer healthcheck y manejo de errores 404/500
+ *
+ * Fuentes de configuración:
+ *   - Variables de entorno (.env)
+ *   - Módulos de rutas en src/routes/*
+ *   - Conexión MySQL vía src/config/db.js (healthcheck)
+ */
+
 const path      = require('path');
 const express   = require('express');
 const helmet    = require('helmet');

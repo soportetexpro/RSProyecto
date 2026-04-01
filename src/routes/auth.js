@@ -3,6 +3,17 @@
 /**
  * auth.js — Rutas de autenticación
  *
+ * Propósito:
+ *   Resolver el ciclo de sesión del usuario (login, sesión actual y logout).
+ *
+ * Fuente de datos principal:
+ *   - MySQL tabla `usuario` y tablas relacionadas vía src/models/usuario.js
+ *
+ * Dependencias críticas:
+ *   - verifyPasswordDjango: valida password hash heredado de Django
+ *   - generarToken: firma JWT para autorización en rutas protegidas
+ *   - requireAuth: valida token y carga req.usuario
+ *
  * POST /api/auth/login   — login con email + password, retorna JWT
  * GET  /api/auth/me      — datos del usuario autenticado (requiere JWT)
  * POST /api/auth/logout  — logout (el cliente descarta el token)
@@ -25,6 +36,8 @@ const router = express.Router();
 // ── POST /api/auth/login ──────────────────────────────────────────────────────
 router.post('/login', async (req, res) => {
   try {
+    // Normalización de credenciales entrantes.
+    // email: trim + lowercase para evitar duplicidades por formato.
     const email    = String(req.body.email    || '').trim().toLowerCase();
     const password = String(req.body.password || '').trim();
 
@@ -32,21 +45,26 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'Email y contraseña son requeridos' });
     }
 
+    // Consulta a MySQL para obtener usuario por email.
     const usuario = await findByEmail(email);
     if (!usuario) return res.status(401).json({ ok: false, error: 'Credenciales inválidas' });
     if (!usuario.is_active) return res.status(403).json({ ok: false, error: 'Cuenta inactiva. Contacta a soporte.' });
 
+    // Verificación criptográfica del password en formato Django PBKDF2.
     let isValid = false;
     try { isValid = verifyPasswordDjango(password, usuario.password); }
     catch { return res.status(401).json({ ok: false, error: 'Credenciales inválidas' }); }
     if (!isValid) return res.status(401).json({ ok: false, error: 'Credenciales inválidas' });
 
+    // Carga datos de negocio asociados al usuario en paralelo para
+    // reducir latencia total del login.
     const [vendedores, metas] = await Promise.all([
       getVendedoresByUsuarioId(usuario.id),
       getMetasByUsuarioId(usuario.id),
       updateLastLogin(usuario.id)
     ]);
 
+    // Emisión de JWT que el frontend usará en Authorization: Bearer.
     const token = generarToken({
       sub:       usuario.id,
       email:     usuario.email,
@@ -86,10 +104,13 @@ router.post('/login', async (req, res) => {
 // Reconstruye vendedores desde MySQL para tener tipo actualizado en cada request
 router.get('/me', requireAuth, async (req, res) => {
   try {
+    // req.usuario.sub viene desde JWT validado por requireAuth.
     const usuario = await findById(req.usuario.sub);
     if (!usuario || !usuario.is_active) {
       return res.status(401).json({ ok: false, error: 'Sesión inválida.' });
     }
+
+    // Reconsulta para asegurar datos actualizados en cada request.
     const vendedores = await getVendedoresByUsuarioId(usuario.id);
     return res.status(200).json({
       ok: true,

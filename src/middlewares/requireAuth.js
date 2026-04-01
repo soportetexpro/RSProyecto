@@ -13,6 +13,7 @@ const { getVendedoresByUsuarioId }   = require('../models/usuario');
 
 async function requireAuth(req, res, next) {
   try {
+    // Header esperado: Authorization: Bearer <jwt>
     const authHeader = req.headers['authorization'] || '';
     const token      = authHeader.startsWith('Bearer ')
       ? authHeader.slice(7).trim()
@@ -25,6 +26,7 @@ async function requireAuth(req, res, next) {
       });
     }
 
+    // Verificación de firma y expiración del token.
     const payload = verificarToken(token);
 
     // Recargar vendedores frescos desde MySQL para que
@@ -32,6 +34,8 @@ async function requireAuth(req, res, next) {
     // sean visibles sin necesidad de re-login.
     const vendedores = await getVendedoresByUsuarioId(payload.sub);
 
+    // req.usuario queda como fuente única de identidad/autorización
+    // para todo el request lifecycle.
     req.usuario = {
       ...payload,
       vendedores,          // sobreescribe los del JWT con los de la BD

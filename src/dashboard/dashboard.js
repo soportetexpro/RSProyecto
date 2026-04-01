@@ -2,6 +2,23 @@
 
 /**
  * dashboard.js — RSProyecto Texpro
+ *
+ * Controlador frontend del módulo Dashboard.
+ *
+ * Responsabilidades:
+ *   - Validar sesión y cargar contexto del usuario
+ *   - Consultar KPIs/evolución/ventas al backend (/api/dashboard)
+ *   - Renderizar tablas y gráfico Chart.js
+ *   - Gestionar modal de detalle por folio
+ *   - Habilitar panel de coordinación para facturas compartidas
+ *
+ * Fuentes de datos consumidas:
+ *   - /api/auth/me
+ *   - /api/dashboard/*
+ *
+ * Estado local principal:
+ *   ventasMes, todosVendedores y referencia del gráfico activo.
+ *
  * Cambios:
  * - Layout: tabla vendedores encima de ventas mes (una sola columna)
  * - coordVendedor: ahora es <select> con lista de todos los vendedores

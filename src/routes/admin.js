@@ -1,5 +1,18 @@
 'use strict';
 
+/**
+ * routes/admin.js
+ *
+ * Endpoints administrativos para gestión de usuarios del sistema.
+ *
+ * Seguridad:
+ *   - requireAuth: exige sesión válida
+ *   - requireAdmin: exige rol administrador
+ *
+ * Fuente de datos:
+ *   MySQL tabla `usuario` (vía pool de src/config/db.js).
+ */
+
 
 const express      = require('express');
 const router       = express.Router();

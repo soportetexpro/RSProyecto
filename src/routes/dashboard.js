@@ -2,6 +2,21 @@
 
 /**
  * routes/dashboard.js
+ *
+ * API del dashboard principal de ventas.
+ *
+ * Responsabilidades:
+ *   - Calcular KPIs de ventas/meta/progreso/descuento
+ *   - Entregar evolución mensual
+ *   - Administrar flujo de facturas compartidas (coordinadores)
+ *   - Disparar notificaciones de meta cumplida/superada
+ *
+ * Origen de información:
+ *   - MySQL: vendedor_meta, factura_compartida, usuario, usuario_vendedor
+ *   - SQL Server Softland: documentos comerciales y detalle de líneas
+ *
+ * Seguridad:
+ *   router.use(requireAuth) para requerir JWT en todos los endpoints.
  */
 
 const express             = require('express');

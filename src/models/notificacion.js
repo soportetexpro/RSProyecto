@@ -2,7 +2,20 @@
 
 /**
  * models/notificacion.js
- * CRUD básico sobre la tabla `notificaciones` (MySQL/bdtexpro)
+ *
+ * Responsabilidad:
+ *   Capa de acceso a datos y reglas de negocio de notificaciones.
+ *
+ * Fuente de datos:
+ *   MySQL (bdtexpro), principalmente tabla `notificaciones`.
+ *
+ * Tablas relacionadas:
+ *   - notificaciones: almacena eventos para cada usuario
+ *   - usuario_vendedor: permite resolver usuario_id desde cod_vendedor
+ *
+ * Este archivo NO expone endpoints HTTP.
+ * Es consumido por rutas y servicios del backend (por ejemplo,
+ * src/routes/notificaciones.js y lógica de dashboard).
  */
 
 const db = require('../config/db');
@@ -23,16 +36,20 @@ const MENSAJES_META_SUPERADA = [
 ];
 
 function mensajeAleatorio(arr) {
+  // Selección uniforme de un mensaje para evitar repetir siempre el mismo texto.
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
 // ── Crear notificación genérica ──────────────────────────────────────
 async function crearNotificacion({ usuarioId, tipo, titulo, mensaje, folio = null, mes = null, anio = null }) {
+  // Validación defensiva: evita insertar registros incompletos.
   if (!usuarioId || !tipo || !titulo || !mensaje) {
     console.error('[notificacion] crearNotificacion: parámetros incompletos →', { usuarioId, tipo, titulo });
     return;
   }
   try {
+    // Inserción persistente en MySQL.
+    // `folio`, `mes` y `anio` son metadatos opcionales para trazabilidad.
     await db.pool.query(
       `INSERT INTO notificaciones
          (usuario_id, tipo, titulo, mensaje, folio, mes, anio)
@@ -55,6 +72,7 @@ async function notificarFolioRecibido({ usuarioIdReceptor, folio, cliente, monto
   const titulo  = `📥 Folio #${folio} asignado a ti`;
   const mensaje = `El coordinador ${nombreCoordinador} te asignó el folio #${folio} (${cliente}) ` +
                   `por $${Number(monto).toLocaleString('es-CL')} con un ${porcentaje}% de participación.`;
+  // Se delega la escritura real al método genérico.
   await crearNotificacion({ usuarioId: usuarioIdReceptor, tipo: 'folio_recibido', titulo, mensaje, folio, mes, anio });
 }
 
@@ -67,11 +85,13 @@ async function notificarFolioAsignado({ usuarioIdCoordinador, folio, cliente, no
   const titulo  = `✅ Folio #${folio} compartido con ${nombreVendedor}`;
   const mensaje = `El folio #${folio} (${cliente}) fue asignado a ${nombreVendedor} ` +
                   `con un ${porcentaje}% de participación.`;
+  // Confirmación para el coordinador que hizo la asignación.
   await crearNotificacion({ usuarioId: usuarioIdCoordinador, tipo: 'folio_asignado', titulo, mensaje, folio, mes, anio });
 }
 
 // ── Notificación: meta cumplida (exactamente 100 %) ──────────────────
 async function notificarMetaCumplida({ usuarioId, mes, anio }) {
+  // Idempotencia funcional: evita duplicar la misma notificación en el mismo mes/año.
   const [existing] = await db.pool.query(
     `SELECT id FROM notificaciones
      WHERE usuario_id = ? AND tipo = 'meta_cumplida' AND mes = ? AND anio = ?
@@ -87,6 +107,7 @@ async function notificarMetaCumplida({ usuarioId, mes, anio }) {
 
 // ── Notificación: meta superada (> 110 %) ────────────────────────────
 async function notificarMetaSuperada({ usuarioId, mes, anio, progreso }) {
+  // Igual que meta_cumplida: se evita crear duplicados por periodo.
   const [existing] = await db.pool.query(
     `SELECT id FROM notificaciones
      WHERE usuario_id = ? AND tipo = 'meta_superada' AND mes = ? AND anio = ?
@@ -102,7 +123,10 @@ async function notificarMetaSuperada({ usuarioId, mes, anio, progreso }) {
 
 // ── Obtener notificaciones de un usuario ─────────────────────────────
 async function obtenerNotificaciones(usuarioId, { soloNoLeidas = false, limit = 30 } = {}) {
+  // Filtro dinámico simple para incluir solo pendientes cuando se solicite.
   const where = soloNoLeidas ? 'AND leida = 0' : '';
+
+  // Orden descendente para mostrar primero lo más reciente en UI.
   const [rows] = await db.pool.query(
     `SELECT id, tipo, titulo, mensaje, leida, folio, mes, anio, fecha_creacion
      FROM notificaciones
@@ -116,6 +140,7 @@ async function obtenerNotificaciones(usuarioId, { soloNoLeidas = false, limit = 
 
 // ── Contar no leídas ─────────────────────────────────────────────────
 async function contarNoLeidas(usuarioId) {
+  // Retorna número entero para que el frontend pinte badge de campana.
   const [[{ total }]] = await db.pool.query(
     `SELECT COUNT(*) AS total FROM notificaciones WHERE usuario_id = ? AND leida = 0`,
     [usuarioId]
@@ -125,6 +150,7 @@ async function contarNoLeidas(usuarioId) {
 
 // ── Marcar como leída ────────────────────────────────────────────────
 async function marcarLeida(id, usuarioId) {
+  // Condición por usuario evita marcar notificaciones ajenas.
   await db.pool.query(
     `UPDATE notificaciones SET leida = 1 WHERE id = ? AND usuario_id = ?`,
     [id, usuarioId]
@@ -133,6 +159,7 @@ async function marcarLeida(id, usuarioId) {
 
 // ── Marcar todas como leídas ─────────────────────────────────────────
 async function marcarTodasLeidas(usuarioId) {
+  // Actualización masiva limitada al usuario autenticado.
   await db.pool.query(
     `UPDATE notificaciones SET leida = 1 WHERE usuario_id = ? AND leida = 0`,
     [usuarioId]
@@ -149,7 +176,7 @@ async function usuarioIdDesdeCodVendedor(codVendedor) {
 
   const codNorm = String(codVendedor).trim();
 
-  // Primero intento exacto
+  // Primer intento: match exacto tras TRIM.
   const [rows] = await db.pool.query(
     `SELECT usuario_id FROM usuario_vendedor WHERE TRIM(cod_vendedor) = ? LIMIT 1`,
     [codNorm]
@@ -160,7 +187,8 @@ async function usuarioIdDesdeCodVendedor(codVendedor) {
     return rows[0].usuario_id;
   }
 
-  // Intento con padding de cero (ej: '1' → '01', '01' → '1')
+  // Segundo intento: normalización con/sin cero a la izquierda.
+  // Ejemplo: '1' <-> '01'.
   const codPadded = codNorm.padStart(2, '0');
   const codUnpadded = codNorm.replace(/^0+/, '') || '0';
 

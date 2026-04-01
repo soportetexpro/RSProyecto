@@ -1,5 +1,20 @@
 'use strict';
 
+/**
+ * tools/db-check.js
+ *
+ * Script de diagnóstico rápido para validar conectividad a MySQL.
+ *
+ * Flujo:
+ *   1) Carga variables de entorno
+ *   2) Ejecuta testConnection()
+ *   3) Ejecuta SELECT 1 AS ping
+ *   4) Cierra el pool y termina con código de salida
+ *
+ * Uso recomendado:
+ *   ejecutar manualmente durante puesta en marcha o troubleshooting.
+ */
+
 require('dotenv').config();
 const { pool, testConnection } = require('../config/db');
 

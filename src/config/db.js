@@ -1,5 +1,18 @@
 'use strict';
 
+/**
+ * db.js
+ *
+ * Gestión de conexión MySQL (bdtexpro) usando mysql2/promise.
+ *
+ * Exporta:
+ *   - pool: conexión reutilizable para queries en modelos/rutas
+ *   - testConnection: verificación activa para healthchecks
+ *
+ * Variables esperadas:
+ *   DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME
+ */
+
 const mysql = require('mysql2/promise');
 require('dotenv').config();
 

@@ -1,10 +1,26 @@
 'use strict';
 
+/**
+ * models/usuario.js
+ *
+ * Capa de acceso a datos del dominio de usuarios.
+ *
+ * Fuente de datos principal:
+ *   MySQL (bdtexpro), tablas: usuario, usuario_vendedor,
+ *   usuario_permisos, vendedor_meta, tasas_descuentos.
+ *
+ * Este módulo es consumido por:
+ *   - rutas de autenticación
+ *   - middleware de autorización
+ *   - flujo de recuperación de contraseña
+ */
+
 const { pool } = require('../config/db');
 const { hashPasswordDjango } = require('../utils/pbkdf2Django');
 
 
 async function findByEmail(email) {
+  // Busca credenciales/base de usuario para login y recuperación.
   const [rows] = await pool.execute(
     'SELECT * FROM usuario WHERE email = ? LIMIT 1',
     [email]
@@ -13,6 +29,7 @@ async function findByEmail(email) {
 }
 
 async function findById(id) {
+  // Retorna perfil público de usuario (sin password).
   const [rows] = await pool.execute(
     'SELECT id, nombre, email, area, codigo, tema, is_active, is_admin, last_login, fecha_creacion FROM usuario WHERE id = ? LIMIT 1',
     [id]
@@ -29,6 +46,7 @@ async function updateLastLogin(id) {
 }
 
 async function updatePassword(email, nuevaPassword) {
+  // Hash compatible con Django antes de persistir en BD.
   const hash = hashPasswordDjango(nuevaPassword);
   const [result] = await pool.execute(
     'UPDATE usuario SET password = ? WHERE email = ? AND is_active = 1',

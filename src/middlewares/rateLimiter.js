@@ -1,3 +1,15 @@
+/**
+ * rateLimiter.js
+ *
+ * Middleware reusable de limitación de intentos para login.
+ *
+ * Fuente de reglas:
+ *   src/config/business-rules.js
+ *
+ * Uso esperado:
+ *   aplicar en endpoints de autenticación para mitigar fuerza bruta.
+ */
+
 const rateLimit = require('express-rate-limit');
 const { MAX_INTENTOS_LOGIN, VENTANA_BLOQUEO_MS } = require('../config/business-rules');
 

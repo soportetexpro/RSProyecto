@@ -2,6 +2,18 @@
 
 /**
  * ventas.js — Módulo de Ventas Texpro
+ *
+ * Controlador frontend de la vista de ventas.
+ *
+ * Responsabilidades:
+ *   - Verificar sesión y construir contexto de navegación
+ *   - Consultar KPIs, evolución y tablas desde /api/ventas
+ *   - Gestionar paginación, búsqueda y ordenamiento client-side
+ *   - Mostrar modal de detalle por folio
+ *
+ * Fuente de datos:
+ *   Endpoints protegidos de /api/ventas y /api/auth/me.
+ *
  * 4 KPIs | 1 Gráfico líneas | 3 Tablas | Modal detalle
  */
 

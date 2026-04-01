@@ -4,6 +4,10 @@
  * inactividad.js — Cierre automático de sesión por inactividad GLOBAL
  * Texpro RSProyecto
  *
+ * Este script se ejecuta en cliente y comparte estado entre pestañas
+ * mediante localStorage. La actividad se persiste en la clave global
+ * `inac_ultimo_act`, permitiendo que el timeout sea transversal a páginas.
+ *
  * REGLA: es una regla del USUARIO, no de la página.
  * El timer se guarda en localStorage (clave: inac_ultimo_act).
  * Navegar entre páginas NO reinicia el contador.
