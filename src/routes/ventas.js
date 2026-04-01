@@ -115,16 +115,20 @@ router.get('/resumen-vendedores', requireAuth, async (req, res) => {
       .input('anio', sql.Int, anio)
       .query(`
         SELECT
-          h.CodVendedor                  AS codVendedor,
-          COUNT(DISTINCT h.Folio)        AS totalFolios,
-          SUM(h.SubTotal)                AS totalVentas,
-          SUM(ISNULL(h.SubTotal * h.TotDesc / 100, 0)) AS totalDescuento
+          h.CodVendedor                                         AS codVendedor,
+          ISNULL(v.NomVendedor, h.CodVendedor)                  AS nomVendedor,
+          COUNT(DISTINCT h.Folio)                               AS totalFolios,
+          SUM(h.SubTotal)                                       AS totalVentas,
+          SUM(ISNULL(h.SubTotal * h.TotDesc / 100, 0))          AS totalDescuento,
+          SUM(h.SubTotal) - SUM(ISNULL(h.SubTotal * h.TotDesc / 100, 0)) AS ventaReal
         FROM [PRODIN].[softland].[iw_gsaen] h
+        LEFT JOIN [PRODIN].[softland].[iw_gmaes] v
+          ON v.CodVendedor = h.CodVendedor
         WHERE h.CodVendedor IN (${codigos.map(c => `'${c}'`).join(',')})
           AND MONTH(h.Fecha) = @mes
           AND YEAR(h.Fecha)  = @anio
           AND h.Tipo IN ('F','N','D')
-        GROUP BY h.CodVendedor
+        GROUP BY h.CodVendedor, v.NomVendedor
         ORDER BY totalVentas DESC
       `);
     res.json({ ok: true, vendedores: result.recordset });
