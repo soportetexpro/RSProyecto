@@ -48,8 +48,6 @@
       </div>
       <div class="header-right">
         <span class="header-date" id="headerDate"></span>
-
-        <!-- ══ CAMPANA DE NOTIFICACIONES ══ -->
         <div class="notif-wrapper" id="notifWrapper">
           <button class="notif-btn" id="notifBtn" aria-label="Notificaciones" aria-expanded="false" aria-haspopup="true">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -58,8 +56,6 @@
             </svg>
             <span class="notif-badge" id="notifBadge" style="display:none">0</span>
           </button>
-
-          <!-- Panel dropdown -->
           <div class="notif-panel" id="notifPanel" role="menu" aria-label="Panel de notificaciones">
             <div class="notif-panel-header">
               <span class="notif-panel-title">Notificaciones</span>
@@ -73,8 +69,6 @@
             </ul>
           </div>
         </div>
-        <!-- ══ /CAMPANA ══ -->
-
         <div class="header-user-chip">
           <div class="chip-avatar" id="chipAvatar">?</div>
           <span class="chip-name" id="chipName">...</span>
@@ -83,8 +77,6 @@
     </header>
 
     <main class="main-content">
-
-      <!-- BIENVENIDA -->
       <div class="welcome-bar">
         <div class="welcome-text">
           <h2 id="welcomeTitle">Hola 👋</h2>
@@ -100,86 +92,47 @@
         </div>
       </div>
 
-      <!-- KPIs -->
       <section class="kpis-grid">
         <div class="kpi-card">
-          <div class="kpi-icono kpi-icono--verde">
-            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="1" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-          </div>
-          <div class="kpi-info">
-            <span class="kpi-label">Total Ventas del Mes</span>
-            <span class="kpi-valor" id="kpiTotalVentas">—</span>
-          </div>
+          <div class="kpi-icono kpi-icono--verde"><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="1" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+          <div class="kpi-info"><span class="kpi-label">Total Ventas del Mes</span><span class="kpi-valor" id="kpiTotalVentas">—</span></div>
         </div>
         <div class="kpi-card">
-          <div class="kpi-icono kpi-icono--azul">
-            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-          </div>
-          <div class="kpi-info">
-            <span class="kpi-label">Meta del Mes</span>
-            <span class="kpi-valor" id="kpiMeta">—</span>
-          </div>
+          <div class="kpi-icono kpi-icono--azul"><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+          <div class="kpi-info"><span class="kpi-label">Meta del Mes</span><span class="kpi-valor" id="kpiMeta">—</span></div>
         </div>
         <div class="kpi-card kpi-card--progreso">
-          <div class="kpi-icono kpi-icono--naranja">
-            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
-          </div>
+          <div class="kpi-icono kpi-icono--naranja"><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div>
           <div class="kpi-info kpi-info--full">
-            <div class="kpi-progreso-header">
-              <span class="kpi-label">Progreso de Meta</span>
-              <span class="kpi-valor kpi-valor--sm" id="kpiProgresoPct">0%</span>
-            </div>
-            <div class="progreso-barra-bg">
-              <div class="progreso-barra-fill" id="progresoFill" style="width:0%"></div>
-            </div>
+            <div class="kpi-progreso-header"><span class="kpi-label">Progreso de Meta</span><span class="kpi-valor kpi-valor--sm" id="kpiProgresoPct">0%</span></div>
+            <div class="progreso-barra-bg"><div class="progreso-barra-fill" id="progresoFill" style="width:0%"></div></div>
           </div>
         </div>
         <div class="kpi-card">
-          <div class="kpi-icono kpi-icono--rojo">
-            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 11 2-2-2-2"/><path d="M11 13h4"/><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/></svg>
-          </div>
-          <div class="kpi-info">
-            <span class="kpi-label">Total Descuentos</span>
-            <span class="kpi-valor" id="kpiDescuento">—</span>
-          </div>
+          <div class="kpi-icono kpi-icono--rojo"><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 11 2-2-2-2"/><path d="M11 13h4"/><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/></svg></div>
+          <div class="kpi-info"><span class="kpi-label">Total Descuentos</span><span class="kpi-valor" id="kpiDescuento">—</span></div>
         </div>
       </section>
 
-      <!-- GRÁFICO -->
       <section class="grafico-seccion">
         <div class="grafico-card">
-          <div class="grafico-header">
-            <h3 class="grafico-titulo">Evolución Mensual — Ventas vs Meta</h3>
-          </div>
-          <div class="grafico-wrapper">
-            <canvas id="graficoEvolucion"></canvas>
-          </div>
+          <div class="grafico-header"><h3 class="grafico-titulo">Evolución Mensual — Ventas vs Meta</h3></div>
+          <div class="grafico-wrapper"><canvas id="graficoEvolucion"></canvas></div>
         </div>
       </section>
 
-      <!-- TABLA VENTAS POR VENDEDOR -->
       <section class="tabla-seccion">
         <div class="tabla-card">
-          <div class="tabla-header">
-            <h3 class="tabla-titulo">Ventas por Vendedor</h3>
-          </div>
+          <div class="tabla-header"><h3 class="tabla-titulo">Ventas por Vendedor</h3></div>
           <div class="tabla-wrapper">
             <table class="dash-tabla">
-              <thead><tr>
-                <th>Cód. Vendedor</th>
-                <th>Nombre</th>
-                <th>Folios</th>
-                <th style="text-align:right">Total Ventas</th>
-              </tr></thead>
-              <tbody id="tbodyVendedores">
-                <tr class="tabla-empty"><td colspan="4">Cargando...</td></tr>
-              </tbody>
+              <thead><tr><th>Cód. Vendedor</th><th>Nombre</th><th>Folios</th><th style="text-align:right">Total Ventas</th></tr></thead>
+              <tbody id="tbodyVendedores"><tr class="tabla-empty"><td colspan="4">Cargando...</td></tr></tbody>
             </table>
           </div>
         </div>
       </section>
 
-      <!-- TABLA VENTAS DEL MES -->
       <section class="tabla-seccion">
         <div class="tabla-card">
           <div class="tabla-header">
@@ -188,116 +141,59 @@
           </div>
           <div class="tabla-wrapper tabla-wrapper--ventas-mes">
             <table class="dash-tabla">
-              <thead><tr>
-                <th>Folio</th>
-                <th>Fecha</th>
-                <th>Cliente</th>
-                <th>Vendedor</th>
-                <th style="text-align:right">Monto</th>
-                <th style="text-align:right">Descuento</th>
-                <th>Detalle</th>
-              </tr></thead>
-              <tbody id="tbodyVentasMes">
-                <tr class="tabla-empty"><td colspan="7">Cargando...</td></tr>
-              </tbody>
+              <thead><tr><th>Folio</th><th>Fecha</th><th>Cliente</th><th>Vendedor</th><th style="text-align:right">Monto</th><th style="text-align:right">Descuento</th><th>Detalle</th></tr></thead>
+              <tbody id="tbodyVentasMes"><tr class="tabla-empty"><td colspan="7">Cargando...</td></tr></tbody>
             </table>
           </div>
-          <div class="tabla-footer">
-            <span class="tabla-total" id="totalVentasMes">0 registros</span>
-          </div>
+          <div class="tabla-footer"><span class="tabla-total" id="totalVentasMes">0 registros</span></div>
         </div>
       </section>
 
-      <!-- PANEL COORDINADOR — tipo C — -->
       <section class="panel-coordinador" id="panelCoordinador" style="display:none">
         <div class="panel-coord-header">
           <h2 class="panel-coord-titulo">🔗 Panel Coordinador</h2>
           <p class="panel-coord-sub">Asigna folios a vendedores de tu equipo y administra las asignaciones</p>
         </div>
         <div class="tabla-card" style="margin-bottom:1.5rem">
-          <div class="tabla-header">
-            <h3 class="tabla-titulo">Asignar folio a vendedor</h3>
-          </div>
+          <div class="tabla-header"><h3 class="tabla-titulo">Asignar folio a vendedor</h3></div>
           <div style="padding:1rem 1.25rem">
             <div class="coord-form">
-              <div class="coord-form-group">
-                <label class="coord-label" for="coordFolio">Folio del mes</label>
-                <select class="filtro-select" id="coordFolio" style="width:100%">
-                  <option value="">— Cargando folios... —</option>
-                </select>
-              </div>
-              <div class="coord-form-group">
-                <label class="coord-label" for="coordVendedor">Vendedor destino</label>
-                <select class="filtro-select" id="coordVendedor" style="width:100%">
-                  <option value="">— Selecciona vendedor —</option>
-                </select>
-              </div>
-              <div class="coord-form-group">
-                <label class="coord-label" for="coordPorcentaje">% a asignar</label>
-                <input class="tabla-busqueda" type="number" id="coordPorcentaje" min="1" max="100" value="100" style="width:100%" />
-              </div>
-              <div class="coord-form-group coord-form-group--btn">
-                <button class="btn-buscar" id="btnCompartir" style="height:38px;padding:0 1.5rem">Asignar folio</button>
-              </div>
+              <div class="coord-form-group"><label class="coord-label" for="coordFolio">Folio del mes</label><select class="filtro-select" id="coordFolio" style="width:100%"><option value="">— Cargando folios... —</option></select></div>
+              <div class="coord-form-group"><label class="coord-label" for="coordVendedor">Vendedor destino</label><select class="filtro-select" id="coordVendedor" style="width:100%"><option value="">— Selecciona vendedor —</option></select></div>
+              <div class="coord-form-group"><label class="coord-label" for="coordPorcentaje">% a asignar</label><input class="tabla-busqueda" type="number" id="coordPorcentaje" min="1" max="100" value="100" style="width:100%" /></div>
+              <div class="coord-form-group coord-form-group--btn"><button class="btn-buscar" id="btnCompartir" style="height:38px;padding:0 1.5rem">Asignar folio</button></div>
             </div>
             <p class="coord-mensaje" id="coordMensaje"></p>
           </div>
         </div>
         <div class="tabla-card">
-          <div class="tabla-header">
-            <h3 class="tabla-titulo">Folios asignados este mes</h3>
-            <span class="coord-crud-hint">Puedes editar, guardar o eliminar cada asignación</span>
-          </div>
+          <div class="tabla-header"><h3 class="tabla-titulo">Folios asignados este mes</h3><span class="coord-crud-hint">Puedes editar, guardar o eliminar cada asignación</span></div>
           <div class="tabla-wrapper tabla-wrapper--ventas-mes">
             <table class="dash-tabla">
-              <thead><tr>
-                <th>Folio</th>
-                <th>Fecha</th>
-                <th>Cliente</th>
-                <th>Vendedor Asignado</th>
-                <th style="text-align:right">%</th>
-                <th style="text-align:right">Monto Asignado</th>
-                <th style="text-align:center">Acciones</th>
-              </tr></thead>
-              <tbody id="tbodyAsignados">
-                <tr class="tabla-empty"><td colspan="7">Cargando...</td></tr>
-              </tbody>
+              <thead><tr><th>Folio</th><th>Fecha</th><th>Cliente</th><th>Vendedor Asignado</th><th style="text-align:right">%</th><th style="text-align:right">Monto Asignado</th><th style="text-align:center">Acciones</th></tr></thead>
+              <tbody id="tbodyAsignados"><tr class="tabla-empty"><td colspan="7">Cargando...</td></tr></tbody>
             </table>
           </div>
-          <div class="tabla-footer">
-            <span class="tabla-total" id="totalAsignados">0 registros</span>
-          </div>
+          <div class="tabla-footer"><span class="tabla-total" id="totalAsignados">0 registros</span></div>
         </div>
       </section>
 
-      <!-- PANEL FOLIOS RECIBIDOS — tipo P — -->
       <section class="panel-coordinador" id="panelCompartidos" style="display:none">
         <div class="panel-coord-header">
           <h2 class="panel-coord-titulo">📥 Folios Asignados</h2>
           <p class="panel-coord-sub">Folios que tu coordinador ha asignado a tu gestión este mes</p>
         </div>
         <div class="tabla-card">
-          <div class="tabla-header">
-            <h3 class="tabla-titulo">Folios que tengo asignados</h3>
-          </div>
+          <div class="tabla-header"><h3 class="tabla-titulo">Folios que tengo asignados</h3></div>
           <div class="tabla-wrapper">
             <table class="dash-tabla">
-              <thead><tr>
-                <th>Folio</th><th>Fecha</th><th>Cliente</th><th>Coordinador</th>
-                <th style="text-align:right">% Asignado</th>
-                <th style="text-align:right">Monto</th>
-              </tr></thead>
-              <tbody id="tbodyCompartidos">
-                <tr class="tabla-empty"><td colspan="6">Cargando...</td></tr>
-              </tbody>
+              <thead><tr><th>Folio</th><th>Fecha</th><th>Cliente</th><th>Coordinador</th><th style="text-align:right">% Asignado</th><th style="text-align:right">Monto</th></tr></thead>
+              <tbody id="tbodyCompartidos"><tr class="tabla-empty"><td colspan="6">Cargando...</td></tr></tbody>
             </table>
           </div>
-          <div class="tabla-footer">
-            <span class="tabla-total" id="totalCompartidos">0 registros</span>
-          </div>
+          <div class="tabla-footer"><span class="tabla-total" id="totalCompartidos">0 registros</span></div>
         </div>
       </section>
-
     </main>
 
     <footer class="main-footer">
@@ -306,7 +202,6 @@
     </footer>
   </div>
 
-  <!-- MODAL DETALLE FOLIO -->
   <div class="modal-overlay" id="modalOverlay" aria-hidden="true">
     <div class="modal" role="dialog" aria-modal="true">
       <div class="modal-header">
@@ -320,14 +215,8 @@
       </div>
       <div class="modal-body">
         <table class="modal-tabla">
-          <thead><tr>
-            <th>Cód. Producto</th><th>Descripción</th><th>Cantidad</th>
-            <th style="text-align:right">Precio Unit.</th>
-            <th style="text-align:right">Total Línea</th>
-          </tr></thead>
-          <tbody id="modalTbody">
-            <tr><td colspan="5" style="text-align:center;padding:2rem">Cargando...</td></tr>
-          </tbody>
+          <thead><tr><th>Cód. Producto</th><th>Descripción</th><th>Cantidad</th><th style="text-align:right">Precio Unit.</th><th style="text-align:right">Total Línea</th></tr></thead>
+          <tbody id="modalTbody"><tr><td colspan="5" style="text-align:center;padding:2rem">Cargando...</td></tr></tbody>
         </table>
       </div>
       <div class="modal-footer">
@@ -337,11 +226,10 @@
     </div>
   </div>
 
-  <!-- TOAST NOTIFICACIONES -->
   <div class="notif-toast-container" id="notifToastContainer" aria-live="polite" aria-atomic="false"></div>
 
-  <!-- Scripts: dashboard primero, luego el módulo de notificaciones -->
   <script src="dashboard.js"></script>
   <script src="notificaciones-ui.js"></script>
+  <script src="../assets/js/inactividad.js"></script>
 </body>
 </html>
