@@ -24,6 +24,7 @@
  * - coordVendedor: ahora es <select> con lista de todos los vendedores
  * - Tabla asignados: CRUD inline (editar vendedor+%, guardar, cancelar, eliminar)
  * - Al eliminar asignacion: el folio vuelve a aparecer en coordFolio
+ * - Tabla vendedores: se agregan columnas Venta Real y Descuento
  */
 
 (function () {
@@ -182,22 +183,29 @@
     } catch (err) { console.error('[cargarGrafico]', err); }
   }
 
-  // ── Tabla vendedores (ancho completo) ─────────────────────────────────────────
+  // ── Tabla vendedores (6 columnas: Cód, Nombre, Folios, Total Ventas, Venta Real, Descuento) ──
   async function cargarVendedores() {
     try {
       const res  = await fetch(`${API}/vendedores?${new URLSearchParams(getParams())}`, { headers:{ Authorization:`Bearer ${token()}` } });
       const data = await res.json();
       const tbody = document.getElementById('tbodyVendedores');
       if (!data.ok || !data.vendedores.length) {
-        tbody.innerHTML = '<tr class="tabla-empty"><td colspan="4">Sin datos</td></tr>'; return;
+        tbody.innerHTML = '<tr class="tabla-empty"><td colspan="6">Sin datos</td></tr>'; return;
       }
-      tbody.innerHTML = data.vendedores.map(v => `
+      tbody.innerHTML = data.vendedores.map(v => {
+        const totalVentas  = Number(v.totalVentas  || 0);
+        const totalDescuento = Number(v.totalDescuento || 0);
+        const ventaReal    = totalVentas - totalDescuento;
+        return `
         <tr>
           <td><strong>${v.codVendedor}</strong></td>
           <td>${v.nombreVendedor || '—'}</td>
           <td>${v.folios}</td>
-          <td style="text-align:right">${formatCLP(v.totalVentas)}</td>
-        </tr>`).join('');
+          <td style="text-align:right">${formatCLP(totalVentas)}</td>
+          <td style="text-align:right">${formatCLP(ventaReal)}</td>
+          <td style="text-align:right">${formatCLP(totalDescuento)}</td>
+        </tr>`;
+      }).join('');
     } catch (err) { console.error('[cargarVendedores]', err); }
   }
 
