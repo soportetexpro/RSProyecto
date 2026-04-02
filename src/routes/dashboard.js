@@ -392,15 +392,31 @@ router.get('/vendedores', async (req, res) => {
 });
 
 // ── GET /api/dashboard/vendedores-todos ──────────────────────────────
+//
+// Lista los vendedores disponibles para asignar en el panel coordinador.
+//
+// Lógica:
+//   - Se expone el cod_vendedor PRINCIPAL (u.cod_vendedor de tabla `usuario`),
+//     que es el código visible y representativo del vendedor.
+//   - El match para encontrar al usuario se hace a través de usuario_vendedor
+//     (uv.usuario_id → u.id), ya que un usuario puede tener múltiples códigos
+//     en usuario_vendedor pero sólo un código principal en usuario.
+//   - Se excluyen los coordinadores (uv.tipo = 'C') para no ofrecerse a sí mismos.
+//   - DISTINCT sobre u.id para evitar duplicados en caso de múltiples registros
+//     en usuario_vendedor para el mismo usuario.
+//
 router.get('/vendedores-todos', async (req, res) => {
   try {
     const [rows] = await db.pool.query(`
-      SELECT
-        uv.cod_vendedor  AS cod,
+      SELECT DISTINCT
+        u.cod_vendedor   AS cod,
         u.nombre         AS nombre
       FROM usuario_vendedor uv
       INNER JOIN usuario u ON u.id = uv.usuario_id
       WHERE uv.tipo <> 'C'
+        AND u.cod_vendedor IS NOT NULL
+        AND u.cod_vendedor <> ''
+        AND u.activo = 1
       ORDER BY u.nombre
     `);
     res.json({ ok: true, vendedores: rows });
@@ -662,6 +678,10 @@ router.post('/compartir', async (req, res) => {
     const mesF          = fechaFolio.getMonth() + 1;
     const anioF         = fechaFolio.getFullYear();
 
+    // Buscar el cod_vendedor real del receptor usando usuario_vendedor como match
+    // cod_vendedor_compartido llega como el cod_vendedor principal (u.cod_vendedor)
+    // pero factura_compartida guarda el código que se usará para el match de folios
+    // → se guarda como viene (cod principal) y se resuelve en getFoliosCompartidosConPct
     const nombreVendedorComp = await getNombreVendedor(cod_vendedor_compartido);
     const nombreCoordinador  = usuario.nombre || `Coordinador (${f.CodVendedor})`;
 
@@ -688,13 +708,11 @@ router.post('/compartir', async (req, res) => {
     );
 
     // ── Notificaciones de folio compartido ───────────────────────────
-    // Diagnóstico: loguear qué cod_vendedor llega y qué usuario se resuelve
     console.log(`[compartir] cod_vendedor_compartido recibido: '${cod_vendedor_compartido}'`);
 
     const usuarioIdReceptor = await notificacionModel.usuarioIdDesdeCodVendedor(cod_vendedor_compartido);
     console.log(`[compartir] usuarioIdReceptor resuelto: ${usuarioIdReceptor}`);
 
-    // Notificar al receptor (await explícito para ver errores reales)
     if (usuarioIdReceptor) {
       try {
         await notificacionModel.notificarFolioRecibido({
@@ -714,7 +732,6 @@ router.post('/compartir', async (req, res) => {
       console.warn(`[compartir] ⚠️ No se pudo notificar al receptor: cod_vendedor='${cod_vendedor_compartido}' no tiene usuario_id`);
     }
 
-    // Notificar al coordinador (await explícito para ver errores reales)
     try {
       await notificacionModel.notificarFolioAsignado({
         usuarioIdCoordinador: usuario.sub,
