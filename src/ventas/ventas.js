@@ -19,7 +19,7 @@
  * Tabla Vendedores — 6 columnas:
  *   Cód. Vendedor | Nombre Vendedor | Folios | Total Cobrado | Venta Real (Lista) | % Descuento
  *
- *   Definiciones (backend — iw_gsaen + iw_gmovi + iw_tprod, SIN filtro mes/año):
+ *   Definiciones (backend — iw_gsaen + iw_gmovi + iw_tprod, filtrado por mes/año):
  *     Total Cobrado      = ROUND(SUM(m.TotLinea), 0)                        → lo que pagó el cliente
  *     Venta Real (Lista) = ROUND(SUM(t.PrecioVta * m.CantFacturada), 0)     → precio lista sin descuento
  *     % Descuento        = (1 - Total Cobrado / Venta Real Lista) * 100      → descuento real otorgado
@@ -353,7 +353,7 @@
     });
   }
 
-  // ── Tabla 1: Ventas por Vendedor (histórico, sin filtro mes/año) ─────────────────────────
+  // ── Tabla 1: Ventas por Vendedor (filtrada por mes/año) ──────────────────────────────────
   //
   // Campos del response (resumen-vendedores):
   //   v.codVendedor        — código del vendedor
@@ -364,14 +364,6 @@
   //   v.pctDescuento       — % descuento real otorgado
   //   descuentoAbsoluto    — ventaRealLista - totalVentasCobrado (calculado en frontend)
   //
-  // Diseño tabla:
-  //   - Barra de progreso horizontal en columna «Total Cobrado» relativa al máximo del set
-  //   - Badge de color semafórico en «% Descuento»:
-  //       verde  (<=5%)  → desempeño óptimo
-  //       amarillo (>5% y <=15%) → alerta moderada
-  //       rojo (>15%)   → descuento elevado
-  //   - Tooltip en «% Descuento» con descuento absoluto en CLP
-  //
   function renderTablaVendedores(vendedores) {
     const tbody = document.getElementById('tbodyVendedores');
 
@@ -380,7 +372,6 @@
       return;
     }
 
-    // Máximo para escalar la barra de progreso
     const maxCobrado = Math.max(...vendedores.map(v => Number(v.totalVentasCobrado) || 0), 1);
 
     tbody.innerHTML = vendedores.map(v => {
@@ -390,7 +381,6 @@
       const descAbs    = lista - cobrado;
       const barPct     = Math.round((cobrado / maxCobrado) * 100);
 
-      // Colores semafóricos para el badge de descuento
       const badgeBg    = pct > 15 ? 'rgba(220,53,69,0.12)'  : pct > 5 ? 'rgba(245,166,35,0.12)'  : 'rgba(0,200,140,0.12)';
       const badgeColor = pct > 15 ? '#dc3545'               : pct > 5 ? '#b07000'                : '#00885a';
       const badgeBorder= pct > 15 ? 'rgba(220,53,69,0.35)'  : pct > 5 ? 'rgba(245,166,35,0.35)' : 'rgba(0,200,140,0.35)';
@@ -527,7 +517,7 @@
     document.body.removeChild(a); URL.revokeObjectURL(url);
   }
 
-  // ── buildLayout: construye todo el HTML del mainContent ──────────────────────────────────
+  // ── buildLayout ──────────────────────────────────────────────────────────────────────────
   function buildLayout() {
     document.getElementById('pageLoader').style.display = 'none';
     document.getElementById('mainContent').innerHTML = `
@@ -584,14 +574,11 @@
         </div>
       </section>
 
-      <!-- Tabla Vendedores: 6 columnas (histórico sin filtro mes/año) -->
+      <!-- Tabla Vendedores: 6 columnas (filtrada por mes/año) -->
       <section class="tabla-section">
         <div class="tabla-header">
           <div>
             <h2 class="section-title">Ventas por Vendedor</h2>
-            <p style="font-size:0.8rem;color:var(--color-gray-mid,#888);margin-top:2px;margin-bottom:0">
-              Histórico completo · Los filtros de mes/año no aplican a esta tabla
-            </p>
           </div>
         </div>
         <div class="tabla-scroll">
@@ -683,26 +670,23 @@
   async function buscar() {
     const params = getParams();
 
-    // Skeleton en tabla ventas del mes
     document.getElementById('ventasTbody').innerHTML =
       Array(5).fill('<tr>' + Array(7).fill(
         '<td><div class="skeleton" style="height:14px;width:80%"></div></td>'
       ).join('') + '</tr>').join('');
 
-    // Skeleton en tabla vendedores
     document.getElementById('tbodyVendedores').innerHTML =
       Array(3).fill('<tr>' + Array(6).fill(
         '<td><div class="skeleton" style="height:14px;width:70%"></div></td>'
       ).join('') + '</tr>').join('');
 
     try {
-      // resumen-vendedores NO recibe mes/anio (histórico total)
       const [resMeta, resVentas, resVend] = await Promise.all([
         fetch(`${API}/meta?${new URLSearchParams({ anio: params.anio })}`,
           { headers: { Authorization: `Bearer ${token()}` } }),
         fetch(`${API}?${new URLSearchParams(params)}`,
           { headers: { Authorization: `Bearer ${token()}` } }),
-        fetch(`${API}/resumen-vendedores`,
+        fetch(`${API}/resumen-vendedores?${new URLSearchParams(params)}`,
           { headers: { Authorization: `Bearer ${token()}` } }),
       ]);
 
@@ -721,7 +705,6 @@
       const totalDescuento = ventasMes.reduce((s, v) => s + (Number(v.descuento) || 0), 0);
       renderKpis(totalVentas, metaMes, totalDescuento);
 
-      // Renderizar tabla vendedores con nueva función
       if (dataVend.ok) {
         renderTablaVendedores(dataVend.vendedores);
       }
