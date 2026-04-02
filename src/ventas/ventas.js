@@ -17,12 +17,13 @@
  * 4 KPIs | 1 Gráfico líneas | 3 Tablas | Modal detalle
  *
  * Tabla Vendedores — 6 columnas:
- *   Cód. Vendedor | Nombre Vendedor | Folios | Total Ventas | Venta Real | % Descuento
+ *   Cód. Vendedor | Nombre Vendedor | Folios | Total Cobrado | Venta Real (Lista) | % Descuento
  *
- *   Definiciones (calculadas en backend sobre iw_gmovi + iw_tprod):
- *     Total Ventas  = SUM(m.TotLinea)                        → lo que pagó el cliente
- *     Venta Real    = SUM(t.PrecioVta * m.CantFacturada)     → precio lista sin descuento
- *     % Descuento   = (1 - Total Ventas / Venta Real) * 100  → descuento otorgado
+ *   Definiciones (backend — iw_gsaen + iw_gmovi + iw_tprod, SIN filtro mes/año):
+ *     Total Cobrado      = ROUND(SUM(m.TotLinea), 0)                        → lo que pagó el cliente
+ *     Venta Real (Lista) = ROUND(SUM(t.PrecioVta * m.CantFacturada), 0)     → precio lista sin descuento
+ *     % Descuento        = (1 - Total Cobrado / Venta Real Lista) * 100      → descuento real otorgado
+ *     Descuento $        = Venta Real Lista - Total Cobrado                  → diferencia absoluta
  */
 
 (function () {
@@ -352,6 +353,100 @@
     });
   }
 
+  // ── Tabla 1: Ventas por Vendedor (histórico, sin filtro mes/año) ─────────────────────────
+  //
+  // Campos del response (resumen-vendedores):
+  //   v.codVendedor        — código del vendedor
+  //   v.nombreVendedor     — MIN(h.NomAux) desde iw_gsaen
+  //   v.totalFolios        — COUNT(DISTINCT h.Folio)
+  //   v.totalVentasCobrado — ROUND(SUM(m.TotLinea), 0)         → lo cobrado al cliente
+  //   v.ventaRealLista     — ROUND(SUM(t.PrecioVta * Cant), 0) → precio lista sin desc.
+  //   v.pctDescuento       — % descuento real otorgado
+  //   descuentoAbsoluto    — ventaRealLista - totalVentasCobrado (calculado en frontend)
+  //
+  // Diseño tabla:
+  //   - Barra de progreso horizontal en columna «Total Cobrado» relativa al máximo del set
+  //   - Badge de color semafórico en «% Descuento»:
+  //       verde  (<=5%)  → desempeño óptimo
+  //       amarillo (>5% y <=15%) → alerta moderada
+  //       rojo (>15%)   → descuento elevado
+  //   - Tooltip en «% Descuento» con descuento absoluto en CLP
+  //
+  function renderTablaVendedores(vendedores) {
+    const tbody = document.getElementById('tbodyVendedores');
+
+    if (!vendedores || !vendedores.length) {
+      tbody.innerHTML = '<tr class="tabla-empty"><td colspan="6">Sin datos para el período seleccionado</td></tr>';
+      return;
+    }
+
+    // Máximo para escalar la barra de progreso
+    const maxCobrado = Math.max(...vendedores.map(v => Number(v.totalVentasCobrado) || 0), 1);
+
+    tbody.innerHTML = vendedores.map(v => {
+      const cobrado    = Number(v.totalVentasCobrado) || 0;
+      const lista      = Number(v.ventaRealLista)     || 0;
+      const pct        = Number(v.pctDescuento)       || 0;
+      const descAbs    = lista - cobrado;
+      const barPct     = Math.round((cobrado / maxCobrado) * 100);
+
+      // Colores semafóricos para el badge de descuento
+      const badgeBg    = pct > 15 ? 'rgba(220,53,69,0.12)'  : pct > 5 ? 'rgba(245,166,35,0.12)'  : 'rgba(0,200,140,0.12)';
+      const badgeColor = pct > 15 ? '#dc3545'               : pct > 5 ? '#b07000'                : '#00885a';
+      const badgeBorder= pct > 15 ? 'rgba(220,53,69,0.35)'  : pct > 5 ? 'rgba(245,166,35,0.35)' : 'rgba(0,200,140,0.35)';
+
+      return `
+        <tr>
+          <td>
+            <span style="
+              display:inline-block;
+              background:var(--color-bg-offset,#f3f4f6);
+              color:var(--color-text,#1a1a2e);
+              font-weight:700;
+              font-size:0.8rem;
+              padding:2px 9px;
+              border-radius:6px;
+              letter-spacing:0.04em;
+            ">${v.codVendedor || '—'}</span>
+          </td>
+          <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+              title="${(v.nombreVendedor || '').replace(/"/g,'&quot;')}">
+            ${v.nombreVendedor || '—'}
+          </td>
+          <td style="text-align:center;font-variant-numeric:tabular-nums">
+            ${v.totalFolios ?? '—'}
+          </td>
+          <td style="text-align:right">
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px">
+              <span style="font-variant-numeric:tabular-nums;font-weight:600">${formatCLP(cobrado)}</span>
+              <div style="width:100%;max-width:120px;height:4px;background:var(--color-border,#e2e8f0);border-radius:999px;overflow:hidden">
+                <div style="height:4px;width:${barPct}%;background:var(--color-primary,#00E2A7);border-radius:999px;transition:width .4s ease"></div>
+              </div>
+            </div>
+          </td>
+          <td style="text-align:right;font-variant-numeric:tabular-nums">
+            ${formatCLP(lista)}
+          </td>
+          <td style="text-align:right">
+            <span
+              title="Descuento absoluto: ${formatCLP(descAbs)}"
+              style="
+                display:inline-block;
+                padding:3px 10px;
+                border-radius:999px;
+                font-size:0.82rem;
+                font-weight:700;
+                background:${badgeBg};
+                color:${badgeColor};
+                border:1px solid ${badgeBorder};
+                cursor:default;
+              ">${formatPct(pct)}</span>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  }
+
   // ── Tabla 3: Modal detalle folio ────────────────────────────────────────────────────────────
   async function abrirDetalle(folio) {
     const overlay = document.getElementById('modalOverlay');
@@ -489,19 +584,26 @@
         </div>
       </section>
 
-      <!-- Tabla Vendedores: 6 columnas -->
+      <!-- Tabla Vendedores: 6 columnas (histórico sin filtro mes/año) -->
       <section class="tabla-section">
-        <h2 class="section-title">Ventas por Vendedor</h2>
+        <div class="tabla-header">
+          <div>
+            <h2 class="section-title">Ventas por Vendedor</h2>
+            <p style="font-size:0.8rem;color:var(--color-gray-mid,#888);margin-top:2px;margin-bottom:0">
+              Histórico completo · Los filtros de mes/año no aplican a esta tabla
+            </p>
+          </div>
+        </div>
         <div class="tabla-scroll">
           <table class="ventas-tabla tabla-vendedores">
             <thead>
               <tr>
-                <th>Cód. Vendedor</th>
+                <th style="width:110px">Cód. Vendedor</th>
                 <th>Nombre Vendedor</th>
-                <th style="text-align:center">Folios</th>
-                <th style="text-align:right">Total Ventas</th>
-                <th style="text-align:right">Venta Real</th>
-                <th style="text-align:right">% Descuento</th>
+                <th style="text-align:center;width:80px">Folios</th>
+                <th style="text-align:right">Total Cobrado</th>
+                <th style="text-align:right">Venta Real (Lista)</th>
+                <th style="text-align:right;width:130px">% Descuento</th>
               </tr>
             </thead>
             <tbody id="tbodyVendedores">
@@ -581,18 +683,26 @@
   async function buscar() {
     const params = getParams();
 
+    // Skeleton en tabla ventas del mes
     document.getElementById('ventasTbody').innerHTML =
       Array(5).fill('<tr>' + Array(7).fill(
         '<td><div class="skeleton" style="height:14px;width:80%"></div></td>'
       ).join('') + '</tr>').join('');
 
+    // Skeleton en tabla vendedores
+    document.getElementById('tbodyVendedores').innerHTML =
+      Array(3).fill('<tr>' + Array(6).fill(
+        '<td><div class="skeleton" style="height:14px;width:70%"></div></td>'
+      ).join('') + '</tr>').join('');
+
     try {
+      // resumen-vendedores NO recibe mes/anio (histórico total)
       const [resMeta, resVentas, resVend] = await Promise.all([
         fetch(`${API}/meta?${new URLSearchParams({ anio: params.anio })}`,
           { headers: { Authorization: `Bearer ${token()}` } }),
         fetch(`${API}?${new URLSearchParams(params)}`,
           { headers: { Authorization: `Bearer ${token()}` } }),
-        fetch(`${API}/resumen-vendedores?${new URLSearchParams(params)}`,
+        fetch(`${API}/resumen-vendedores`,
           { headers: { Authorization: `Bearer ${token()}` } }),
       ]);
 
@@ -611,32 +721,9 @@
       const totalDescuento = ventasMes.reduce((s, v) => s + (Number(v.descuento) || 0), 0);
       renderKpis(totalVentas, metaMes, totalDescuento);
 
+      // Renderizar tabla vendedores con nueva función
       if (dataVend.ok) {
-        const tbody = document.getElementById('tbodyVendedores');
-        if (!dataVend.vendedores.length) {
-          tbody.innerHTML = '<tr class="tabla-empty"><td colspan="6">Sin datos para el período seleccionado</td></tr>';
-        } else {
-          tbody.innerHTML = dataVend.vendedores.map(v => `
-            <tr>
-              <td><strong>${v.codVendedor || '—'}</strong></td>
-              <td>${v.nomVendedor || '—'}</td>
-              <td style="text-align:center">${v.totalFolios ?? '—'}</td>
-              <td style="text-align:right">${formatCLP(v.totalVentas)}</td>
-              <td style="text-align:right">${formatCLP(v.ventaReal)}</td>
-              <td style="text-align:right">
-                <span style="
-                  display:inline-block;
-                  padding:2px 8px;
-                  border-radius:999px;
-                  font-size:0.82rem;
-                  font-weight:600;
-                  background:${Number(v.pctDescuento) > 15 ? 'rgba(220,53,69,0.12)' : Number(v.pctDescuento) > 5 ? 'rgba(245,166,35,0.12)' : 'rgba(0,200,140,0.12)'};
-                  color:${Number(v.pctDescuento) > 15 ? '#dc3545' : Number(v.pctDescuento) > 5 ? '#b07000' : '#00885a'};
-                ">${formatPct(v.pctDescuento)}</span>
-              </td>
-            </tr>
-          `).join('');
-        }
+        renderTablaVendedores(dataVend.vendedores);
       }
 
       renderTabla();
@@ -646,6 +733,8 @@
       console.error('[buscar]', err);
       document.getElementById('ventasTbody').innerHTML =
         '<tr class="tabla-empty"><td colspan="7">⚠️ Error al cargar ventas.</td></tr>';
+      document.getElementById('tbodyVendedores').innerHTML =
+        '<tr class="tabla-empty"><td colspan="6">⚠️ Error al cargar vendedores.</td></tr>';
     }
   }
 
