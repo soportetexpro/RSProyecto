@@ -24,6 +24,7 @@
  * - coordVendedor: ahora es <select> con lista de todos los vendedores
  * - Tabla asignados: CRUD inline (editar vendedor+%, guardar, cancelar, eliminar)
  * - Al eliminar asignacion: el folio vuelve a aparecer en coordFolio
+ * - Tabla vendedores: columnas Venta Real y Descuento agregadas (6 columnas total)
  */
 
 (function () {
@@ -182,22 +183,30 @@
     } catch (err) { console.error('[cargarGrafico]', err); }
   }
 
-  // ── Tabla vendedores (ancho completo) ─────────────────────────────────────────
+  // ── Tabla vendedores — 6 columnas ─────────────────────────────────────────
+  // Campos del endpoint GET /api/dashboard/vendedores:
+  //   codVendedor, nombre, folios, totalVentas, totalDescuento, ventaReal
   async function cargarVendedores() {
     try {
       const res  = await fetch(`${API}/vendedores?${new URLSearchParams(getParams())}`, { headers:{ Authorization:`Bearer ${token()}` } });
       const data = await res.json();
       const tbody = document.getElementById('tbodyVendedores');
       if (!data.ok || !data.vendedores.length) {
-        tbody.innerHTML = '<tr class="tabla-empty"><td colspan="4">Sin datos</td></tr>'; return;
+        tbody.innerHTML = '<tr class="tabla-empty"><td colspan="6">Sin datos</td></tr>'; return;
       }
-      tbody.innerHTML = data.vendedores.map(v => `
-        <tr>
+      tbody.innerHTML = data.vendedores.map(v => {
+        // ventaReal puede venir calculado del backend o se calcula en frontend
+        const ventaReal     = v.ventaReal      != null ? v.ventaReal      : (Number(v.totalVentas || 0) - Number(v.totalDescuento || 0));
+        const totalDescuento = v.totalDescuento != null ? v.totalDescuento : 0;
+        return `<tr>
           <td><strong>${v.codVendedor}</strong></td>
-          <td>${v.nombreVendedor || '—'}</td>
+          <td>${v.nombre || '—'}</td>
           <td>${v.folios}</td>
+          <td style="text-align:right">${formatCLP(ventaReal)}</td>
+          <td style="text-align:right">${formatCLP(totalDescuento)}</td>
           <td style="text-align:right">${formatCLP(v.totalVentas)}</td>
-        </tr>`).join('');
+        </tr>`;
+      }).join('');
     } catch (err) { console.error('[cargarVendedores]', err); }
   }
 
@@ -334,196 +343,150 @@
       }
       sel.innerHTML = '<option value="">— Selecciona un folio —</option>' +
         data.folios.map(f =>
-          `<option value="${f.Folio}">${f.Folio} — ${f.cliente||'?'} — ${formatCLP(f.monto)}</option>`
+          `<option value="${f.Folio}">${f.Folio} — ${f.cliente||'Sin cliente'} (${formatCLP(f.monto)})</option>`
         ).join('');
-    } catch(err) { console.error('[cargarFoliosParaCompartir]',err); }
-  }
-
-  // ─── CRUD asignaciones coordinador ───────────────────────────────────────────────
-
-  function opcionesVendedores(seleccionado) {
-    return todosVendedores.map(v =>
-      `<option value="${v.cod}" ${v.cod === seleccionado ? 'selected' : ''}>${v.cod} — ${v.nombre||'Sin nombre'}</option>`
-    ).join('');
-  }
-
-  function filaAsignadoVista(c) {
-    return `
-      <td><strong>${c.folio}</strong></td>
-      <td>${c.fecha ? new Date(c.fecha).toLocaleDateString('es-CL') : '—'}</td>
-      <td>${c.cliente||'—'}</td>
-      <td>${c.nombre_vendedor_compartido||c.cod_vendedor_compartido||'—'}</td>
-      <td style="text-align:right">${c.porcentaje}%</td>
-      <td style="text-align:right">${formatCLP(c.monto_asignado)}</td>
-      <td>
-        <div class="crud-acciones">
-          <button class="btn-crud btn-crud--edit" title="Editar" data-id="${c.id}">&#9998;</button>
-          <button class="btn-crud btn-crud--del"  title="Eliminar" data-id="${c.id}" data-folio="${c.folio}">&times;</button>
-        </div>
-      </td>`;
-  }
-
-  function filaAsignadoEdicion(c) {
-    return `
-      <td><strong>${c.folio}</strong></td>
-      <td>${c.fecha ? new Date(c.fecha).toLocaleDateString('es-CL') : '—'}</td>
-      <td>${c.cliente||'—'}</td>
-      <td>
-        <select class="crud-input-select" id="editVend_${c.id}">
-          <option value="">— Selecciona —</option>
-          ${opcionesVendedores(c.cod_vendedor_compartido)}
-        </select>
-      </td>
-      <td style="text-align:right">
-        <input class="crud-input-pct" type="number" id="editPct_${c.id}" min="1" max="100" value="${c.porcentaje}" />
-      </td>
-      <td style="text-align:right">${formatCLP(c.monto_asignado)}</td>
-      <td>
-        <div class="crud-acciones">
-          <button class="btn-crud btn-crud--save"   title="Guardar" data-id="${c.id}" data-folio="${c.folio}">✓</button>
-          <button class="btn-crud btn-crud--cancel" title="Cancelar" data-id="${c.id}">✕</button>
-        </div>
-      </td>`;
+    } catch(err) { console.error('[cargarFoliosParaCompartir]', err); }
   }
 
   async function cargarFoliosAsignados() {
     try {
-      const res  = await fetch(`${API}/asignados?${new URLSearchParams(getParams())}`, { headers:{ Authorization:`Bearer ${token()}` } });
+      const res  = await fetch(`${API}/compartir/asignados?${new URLSearchParams(getParams())}`, { headers:{ Authorization:`Bearer ${token()}` } });
       const data = await res.json();
       const tbody = document.getElementById('tbodyAsignados');
       document.getElementById('totalAsignados').textContent = `${(data.asignados||[]).length} registros`;
       if (!data.ok || !data.asignados?.length) {
-        tbody.innerHTML = '<tr class="tabla-empty"><td colspan="7">Sin folios asignados este mes</td></tr>'; return;
+        tbody.innerHTML = '<tr class="tabla-empty"><td colspan="7">Sin asignaciones este mes</td></tr>'; return;
       }
-      tbody.innerHTML = data.asignados.map(c => `<tr data-id="${c.id}">${filaAsignadoVista(c)}</tr>`).join('');
-      bindCrudEvents(tbody, data.asignados);
-    } catch(err) { console.error('[cargarFoliosAsignados]',err); }
+      tbody.innerHTML = data.asignados.map(a => `
+        <tr data-id="${a.id}">
+          <td><strong>${a.folio}</strong></td>
+          <td>${a.fecha||'—'}</td>
+          <td>${a.cliente||'—'}</td>
+          <td class="td-vendedor-val">${a.cod_vendedor_compartido} — ${a.nombre_vendedor||''}</td>
+          <td style="text-align:right" class="td-pct-val">${a.porcentaje}%</td>
+          <td style="text-align:right">${formatCLP(a.monto_asignado)}</td>
+          <td style="text-align:center">
+            <button class="btn-editar-asig" data-id="${a.id}" title="Editar">✏️</button>
+            <button class="btn-eliminar-asig" data-id="${a.id}" title="Eliminar">🗑️</button>
+          </td>
+        </tr>`).join('');
+
+      tbody.querySelectorAll('.btn-editar-asig').forEach(btn => btn.addEventListener('click', () => editarAsignacion(btn.dataset.id, data.asignados)));
+      tbody.querySelectorAll('.btn-eliminar-asig').forEach(btn => btn.addEventListener('click', () => eliminarAsignacion(btn.dataset.id)));
+    } catch(err) { console.error('[cargarFoliosAsignados]', err); }
   }
 
-  function bindCrudEvents(tbody, asignados) {
-    // Botones EDITAR
-    tbody.querySelectorAll('.btn-crud--edit').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const id  = btn.dataset.id;
-        const c   = asignados.find(a => String(a.id) === String(id));
-        const tr  = tbody.querySelector(`tr[data-id="${id}"]`);
-        if (!c || !tr) return;
-        tr.innerHTML = filaAsignadoEdicion(c);
-        bindCrudEvents(tbody, asignados); // rebind para save/cancel
-      });
-    });
-
-    // Botones GUARDAR
-    tbody.querySelectorAll('.btn-crud--save').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const id      = btn.dataset.id;
-        const vendSel = document.getElementById(`editVend_${id}`)?.value;
-        const pctSel  = document.getElementById(`editPct_${id}`)?.value;
-        if (!vendSel || !pctSel) {
-          alert('Selecciona vendedor y porcentaje'); return;
-        }
-        try {
-          const res  = await fetch(`${API}/compartir/${id}`, {
-            method:'PUT',
-            headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${token()}` },
-            body: JSON.stringify({ cod_vendedor_compartido: vendSel, porcentaje: Number(pctSel) })
-          });
-          const data = await res.json();
-          if (!data.ok) throw new Error(data.error);
-          await cargarFoliosAsignados();
-        } catch(err) { alert(`Error al guardar: ${err.message}`); }
-      });
-    });
-
-    // Botones CANCELAR
-    tbody.querySelectorAll('.btn-crud--cancel').forEach(btn => {
-      btn.addEventListener('click', async () => { await cargarFoliosAsignados(); });
-    });
-
-    // Botones ELIMINAR
-    tbody.querySelectorAll('.btn-crud--del').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const id    = btn.dataset.id;
-        const folio = btn.dataset.folio;
-        if (!confirm(`¿Eliminar asignación del folio ${folio}? El folio volverá a estar disponible.`)) return;
-        try {
-          const res  = await fetch(`${API}/compartir/${id}`, {
-            method:'DELETE',
-            headers:{ Authorization:`Bearer ${token()}` }
-          });
-          const data = await res.json();
-          if (!data.ok) throw new Error(data.error);
-          // Recargar lista folios + asignados
-          await Promise.all([ cargarFoliosParaCompartir(), cargarFoliosAsignados(), cargarResumen(), cargarVentasMes() ]);
-        } catch(err) { alert(`Error al eliminar: ${err.message}`); }
-      });
-    });
+  function editarAsignacion(id, lista) {
+    const asig = lista.find(a => String(a.id) === String(id));
+    if (!asig) return;
+    const row  = document.querySelector(`#tbodyAsignados tr[data-id="${id}"]`);
+    if (!row) return;
+    const selVend = `<select class="filtro-select td-vendedor-edit" style="width:100%">
+      ${todosVendedores.map(v=>`<option value="${v.cod}" ${v.cod===asig.cod_vendedor_compartido?'selected':''}>${v.cod} — ${v.nombre||''}</option>`).join('')}
+    </select>`;
+    row.querySelector('.td-vendedor-val').innerHTML = selVend;
+    row.querySelector('.td-pct-val').innerHTML = `<input type="number" class="tabla-busqueda td-pct-edit" value="${asig.porcentaje}" min="1" max="100" style="width:60px" />`;
+    const tdAcc = row.cells[row.cells.length - 1];
+    tdAcc.innerHTML = `
+      <button class="btn-guardar-asig" data-id="${id}" title="Guardar">💾</button>
+      <button class="btn-cancelar-asig" data-id="${id}" title="Cancelar">✖️</button>`;
+    tdAcc.querySelector('.btn-guardar-asig').addEventListener('click',  () => guardarAsignacion(id));
+    tdAcc.querySelector('.btn-cancelar-asig').addEventListener('click', () => cargarFoliosAsignados());
   }
 
-  // ══ PANEL FOLIOS RECIBIDOS (tipo P) ═════════════════════════════════════
+  async function guardarAsignacion(id) {
+    const row      = document.querySelector(`#tbodyAsignados tr[data-id="${id}"]`);
+    const vendedor = row.querySelector('.td-vendedor-edit')?.value;
+    const pct      = row.querySelector('.td-pct-edit')?.value;
+    if (!vendedor || !pct) return;
+    try {
+      const res  = await fetch(`${API}/compartir/${id}`, {
+        method:'PUT',
+        headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${token()}` },
+        body: JSON.stringify({ cod_vendedor_compartido: vendedor, porcentaje: Number(pct) })
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error);
+      await Promise.all([ cargarFoliosAsignados(), cargarResumen(), cargarVentasMes() ]);
+    } catch(err) { console.error('[guardarAsignacion]', err); }
+  }
+
+  async function eliminarAsignacion(id) {
+    if (!confirm('¿Eliminar esta asignación?')) return;
+    try {
+      const res  = await fetch(`${API}/compartir/${id}`, { method:'DELETE', headers:{ Authorization:`Bearer ${token()}` } });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error);
+      await Promise.all([ cargarFoliosParaCompartir(), cargarFoliosAsignados(), cargarResumen(), cargarVentasMes() ]);
+    } catch(err) { console.error('[eliminarAsignacion]', err); }
+  }
 
   async function iniciarPanelCompartidos() {
     document.getElementById('panelCompartidos').style.display = 'block';
     document.getElementById('panelCoordinador').style.display = 'none';
-    await cargarFoliosCompartidos();
-  }
-
-  async function cargarFoliosCompartidos() {
     try {
-      const res  = await fetch(`${API}/compartidos?${new URLSearchParams(getParams())}`, { headers:{ Authorization:`Bearer ${token()}` } });
+      const res  = await fetch(`${API}/compartir/recibidos?${new URLSearchParams(getParams())}`, { headers:{ Authorization:`Bearer ${token()}` } });
       const data = await res.json();
       const tbody = document.getElementById('tbodyCompartidos');
-      document.getElementById('totalCompartidos').textContent = `${(data.compartidos||[]).length} registros`;
-      if (!data.ok || !data.compartidos?.length) {
-        tbody.innerHTML = '<tr class="tabla-empty"><td colspan="6">Sin folios asignados este mes</td></tr>'; return;
+      document.getElementById('totalCompartidos').textContent = `${(data.recibidos||[]).length} registros`;
+      if (!data.ok || !data.recibidos?.length) {
+        tbody.innerHTML = '<tr class="tabla-empty"><td colspan="6">Sin folios asignados</td></tr>'; return;
       }
-      tbody.innerHTML = data.compartidos.map(c => `
+      tbody.innerHTML = data.recibidos.map(r => `
         <tr>
-          <td><strong>${c.folio}</strong></td>
-          <td>${c.fecha ? new Date(c.fecha).toLocaleDateString('es-CL') : '—'}</td>
-          <td>${c.cliente||'—'}</td>
-          <td>${c.coordinador||c.cod_vendedor_principal||'—'}</td>
-          <td style="text-align:right">${c.porcentaje}%</td>
-          <td style="text-align:right">${formatCLP(c.monto_asignado)}</td>
+          <td><strong>${r.folio}</strong></td>
+          <td>${r.fecha||'—'}</td>
+          <td>${r.cliente||'—'}</td>
+          <td>${r.nombre_coordinador||r.cod_vendedor_origen||'—'}</td>
+          <td style="text-align:right">${r.porcentaje}%</td>
+          <td style="text-align:right">${formatCLP(r.monto_asignado)}</td>
         </tr>`).join('');
-    } catch(err) { console.error('[cargarFoliosCompartidos]',err); }
+    } catch(err) { console.error('[iniciarPanelCompartidos]', err); }
   }
 
-  // ── Cargar todo ────────────────────────────────────────────────────────────
-  async function cargarTodo(usuario) {
-    const tareas = [ cargarResumen(), cargarGrafico(), cargarVendedores(), cargarVentasMes() ];
-    if (esCoordinador(usuario)) tareas.push(cargarFoliosParaCompartir(), cargarFoliosAsignados());
-    else tareas.push(cargarFoliosCompartidos());
-    await Promise.all(tareas);
+  // ── Búsqueda en tabla ventas mes ─────────────────────────────────────────
+  function initBusqueda() {
+    document.getElementById('busquedaVentas').addEventListener('input', e => {
+      const q = e.target.value.trim().toLowerCase();
+      renderVentasMes(q
+        ? ventasMes.filter(v => String(v.Folio).includes(q) || (v.cliente||'').toLowerCase().includes(q))
+        : ventasMes
+      );
+    });
   }
 
-  // ── Init ──────────────────────────────────────────────────────────────────
+  // ── Init ─────────────────────────────────────────────────────────────────
   async function init() {
     const usuario = await verificarSesion();
     if (!usuario) return;
     cargarSidebar(usuario);
     initSelectores();
+    initBusqueda();
 
-    if (esCoordinador(usuario)) await iniciarPanelCoordinador();
-    else                        await iniciarPanelCompartidos();
+    // Primera carga
+    await Promise.all([ cargarResumen(), cargarGrafico(), cargarVendedores(), cargarVentasMes() ]);
 
-    document.getElementById('busquedaVentas').addEventListener('input', e => {
-      const q = e.target.value.toLowerCase();
-      renderVentasMes(ventasMes.filter(v =>
-        String(v.Folio||'').toLowerCase().includes(q) ||
-        String(v.cliente||'').toLowerCase().includes(q)
-      ));
+    // Panel coordinador / compartidos
+    if (esCoordinador(usuario)) {
+      await iniciarPanelCoordinador();
+    } else if ((usuario.vendedores||[]).some(v => v.tipo === 'V')) {
+      await iniciarPanelCompartidos();
+    }
+
+    // Botón actualizar
+    document.getElementById('btnActualizar').addEventListener('click', async () => {
+      await Promise.all([ cargarResumen(), cargarGrafico(), cargarVendedores(), cargarVentasMes() ]);
+      if (esCoordinador(usuario)) {
+        await Promise.all([ cargarFoliosParaCompartir(), cargarFoliosAsignados() ]);
+      }
     });
 
+    // Modal
     document.getElementById('modalCerrar').addEventListener('click', cerrarModal);
-    document.getElementById('modalOverlay').addEventListener('click', e => { if (e.target===e.currentTarget) cerrarModal(); });
-    document.addEventListener('keydown', e => { if (e.key==='Escape') cerrarModal(); });
-    document.getElementById('btnActualizar').addEventListener('click', () => cargarTodo(usuario));
-
-    cargarTodo(usuario);
+    document.getElementById('modalOverlay').addEventListener('click', e => { if (e.target === e.currentTarget) cerrarModal(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') cerrarModal(); });
   }
 
-  if (document.readyState==='loading') document.addEventListener('DOMContentLoaded', init);
-  else init();
+  document.addEventListener('DOMContentLoaded', init);
 
 })();
