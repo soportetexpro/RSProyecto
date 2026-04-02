@@ -177,7 +177,9 @@
 
   async function cargarGrafico() {
     try {
-      const res  = await fetch(`${API}/evolucion?${new URLSearchParams({ anio: getParams().anio })}`,
+      const anio = getParams().anio;
+
+      const res  = await fetch(`${API}/evolucion?${new URLSearchParams({ anio })}`,
         { headers: { Authorization: `Bearer ${token()}` } });
       const data = await res.json();
       if (!data.ok) return;
@@ -185,6 +187,10 @@
       const labels = data.evolucion.map(e => MESES_LABEL[e.mes - 1]);
       const ventas = data.evolucion.map(e => e.ventas);
       const meta   = data.evolucion.map(e => e.meta);
+
+      // Actualizar título DOM si existe el elemento
+      const elTitulo = document.getElementById('graficoTitulo');
+      if (elTitulo) elTitulo.textContent = `Evolución Mensual — Año ${anio}`;
 
       const ctx = document.getElementById('graficoVentas').getContext('2d');
       if (grafico) grafico.destroy();
@@ -223,6 +229,13 @@
           maintainAspectRatio: false,
           interaction: { mode: 'index', intersect: false },
           plugins: {
+            title: {
+              display: true,
+              text: `Evolución Mensual — Año ${anio}`,
+              font: { family: 'Montserrat', size: 14, weight: '600' },
+              color: 'var(--color-text, #1a1a2e)',
+              padding: { bottom: 12 },
+            },
             legend: {
               position: 'top',
               labels: { font: { family: 'Montserrat', size: 12 }, usePointStyle: true }
@@ -395,370 +408,174 @@
               font-weight:700;
               font-size:0.8rem;
               padding:2px 9px;
-              border-radius:6px;
+              border-radius:4px;
               letter-spacing:0.04em;
             ">${v.codVendedor || '—'}</span>
           </td>
-          <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
-              title="${(v.nombreVendedor || '').replace(/"/g,'&quot;')}">
-            ${v.nombreVendedor || '—'}
-          </td>
-          <td style="text-align:center;font-variant-numeric:tabular-nums">
-            ${v.totalFolios ?? '—'}
-          </td>
+          <td>${v.nombreVendedor || '—'}</td>
+          <td style="text-align:center">${v.totalFolios || 0}</td>
           <td style="text-align:right">
             <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px">
-              <span style="font-variant-numeric:tabular-nums;font-weight:600">${formatCLP(cobrado)}</span>
-              <div style="width:100%;max-width:120px;height:4px;background:var(--color-border,#e2e8f0);border-radius:999px;overflow:hidden">
-                <div style="height:4px;width:${barPct}%;background:var(--color-primary,#00E2A7);border-radius:999px;transition:width .4s ease"></div>
+              <span>${formatCLP(cobrado)}</span>
+              <div style="width:100%;max-width:90px;height:4px;background:rgba(0,0,0,0.08);border-radius:2px;overflow:hidden">
+                <div style="width:${barPct}%;height:100%;background:var(--color-primary,#00E2A7);border-radius:2px"></div>
               </div>
             </div>
           </td>
-          <td style="text-align:right;font-variant-numeric:tabular-nums">
-            ${formatCLP(lista)}
-          </td>
+          <td style="text-align:right">${formatCLP(lista)}</td>
           <td style="text-align:right">
-            <span
-              title="Descuento absoluto: ${formatCLP(descAbs)}"
-              style="
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px">
+              <span style="
                 display:inline-block;
-                padding:3px 10px;
-                border-radius:999px;
-                font-size:0.82rem;
-                font-weight:700;
                 background:${badgeBg};
                 color:${badgeColor};
                 border:1px solid ${badgeBorder};
-                cursor:default;
+                font-weight:600;
+                font-size:0.78rem;
+                padding:2px 8px;
+                border-radius:20px;
               ">${formatPct(pct)}</span>
+              <span style="font-size:0.72rem;color:var(--color-text-muted,#6b7280)">${formatCLP(descAbs)}</span>
+            </div>
           </td>
-        </tr>
-      `;
+        </tr>`;
     }).join('');
   }
 
-  // ── Tabla 3: Modal detalle folio ────────────────────────────────────────────────────────────
+  // ── Modal detalle folio ───────────────────────────────────────────────────────────────────
   async function abrirDetalle(folio) {
-    const overlay = document.getElementById('modalOverlay');
-    const tbody   = document.getElementById('modalTbody');
-    const totalEl = document.getElementById('modalTotalValor');
-
-    const venta = ventasMes.find(v => String(v.Folio) === String(folio));
-    document.getElementById('modalTitulo').textContent    = `Folio N° ${folio}`;
-    document.getElementById('modalSubtitulo').textContent = venta
-      ? `${venta.cliente || ''} • ${venta.fecha_formato || ''}` : '';
-    document.getElementById('modalResumen').innerHTML = venta ? `
-      <div class="modal-chip"><span>Vendedor</span><strong>${venta.CodVendedor || '—'}</strong></div>
-      <div class="modal-chip"><span>Monto</span><strong>${formatCLP(venta.monto)}</strong></div>
-      <div class="modal-chip"><span>Descuento</span><strong>${formatCLP(venta.descuento)}</strong></div>
-    ` : '';
-
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:2rem">Cargando...</td></tr>';
-    totalEl.textContent = '—';
-    overlay.classList.add('modal-overlay--visible');
-    overlay.setAttribute('aria-hidden', 'false');
-    document.body.style.overflow = 'hidden';
-
     try {
-      const res  = await fetch(`${API}/detalle/${folio}`, {
-        headers: { Authorization: `Bearer ${token()}` }
-      });
+      const res  = await fetch(`${API}/detalle/${folio}`, { headers: { Authorization: `Bearer ${token()}` } });
       const data = await res.json();
+      if (!data.ok) return;
 
-      if (!data.ok || !data.detalle?.length) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--color-gray-mid)">Sin líneas de detalle</td></tr>';
-        return;
+      const modal   = document.getElementById('modalDetalle');
+      const titulo  = document.getElementById('modalTitulo');
+      const cuerpo  = document.getElementById('modalCuerpo');
+
+      titulo.textContent = `Detalle Folio #${folio}`;
+
+      if (!data.detalle || !data.detalle.length) {
+        cuerpo.innerHTML = '<p style="text-align:center;color:var(--color-text-muted)">Sin líneas de detalle.</p>';
+      } else {
+        const cabecera = data.detalle[0];
+        cuerpo.innerHTML = `
+          <div class="modal-info-grid">
+            <div class="modal-info-item"><span class="modal-info-label">Cliente</span><span class="modal-info-val">${cabecera.cliente || '—'}</span></div>
+            <div class="modal-info-item"><span class="modal-info-label">Fecha</span><span class="modal-info-val">${cabecera.fecha_formato || '—'}</span></div>
+            <div class="modal-info-item"><span class="modal-info-label">Vendedor</span><span class="modal-info-val">${cabecera.CodVendedor || '—'}</span></div>
+          </div>
+          <div class="tabla-wrapper" style="margin-top:var(--space-4)">
+            <table class="ventas-tabla">
+              <thead><tr>
+                <th>Producto</th><th>Descripción</th>
+                <th style="text-align:right">Cant.</th>
+                <th style="text-align:right">P. Lista</th>
+                <th style="text-align:right">P. Cobrado</th>
+                <th style="text-align:right">Descuento</th>
+                <th style="text-align:right">Total Línea</th>
+              </tr></thead>
+              <tbody>
+                ${data.detalle.map(d => `
+                  <tr>
+                    <td>${d.CodArticulo || '—'}</td>
+                    <td>${d.descripcion || '—'}</td>
+                    <td style="text-align:right">${d.cantidad ?? '—'}</td>
+                    <td style="text-align:right">${formatCLP(d.precioLista)}</td>
+                    <td style="text-align:right">${formatCLP(d.precioCobrado)}</td>
+                    <td style="text-align:right">${formatCLP(d.descuento)}</td>
+                    <td style="text-align:right">${formatCLP(d.totalLinea)}</td>
+                  </tr>`).join('')}
+              </tbody>
+            </table>
+          </div>`;
       }
 
-      const total = data.detalle.reduce((s, l) => s + (Number(l.TotLinea) || 0), 0);
-      tbody.innerHTML = data.detalle.map(l => `
-        <tr>
-          <td><code>${l.CodProd || '—'}</code></td>
-          <td>${l.DesProd || '—'}</td>
-          <td style="text-align:center">${l.CantFacturada ?? '—'}</td>
-          <td style="text-align:right">${formatCLP(l.precio_unitario_cobrado)}</td>
-          <td style="text-align:right">${formatCLP(l.precio_historico_ajustado)}</td>
-          <td style="text-align:right">${l.pct_descuento != null ? l.pct_descuento + '%' : '—'}</td>
-          <td style="text-align:right"><strong>${formatCLP(l.TotLinea)}</strong></td>
-        </tr>
-      `).join('');
-      totalEl.textContent = formatCLP(total);
-
+      modal.classList.remove('hidden');
+      modal.setAttribute('aria-hidden', 'false');
     } catch (err) {
       console.error('[abrirDetalle]', err);
-      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--color-danger)">⚠️ Error al cargar detalle</td></tr>';
     }
   }
 
   function cerrarModal() {
-    document.getElementById('modalOverlay').classList.remove('modal-overlay--visible');
-    document.getElementById('modalOverlay').setAttribute('aria-hidden', 'true');
-    document.body.style.overflow = '';
+    const modal = document.getElementById('modalDetalle');
+    modal.classList.add('hidden');
+    modal.setAttribute('aria-hidden', 'true');
   }
 
   // ── Exportar CSV ─────────────────────────────────────────────────────────────────────────
   function exportarCSV() {
-    const headers = ['Folio','Fecha','Cliente','Vendedor','Monto','Descuento'];
-    const filas   = estado.ventasFiltradas.map(v => [
-      v.Folio || '',
-      v.fecha_formato || '',
-      `"${(v.cliente     || '').replace(/"/g,'""')}"`,
-      v.CodVendedor || '',
-      v.monto       || 0,
-      v.descuento   || 0,
-    ].join(','));
-    const csv  = [headers.join(','), ...filas].join('\n');
+    const datos = sortVentas(estado.ventasFiltradas);
+    if (!datos.length) return;
+
+    const cab  = ['Folio','Fecha','Cliente','Vendedor','Monto','Descuento'];
+    const rows = datos.map(v => [
+      v.Folio, v.fecha_formato, v.cliente, v.CodVendedor,
+      v.monto, v.descuento
+    ].map(c => `"${String(c ?? '').replace(/"/g,'""')}"`).join(','));
+
+    const csv  = [cab.join(','), ...rows].join('\n');
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
     const url  = URL.createObjectURL(blob);
-    const a    = Object.assign(document.createElement('a'), {
-      href: url, download: `ventas_${new Date().toISOString().slice(0,10)}.csv`
-    });
-    document.body.appendChild(a); a.click();
-    document.body.removeChild(a); URL.revokeObjectURL(url);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `ventas_${getParams().mes}_${getParams().anio}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
-  // ── buildLayout ──────────────────────────────────────────────────────────────────────────
-  function buildLayout() {
-    document.getElementById('pageLoader').style.display = 'none';
-    document.getElementById('mainContent').innerHTML = `
-
-      <!-- Filtros -->
-      <section class="filtros-bar">
-        <div class="filtros-group">
-          <label for="filtroMes">Mes</label>
-          <select id="filtroMes" class="filtro-select"></select>
-        </div>
-        <div class="filtros-group">
-          <label for="filtroAnio">Año</label>
-          <select id="filtroAnio" class="filtro-select"></select>
-        </div>
-        <div class="filtros-group">
-          <label for="filtroVendedor">Vendedor</label>
-          <select id="filtroVendedor" class="filtro-select">
-            <option value="">Todos</option>
-          </select>
-        </div>
-        <div class="filtros-actions">
-          <button id="btnBuscar" class="btn btn-primary">Buscar</button>
-          <button id="btnLimpiar" class="btn btn-ghost">Limpiar</button>
-          <button id="btnExportar" class="btn btn-ghost">Exportar CSV</button>
-        </div>
-      </section>
-
-      <!-- KPIs -->
-      <section class="kpis-grid">
-        <div class="kpi-card">
-          <span class="kpi-label">Total Ventas</span>
-          <span class="kpi-valor" id="kpiTotalVentas">—</span>
-        </div>
-        <div class="kpi-card">
-          <span class="kpi-label">Meta del Mes</span>
-          <span class="kpi-valor" id="kpiMeta">—</span>
-        </div>
-        <div class="kpi-card">
-          <span class="kpi-label">Descuentos</span>
-          <span class="kpi-valor" id="kpiDescuento">—</span>
-        </div>
-        <div class="kpi-card kpi-card--progress">
-          <span class="kpi-label">Progreso Meta</span>
-          <span class="kpi-valor" id="kpiProgresoPct">—</span>
-          <div class="progreso-bar"><div id="progresoFill" class="progreso-fill"></div></div>
-        </div>
-      </section>
-
-      <!-- Gráfico -->
-      <section class="grafico-section">
-        <h2 class="section-title">Evolución de Ventas</h2>
-        <div class="grafico-wrapper">
-          <canvas id="graficoVentas"></canvas>
-        </div>
-      </section>
-
-      <!-- Tabla Vendedores: 6 columnas (filtrada por mes/año) -->
-      <section class="tabla-section">
-        <div class="tabla-header">
-          <div>
-            <h2 class="section-title">Ventas por Vendedor</h2>
-          </div>
-        </div>
-        <div class="tabla-scroll">
-          <table class="ventas-tabla tabla-vendedores">
-            <thead>
-              <tr>
-                <th style="width:110px">Cód. Vendedor</th>
-                <th>Nombre Vendedor</th>
-                <th style="text-align:center;width:80px">Folios</th>
-                <th style="text-align:right">Total Cobrado</th>
-                <th style="text-align:right">Venta Real (Lista)</th>
-                <th style="text-align:right;width:130px">% Descuento</th>
-              </tr>
-            </thead>
-            <tbody id="tbodyVendedores">
-              <tr class="tabla-empty"><td colspan="6">Aplica los filtros para ver los datos</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <!-- Tabla Ventas del Mes -->
-      <section class="tabla-section">
-        <div class="tabla-header">
-          <h2 class="section-title">Ventas del Mes</h2>
-          <div class="tabla-controles">
-            <input type="text" id="tablaBusqueda" class="tabla-busqueda" placeholder="Buscar folio o cliente…" />
-            <span class="tabla-total" id="tablaTotal"></span>
-          </div>
-        </div>
-        <div class="tabla-scroll">
-          <table class="ventas-tabla">
-            <thead>
-              <tr>
-                <th data-col="Folio">Folio</th>
-                <th data-col="fecha_formato">Fecha</th>
-                <th data-col="cliente">Cliente</th>
-                <th data-col="CodVendedor">Vendedor</th>
-                <th data-col="monto">Monto</th>
-                <th data-col="descuento">Descuento</th>
-                <th>Detalle</th>
-              </tr>
-            </thead>
-            <tbody id="ventasTbody">
-              <tr class="tabla-empty"><td colspan="7">Aplica los filtros para ver las ventas</td></tr>
-            </tbody>
-          </table>
-        </div>
-        <div class="paginacion" id="paginacion"></div>
-      </section>
-
-      <!-- Modal detalle folio -->
-      <div class="modal-overlay" id="modalOverlay" aria-hidden="true" role="dialog" aria-modal="true">
-        <div class="modal-panel">
-          <div class="modal-header">
-            <div>
-              <h3 class="modal-titulo" id="modalTitulo">Detalle Folio</h3>
-              <p class="modal-subtitulo" id="modalSubtitulo"></p>
-            </div>
-            <button class="modal-cerrar" id="modalCerrar" aria-label="Cerrar modal">✕</button>
-          </div>
-          <div class="modal-resumen" id="modalResumen"></div>
-          <div class="tabla-scroll">
-            <table class="ventas-tabla modal-tabla">
-              <thead>
-                <tr>
-                  <th>Código</th>
-                  <th>Descripción</th>
-                  <th>Cantidad</th>
-                  <th>Precio Cobrado</th>
-                  <th>Precio Histórico</th>
-                  <th>% Desc.</th>
-                  <th>Total Línea</th>
-                </tr>
-              </thead>
-              <tbody id="modalTbody"></tbody>
-            </table>
-          </div>
-          <div class="modal-footer">
-            <span>Total Folio</span>
-            <strong id="modalTotalValor">—</strong>
-          </div>
-        </div>
-      </div>
-    `;
-  }
-
-  // ── Carga principal ────────────────────────────────────────────────────────────────────────
-  async function buscar() {
-    const params = getParams();
-
-    document.getElementById('ventasTbody').innerHTML =
-      Array(5).fill('<tr>' + Array(7).fill(
-        '<td><div class="skeleton" style="height:14px;width:80%"></div></td>'
-      ).join('') + '</tr>').join('');
-
-    document.getElementById('tbodyVendedores').innerHTML =
-      Array(3).fill('<tr>' + Array(6).fill(
-        '<td><div class="skeleton" style="height:14px;width:70%"></div></td>'
-      ).join('') + '</tr>').join('');
-
-    try {
-      const [resMeta, resVentas, resVend] = await Promise.all([
-        fetch(`${API}/meta?${new URLSearchParams({ anio: params.anio })}`,
-          { headers: { Authorization: `Bearer ${token()}` } }),
-        fetch(`${API}?${new URLSearchParams(params)}`,
-          { headers: { Authorization: `Bearer ${token()}` } }),
-        fetch(`${API}/resumen-vendedores?${new URLSearchParams(params)}`,
-          { headers: { Authorization: `Bearer ${token()}` } }),
-      ]);
-
-      const [dataMeta, dataVentas, dataVend] = await Promise.all([
-        resMeta.json(), resVentas.json(), resVend.json()
-      ]);
-
-      const metaMes = dataMeta.ok ? dataMeta.metaMes : 0;
-
-      ventasMes              = dataVentas.ok ? dataVentas.ventas || [] : [];
-      estado.ventas          = ventasMes;
-      estado.ventasFiltradas = ventasMes;
-      estado.paginaActual    = 1;
-
-      const totalVentas    = ventasMes.reduce((s, v) => s + (Number(v.monto)     || 0), 0);
-      const totalDescuento = ventasMes.reduce((s, v) => s + (Number(v.descuento) || 0), 0);
-      renderKpis(totalVentas, metaMes, totalDescuento);
-
-      if (dataVend.ok) {
-        renderTablaVendedores(dataVend.vendedores);
-      }
-
-      renderTabla();
-      cargarGrafico();
-
-    } catch (err) {
-      console.error('[buscar]', err);
-      document.getElementById('ventasTbody').innerHTML =
-        '<tr class="tabla-empty"><td colspan="7">⚠️ Error al cargar ventas.</td></tr>';
-      document.getElementById('tbodyVendedores').innerHTML =
-        '<tr class="tabla-empty"><td colspan="6">⚠️ Error al cargar vendedores.</td></tr>';
-    }
+  // ── Búsqueda ─────────────────────────────────────────────────────────────────────────────
+  function buscar() {
+    estado.paginaActual = 1;
+    renderTabla();
   }
 
   // ── Init ─────────────────────────────────────────────────────────────────────────────────
   async function init() {
     const usuario = await verificarSesion();
     if (!usuario) return;
-    estado.usuario = usuario;
 
-    buildLayout();
+    estado.usuario = usuario;
     cargarSidebar(usuario);
     initFiltros(usuario);
+
+    async function cargarTodo() {
+      const { mes, anio } = getParams();
+      const qs = new URLSearchParams({ mes, anio });
+
+      const [resKpi, resVentas, resVendedores] = await Promise.all([
+        fetch(`${API}/kpis?${qs}`,               { headers: { Authorization: `Bearer ${token()}` } }),
+        fetch(`${API}/ventas-mes?${qs}`,          { headers: { Authorization: `Bearer ${token()}` } }),
+        fetch(`${API}/resumen-vendedores?${qs}`,  { headers: { Authorization: `Bearer ${token()}` } }),
+      ]);
+
+      const [dKpi, dVentas, dVendedores] = await Promise.all([
+        resKpi.json(), resVentas.json(), resVendedores.json()
+      ]);
+
+      if (dKpi.ok)       renderKpis(dKpi.totalVentas, dKpi.metaMes, dKpi.totalDescuento);
+      if (dVentas.ok)    { estado.ventas = dVentas.ventas; estado.ventasFiltradas = dVentas.ventas; renderTabla(); }
+      if (dVendedores.ok) renderTablaVendedores(dVendedores.vendedores);
+
+      await cargarGrafico();
+
+      document.getElementById('pageLoader')?.classList.add('hidden');
+    }
+
+    await cargarTodo();
     initSort();
 
-    document.getElementById('btnBuscar').addEventListener('click', buscar);
-    document.getElementById('btnLimpiar').addEventListener('click', () => {
-      document.getElementById('filtroVendedor').value = '';
-      ventasMes = estado.ventas = estado.ventasFiltradas = [];
-      estado.paginaActual = 1;
-      renderKpis(0, 0, 0);
-      document.getElementById('ventasTbody').innerHTML =
-        '<tr class="tabla-empty"><td colspan="7">Aplica los filtros para ver las ventas</td></tr>';
-      document.getElementById('tbodyVendedores').innerHTML =
-        '<tr class="tabla-empty"><td colspan="6">—</td></tr>';
-      renderPaginacion(0);
-    });
-    document.getElementById('btnExportar').addEventListener('click', exportarCSV);
-    document.getElementById('tablaBusqueda').addEventListener('input', () => {
-      estado.paginaActual = 1; renderTabla();
-    });
-
-    document.getElementById('modalCerrar').addEventListener('click', cerrarModal);
-    document.getElementById('modalOverlay').addEventListener('click', e => {
+    document.getElementById('btnAplicar')?.addEventListener('click', cargarTodo);
+    document.getElementById('tablaBusqueda')?.addEventListener('input', buscar);
+    document.getElementById('btnExportar')?.addEventListener('click', exportarCSV);
+    document.getElementById('btnCerrarModal')?.addEventListener('click', cerrarModal);
+    document.getElementById('modalDetalle')?.addEventListener('click', e => {
       if (e.target === e.currentTarget) cerrarModal();
     });
     document.addEventListener('keydown', e => { if (e.key === 'Escape') cerrarModal(); });
-
-    buscar();
   }
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
-  else init();
+  document.addEventListener('DOMContentLoaded', init);
 
 })();
