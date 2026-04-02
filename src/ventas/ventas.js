@@ -245,6 +245,14 @@
 
   // ── Tabla 1: resumen por vendedor ────────────────────────────────────────────
   // Columnas: Cód. Vendedor | Nombre Vendedor | Folios | Total Ventas | Venta Real | Descuento
+  //
+  // Definiciones (calculadas en el backend sobre iw_gmovi + iw_tprod):
+  //   Total Ventas   = SUM(m.TotLinea)                     → lo que pagó el cliente (con descuento)
+  //   Venta Real     = SUM(t.PrecioVta * m.CantFacturada)  → precio lista sin descuento
+  //   Descuento      = Venta Real − Total Ventas            → diferencia real en pesos
+  //
+  // IMPORTANTE: ventaReal viene directamente del API (v.ventaReal).
+  // NO se recalcula en el frontend para evitar inconsistencias.
 
   // ── Tabla 2: ventas del mes (paginada) ───────────────────────────────────────
   function sortVentas(arr) {
@@ -603,19 +611,16 @@
         if (!dataVend.vendedores.length) {
           tbody.innerHTML = '<tr class="tabla-empty"><td colspan="6">Sin datos</td></tr>';
         } else {
-          tbody.innerHTML = dataVend.vendedores.map(v => {
-            const ventaReal = (Number(v.totalVentas) || 0) - (Number(v.totalDescuento) || 0);
-            return `
+          tbody.innerHTML = dataVend.vendedores.map(v => `
               <tr>
                 <td><strong>${v.codVendedor}</strong></td>
                 <td>${v.nomVendedor || '—'}</td>
                 <td style="text-align:center">${v.totalFolios}</td>
                 <td style="text-align:right">${formatCLP(v.totalVentas)}</td>
-                <td style="text-align:right">${formatCLP(ventaReal)}</td>
+                <td style="text-align:right">${formatCLP(v.ventaReal)}</td>
                 <td style="text-align:right">${formatCLP(v.totalDescuento)}</td>
               </tr>
-            `;
-          }).join('');
+            `).join('');
         }
       }
 
