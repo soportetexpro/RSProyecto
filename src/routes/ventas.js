@@ -111,6 +111,17 @@ router.get('/meta', requireAuth, async (req, res) => {
 });
 
 // ── GET /api/ventas/resumen-vendedores ────────────────────────────────────────────────────────────────────────────
+//
+// NOTA IMPORTANTE — lógica de ventaReal:
+//   h.SubTotal en Softland es el monto que pagó el cliente (ya con descuento aplicado).
+//   Por lo tanto:
+//     totalVentas   = SUM(SubTotal)                  → monto real cobrado al cliente
+//     totalDescuento= SUM(SubTotal * TotDesc / 100)  → monto descontado
+//     ventaReal     = totalVentas + totalDescuento    → precio lista sin descuento
+//
+//   Ejemplo: producto lista $32.795, descuento 6,54% → vendido a $30.782
+//     ventaReal = $30.782 + $2.013 = $32.795 ✓
+//
 router.get('/resumen-vendedores', requireAuth, async (req, res) => {
   try {
     const codigos = getCodigos(req);
@@ -132,7 +143,7 @@ router.get('/resumen-vendedores', requireAuth, async (req, res) => {
           COUNT(DISTINCT h.Folio)                               AS totalFolios,
           SUM(h.SubTotal)                                       AS totalVentas,
           SUM(ISNULL(h.SubTotal * h.TotDesc / 100, 0))          AS totalDescuento,
-          SUM(h.SubTotal) - SUM(ISNULL(h.SubTotal * h.TotDesc / 100, 0)) AS ventaReal
+          SUM(h.SubTotal) + SUM(ISNULL(h.SubTotal * h.TotDesc / 100, 0)) AS ventaReal
         FROM [PRODIN].[softland].[iw_gsaen] h
         LEFT JOIN [PRODIN].[softland].[iw_gmaes] v
           ON v.CodVendedor = h.CodVendedor
@@ -140,6 +151,7 @@ router.get('/resumen-vendedores', requireAuth, async (req, res) => {
           AND MONTH(h.Fecha) = @mes
           AND YEAR(h.Fecha)  = @anio
           AND h.Tipo IN ('F','N','D')
+          AND h.Estado <> 'A'
         GROUP BY h.CodVendedor, v.NomVendedor
         ORDER BY totalVentas DESC
       `);
