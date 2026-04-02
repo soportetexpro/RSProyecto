@@ -27,12 +27,16 @@
   const MINUTOS_INACTIVIDAD = 10;
   const SEGUNDOS_AVISO      = 60;
   const MS_INACTIVIDAD      = MINUTOS_INACTIVIDAD * 60 * 1000;
-  const KEY_ULTIMO_ACT      = 'inac_ultimo_act';   // clave en localStorage
-  const LOGIN_URL           = '/login/index.html'; // ruta absoluta desde raíz (siempre usar esta)
+  const KEY_ULTIMO_ACT      = 'inac_ultimo_act';
+
+  // LOGIN_URL: ruta relativa al login desde cualquier módulo en src/<modulo>/
+  // Se usa ../login/index.html para que funcione correctamente desde
+  // src/ventas/, src/bodega/, src/facturacion/, etc.
+  const LOGIN_URL = '../login/index.html';
 
   // ── Estado local de esta pestaña ──────────────────────────────────
-  let timerChequeo   = null;   // setInterval que chequea el localStorage
-  let timerCuenta    = null;   // setInterval cuenta regresiva del aviso
+  let timerChequeo   = null;
+  let timerCuenta    = null;
   let cuentaRestante = SEGUNDOS_AVISO;
   let avisando       = false;
 
@@ -48,7 +52,7 @@
 
   function tiempoInactivo() {
     const ultima = leerUltimaActividad();
-    if (!ultima) return MS_INACTIVIDAD + 1; // si no existe, tratar como expirado
+    if (!ultima) return MS_INACTIVIDAD + 1;
     return Date.now() - ultima;
   }
 
@@ -188,7 +192,7 @@
     clearInterval(timerCuenta);
     avisando = false;
     document.getElementById('inac-overlay')?.classList.remove('inac-visible');
-    escribirActividad();   // reinicia el reloj global en localStorage
+    escribirActividad();
   }
 
   function cerrarSesion() {
@@ -197,8 +201,7 @@
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     localStorage.removeItem(KEY_ULTIMO_ACT);
-    // Siempre usar la URL absoluta LOGIN_URL para garantizar redirección correcta
-    // sin importar desde qué módulo o ruta se dispare el cierre de sesión
+    // LOGIN_URL es relativa (../login/index.html) — funciona desde src/<cualquier-modulo>/
     window.location.href = LOGIN_URL + '?razon=inactividad';
   }
 
@@ -206,17 +209,13 @@
   const EVENTOS = ['mousemove','mousedown','keydown','scroll','touchstart','click'];
 
   function onActividad() {
-    if (avisando) return;   // mientras el aviso está, ignorar
+    if (avisando) return;
     escribirActividad();
   }
 
   // ── Chequeo periódico (cada 5 s) ───────────────────────────────────────
-  // En vez de un setTimeout que se reinicia, chequeamos el valor real del
-  // localStorage cada 5 segundos. Así si el usuario navegó a otra página
-  // y el timer ya expiró, esta página también lo detecta.
   function chequear() {
     if (!localStorage.getItem('token')) {
-      // Token eliminado (otra pestaña cerró sesión) — ir siempre al login absoluto
       window.location.href = LOGIN_URL + '?razon=inactividad';
       return;
     }
@@ -228,21 +227,17 @@
 
   // ── Inicialización ──────────────────────────────────────────────────────────────
   function iniciar() {
-    if (!localStorage.getItem('token')) return;   // no logueado, nada que hacer
+    if (!localStorage.getItem('token')) return;
 
     inyectarEstilos();
     crearOverlay();
 
-    // Registrar actividad en todos los eventos
     EVENTOS.forEach(ev => document.addEventListener(ev, onActividad, { passive: true }));
 
-    // Marcar actividad inicial si no hay registro previo
     if (!leerUltimaActividad()) escribirActividad();
 
-    // Chequear cada 5 segundos
     timerChequeo = setInterval(chequear, 5000);
 
-    // También chequear al volver a la pestaña
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') chequear();
     });

@@ -244,6 +244,7 @@
   }
 
   // ── Tabla 1: resumen por vendedor ────────────────────────────────────────────
+  // Columnas: Cód. Vendedor | Nombre | Folios | Total Ventas | Venta Real | Descuento
 
   // ── Tabla 2: ventas del mes (paginada) ───────────────────────────────────────
   function sortVentas(arr) {
@@ -354,7 +355,6 @@
       <div class="modal-chip"><span>Descuento</span><strong>${formatCLP(venta.descuento)}</strong></div>
     ` : '';
 
-    // ── CAMBIO PASO 2 — colspan 6 → 7 ───────────────────────────────────────
     tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:2rem">Cargando...</td></tr>';
     totalEl.textContent = '—';
     overlay.classList.add('modal-overlay--visible');
@@ -367,25 +367,23 @@
       });
       const data = await res.json();
 
-      // ── CAMBIO PASO 2 — colspan 6 → 7 ─────────────────────────────────────
       if (!data.ok || !data.detalle?.length) {
         tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--color-gray-mid)">Sin líneas de detalle</td></tr>';
         return;
       }
 
-      // ── CAMBIO PASO 2 — columnas nuevas ────────────────────────────────────
       const total = data.detalle.reduce((s, l) => s + (Number(l.TotLinea) || 0), 0);
-tbody.innerHTML = data.detalle.map(l => `
-  <tr>
-    <td><code>${l.CodProd || '—'}</code></td>
-    <td>${l.DesProd || '—'}</td>
-    <td style="text-align:center">${l.CantFacturada ?? '—'}</td>
-    <td style="text-align:right">${formatCLP(l.precio_unitario_cobrado)}</td>
-    <td style="text-align:right">${formatCLP(l.precio_historico_ajustado)}</td>
-    <td style="text-align:right">${l.pct_descuento != null ? l.pct_descuento + '%' : '—'}</td>
-    <td style="text-align:right"><strong>${formatCLP(l.TotLinea)}</strong></td>
-  </tr>
-`).join('');
+      tbody.innerHTML = data.detalle.map(l => `
+        <tr>
+          <td><code>${l.CodProd || '—'}</code></td>
+          <td>${l.DesProd || '—'}</td>
+          <td style="text-align:center">${l.CantFacturada ?? '—'}</td>
+          <td style="text-align:right">${formatCLP(l.precio_unitario_cobrado)}</td>
+          <td style="text-align:right">${formatCLP(l.precio_historico_ajustado)}</td>
+          <td style="text-align:right">${l.pct_descuento != null ? l.pct_descuento + '%' : '—'}</td>
+          <td style="text-align:right"><strong>${formatCLP(l.TotLinea)}</strong></td>
+        </tr>
+      `).join('');
       totalEl.textContent = formatCLP(total);
 
     } catch (err) {
@@ -458,16 +456,22 @@ tbody.innerHTML = data.detalle.map(l => `
       if (dataVend.ok) {
         const tbody = document.getElementById('tbodyVendedores');
         if (!dataVend.vendedores.length) {
-          tbody.innerHTML = '<tr class="tabla-empty"><td colspan="4">Sin datos</td></tr>';
+          tbody.innerHTML = '<tr class="tabla-empty"><td colspan="6">Sin datos</td></tr>';
         } else {
-          tbody.innerHTML = dataVend.vendedores.map(v => `
-            <tr>
-              <td><strong>${v.codVendedor}</strong></td>
-              <td style="text-align:center">${v.totalFolios}</td>
-              <td style="text-align:right">${formatCLP(v.totalVentas)}</td>
-              <td style="text-align:right">${formatCLP(v.totalDescuento)}</td>
-            </tr>
-          `).join('');
+          tbody.innerHTML = dataVend.vendedores.map(v => {
+            // ventaReal = totalVentas - totalDescuento para ese vendedor
+            const ventaReal = (Number(v.totalVentas) || 0) - (Number(v.totalDescuento) || 0);
+            return `
+              <tr>
+                <td><strong>${v.codVendedor}</strong></td>
+                <td>${v.nomVendedor || '—'}</td>
+                <td style="text-align:center">${v.totalFolios}</td>
+                <td style="text-align:right">${formatCLP(v.totalVentas)}</td>
+                <td style="text-align:right">${formatCLP(ventaReal)}</td>
+                <td style="text-align:right">${formatCLP(v.totalDescuento)}</td>
+              </tr>
+            `;
+          }).join('');
         }
       }
 
@@ -500,7 +504,7 @@ tbody.innerHTML = data.detalle.map(l => `
       document.getElementById('ventasTbody').innerHTML =
         '<tr class="tabla-empty"><td colspan="7">Aplica los filtros para ver las ventas</td></tr>';
       document.getElementById('tbodyVendedores').innerHTML =
-        '<tr class="tabla-empty"><td colspan="4">—</td></tr>';
+        '<tr class="tabla-empty"><td colspan="6">—</td></tr>';
       renderPaginacion(0);
     });
     document.getElementById('btnExportar').addEventListener('click', exportarCSV);
