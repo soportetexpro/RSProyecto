@@ -112,15 +112,17 @@ router.get('/meta', requireAuth, async (req, res) => {
 
 // ── GET /api/ventas/resumen-vendedores ────────────────────────────────────────────────────────────────────────────
 //
-// NOTA IMPORTANTE — lógica de ventaReal:
-//   h.SubTotal en Softland es el monto que pagó el cliente (ya con descuento aplicado).
-//   Por lo tanto:
-//     totalVentas   = SUM(SubTotal)                  → monto real cobrado al cliente
-//     totalDescuento= SUM(SubTotal * TotDesc / 100)  → monto descontado
-//     ventaReal     = totalVentas + totalDescuento    → precio lista sin descuento
+// Lógica de cálculo (misma base que getDetalleFolio en models/venta.js):
 //
-//   Ejemplo: producto lista $32.795, descuento 6,54% → vendido a $30.782
-//     ventaReal = $30.782 + $2.013 = $32.795 ✓
+//   El campo h.TotDesc de iw_gsaen viene en 0 para la mayoría de folios
+//   en Softland y NO refleja el descuento real por línea.
+//
+//   Descuento real = diferencia entre precio lista (iw_tprod.PrecioVta)
+//                   y precio cobrado (iw_gmovi.TotLinea / CantFacturada)
+//
+//   totalVentas    = SUM(m.TotLinea)              → lo que pagó el cliente
+//   ventaReal      = SUM(t.PrecioVta * m.CantFacturada) → precio lista sin descuento
+//   totalDescuento = ventaReal - totalVentas      → diferencia real en pesos
 //
 router.get('/resumen-vendedores', requireAuth, async (req, res) => {
   try {
@@ -138,13 +140,17 @@ router.get('/resumen-vendedores', requireAuth, async (req, res) => {
       .input('anio', sql.Int, anio)
       .query(`
         SELECT
-          h.CodVendedor                                         AS codVendedor,
-          ISNULL(v.NomVendedor, h.CodVendedor)                  AS nomVendedor,
-          COUNT(DISTINCT h.Folio)                               AS totalFolios,
-          SUM(h.SubTotal)                                       AS totalVentas,
-          SUM(ISNULL(h.SubTotal * h.TotDesc / 100, 0))          AS totalDescuento,
-          SUM(h.SubTotal) + SUM(ISNULL(h.SubTotal * h.TotDesc / 100, 0)) AS ventaReal
+          h.CodVendedor                                              AS codVendedor,
+          ISNULL(v.NomVendedor, h.CodVendedor)                       AS nomVendedor,
+          COUNT(DISTINCT h.Folio)                                    AS totalFolios,
+          ROUND(SUM(m.TotLinea), 0)                                  AS totalVentas,
+          ROUND(SUM(t.PrecioVta * m.CantFacturada), 0)               AS ventaReal,
+          ROUND(SUM(t.PrecioVta * m.CantFacturada) - SUM(m.TotLinea), 0) AS totalDescuento
         FROM [PRODIN].[softland].[iw_gsaen] h
+        INNER JOIN [PRODIN].[softland].[iw_gmovi] m
+          ON m.NroInt = h.NroInt AND m.Tipo = h.Tipo
+        INNER JOIN [PRODIN].[softland].[iw_tprod] t
+          ON t.CodProd = m.CodProd
         LEFT JOIN [PRODIN].[softland].[iw_gmaes] v
           ON v.CodVendedor = h.CodVendedor
         WHERE h.CodVendedor IN (${codigos.map(c => `'${c}'`).join(',')})
