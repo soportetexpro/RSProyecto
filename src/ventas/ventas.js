@@ -15,6 +15,14 @@
  *   Endpoints protegidos de /api/ventas y /api/auth/me.
  *
  * 4 KPIs | 1 Gráfico líneas | 3 Tablas | Modal detalle
+ *
+ * Tabla Vendedores — 6 columnas:
+ *   Cód. Vendedor | Nombre Vendedor | Folios | Total Ventas | Venta Real | % Descuento
+ *
+ *   Definiciones (calculadas en backend sobre iw_gmovi + iw_tprod):
+ *     Total Ventas  = SUM(m.TotLinea)                        → lo que pagó el cliente
+ *     Venta Real    = SUM(t.PrecioVta * m.CantFacturada)     → precio lista sin descuento
+ *     % Descuento   = (1 - Total Ventas / Venta Real) * 100  → descuento otorgado
  */
 
 (function () {
@@ -35,7 +43,7 @@
     usuario:         null,
   };
 
-  // ── Formato CLP ─────────────────────────────────────────────────────────────
+  // ── Formato CLP ────────────────────────────────────────────────────────────────────────
   function formatCLP(v) {
     if (v == null || v === '') return '—';
     return new Intl.NumberFormat('es-CL', {
@@ -43,7 +51,15 @@
     }).format(Number(v));
   }
 
-  // ── Auth ─────────────────────────────────────────────────────────────────────
+  // ── Formato % ─────────────────────────────────────────────────────────────────────────
+  function formatPct(v) {
+    if (v == null || v === '') return '—';
+    const n = Number(v);
+    if (isNaN(n)) return '—';
+    return n.toFixed(2) + '%';
+  }
+
+  // ── Auth ─────────────────────────────────────────────────────────────────────────────────
   async function verificarSesion() {
     if (!token()) { window.location.href = '../login/index.html'; return null; }
     try {
@@ -54,7 +70,7 @@
     } catch { window.location.href = '../login/index.html'; return null; }
   }
 
-  // ── Sidebar ──────────────────────────────────────────────────────────────────
+  // ── Sidebar ──────────────────────────────────────────────────────────────────────────────
   const MODULOS = [
     { nombre:'Ventas',        icon:'📊', url:'../ventas/index.html',       area:['ventas','gerencia'] },
     { nombre:'Facturación',   icon:'🧾', url:'../facturacion/index.html',  area:['facturacion','contabilidad','gerencia'] },
@@ -101,7 +117,7 @@
     });
   }
 
-  // ── Selectores mes/año ───────────────────────────────────────────────────────
+  // ── Selectores mes/año ────────────────────────────────────────────────────────────────────────
   function initFiltros(usuario) {
     const hoy   = new Date();
     const meses = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
@@ -138,7 +154,7 @@
     };
   }
 
-  // ── KPIs ─────────────────────────────────────────────────────────────────────
+  // ── KPIs ─────────────────────────────────────────────────────────────────────────────────
   function renderKpis(totalVentas, metaMes, totalDescuento) {
     const progreso = metaMes > 0 ? Math.min(Math.round((totalVentas / metaMes) * 100), 999) : 0;
     const pct      = Math.min(progreso, 100);
@@ -155,7 +171,7 @@
                           : 'var(--color-danger)';
   }
 
-  // ── Gráfico de líneas ────────────────────────────────────────────────────────
+  // ── Gráfico de líneas ──────────────────────────────────────────────────────────────────────
   const MESES_LABEL = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 
   async function cargarGrafico() {
@@ -243,18 +259,7 @@
     }
   }
 
-  // ── Tabla 1: resumen por vendedor ────────────────────────────────────────────
-  // Columnas: Cód. Vendedor | Nombre Vendedor | Folios | Total Ventas | Venta Real | Descuento
-  //
-  // Definiciones (calculadas en el backend sobre iw_gmovi + iw_tprod):
-  //   Total Ventas   = SUM(m.TotLinea)                     → lo que pagó el cliente (con descuento)
-  //   Venta Real     = SUM(t.PrecioVta * m.CantFacturada)  → precio lista sin descuento
-  //   Descuento      = Venta Real − Total Ventas            → diferencia real en pesos
-  //
-  // IMPORTANTE: ventaReal viene directamente del API (v.ventaReal).
-  // NO se recalcula en el frontend para evitar inconsistencias.
-
-  // ── Tabla 2: ventas del mes (paginada) ───────────────────────────────────────
+  // ── Tabla 2: ventas del mes (paginada) ─────────────────────────────────────────────────────
   function sortVentas(arr) {
     return [...arr].sort((a, b) => {
       let va = a[estado.sortCol] ?? '';
@@ -347,7 +352,7 @@
     });
   }
 
-  // ── Tabla 3: Modal detalle folio ─────────────────────────────────────────────
+  // ── Tabla 3: Modal detalle folio ────────────────────────────────────────────────────────────
   async function abrirDetalle(folio) {
     const overlay = document.getElementById('modalOverlay');
     const tbody   = document.getElementById('modalTbody');
@@ -406,7 +411,7 @@
     document.body.style.overflow = '';
   }
 
-  // ── Exportar CSV ─────────────────────────────────────────────────────────────
+  // ── Exportar CSV ─────────────────────────────────────────────────────────────────────────
   function exportarCSV() {
     const headers = ['Folio','Fecha','Cliente','Vendedor','Monto','Descuento'];
     const filas   = estado.ventasFiltradas.map(v => [
@@ -427,7 +432,7 @@
     document.body.removeChild(a); URL.revokeObjectURL(url);
   }
 
-  // ── buildLayout: construye todo el HTML del mainContent ──────────────────────
+  // ── buildLayout: construye todo el HTML del mainContent ──────────────────────────────────
   function buildLayout() {
     document.getElementById('pageLoader').style.display = 'none';
     document.getElementById('mainContent').innerHTML = `
@@ -493,10 +498,10 @@
               <tr>
                 <th>Cód. Vendedor</th>
                 <th>Nombre Vendedor</th>
-                <th>Folios</th>
-                <th>Total Ventas</th>
-                <th>Venta Real</th>
-                <th>Descuento</th>
+                <th style="text-align:center">Folios</th>
+                <th style="text-align:right">Total Ventas</th>
+                <th style="text-align:right">Venta Real</th>
+                <th style="text-align:right">% Descuento</th>
               </tr>
             </thead>
             <tbody id="tbodyVendedores">
@@ -572,7 +577,7 @@
     `;
   }
 
-  // ── Carga principal ──────────────────────────────────────────────────────────
+  // ── Carga principal ────────────────────────────────────────────────────────────────────────
   async function buscar() {
     const params = getParams();
 
@@ -609,18 +614,28 @@
       if (dataVend.ok) {
         const tbody = document.getElementById('tbodyVendedores');
         if (!dataVend.vendedores.length) {
-          tbody.innerHTML = '<tr class="tabla-empty"><td colspan="6">Sin datos</td></tr>';
+          tbody.innerHTML = '<tr class="tabla-empty"><td colspan="6">Sin datos para el período seleccionado</td></tr>';
         } else {
           tbody.innerHTML = dataVend.vendedores.map(v => `
-              <tr>
-                <td><strong>${v.codVendedor}</strong></td>
-                <td>${v.nomVendedor || '—'}</td>
-                <td style="text-align:center">${v.totalFolios}</td>
-                <td style="text-align:right">${formatCLP(v.totalVentas)}</td>
-                <td style="text-align:right">${formatCLP(v.ventaReal)}</td>
-                <td style="text-align:right">${formatCLP(v.totalDescuento)}</td>
-              </tr>
-            `).join('');
+            <tr>
+              <td><strong>${v.codVendedor || '—'}</strong></td>
+              <td>${v.nomVendedor || '—'}</td>
+              <td style="text-align:center">${v.totalFolios ?? '—'}</td>
+              <td style="text-align:right">${formatCLP(v.totalVentas)}</td>
+              <td style="text-align:right">${formatCLP(v.ventaReal)}</td>
+              <td style="text-align:right">
+                <span style="
+                  display:inline-block;
+                  padding:2px 8px;
+                  border-radius:999px;
+                  font-size:0.82rem;
+                  font-weight:600;
+                  background:${Number(v.pctDescuento) > 15 ? 'rgba(220,53,69,0.12)' : Number(v.pctDescuento) > 5 ? 'rgba(245,166,35,0.12)' : 'rgba(0,200,140,0.12)'};
+                  color:${Number(v.pctDescuento) > 15 ? '#dc3545' : Number(v.pctDescuento) > 5 ? '#b07000' : '#00885a'};
+                ">${formatPct(v.pctDescuento)}</span>
+              </td>
+            </tr>
+          `).join('');
         }
       }
 
@@ -634,7 +649,7 @@
     }
   }
 
-  // ── Init ─────────────────────────────────────────────────────────────────────
+  // ── Init ─────────────────────────────────────────────────────────────────────────────────
   async function init() {
     const usuario = await verificarSesion();
     if (!usuario) return;
