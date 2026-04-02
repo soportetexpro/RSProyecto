@@ -244,7 +244,7 @@
   }
 
   // ── Tabla 1: resumen por vendedor ────────────────────────────────────────────
-  // Columnas: Cód. Vendedor | Nombre | Folios | Total Ventas | Venta Real | Descuento
+  // Columnas: Cód. Vendedor | Nombre Vendedor | Folios | Total Ventas | Venta Real | Descuento
 
   // ── Tabla 2: ventas del mes (paginada) ───────────────────────────────────────
   function sortVentas(arr) {
@@ -419,6 +419,151 @@
     document.body.removeChild(a); URL.revokeObjectURL(url);
   }
 
+  // ── buildLayout: construye todo el HTML del mainContent ──────────────────────
+  function buildLayout() {
+    document.getElementById('pageLoader').style.display = 'none';
+    document.getElementById('mainContent').innerHTML = `
+
+      <!-- Filtros -->
+      <section class="filtros-bar">
+        <div class="filtros-group">
+          <label for="filtroMes">Mes</label>
+          <select id="filtroMes" class="filtro-select"></select>
+        </div>
+        <div class="filtros-group">
+          <label for="filtroAnio">Año</label>
+          <select id="filtroAnio" class="filtro-select"></select>
+        </div>
+        <div class="filtros-group">
+          <label for="filtroVendedor">Vendedor</label>
+          <select id="filtroVendedor" class="filtro-select">
+            <option value="">Todos</option>
+          </select>
+        </div>
+        <div class="filtros-actions">
+          <button id="btnBuscar" class="btn btn-primary">Buscar</button>
+          <button id="btnLimpiar" class="btn btn-ghost">Limpiar</button>
+          <button id="btnExportar" class="btn btn-ghost">Exportar CSV</button>
+        </div>
+      </section>
+
+      <!-- KPIs -->
+      <section class="kpis-grid">
+        <div class="kpi-card">
+          <span class="kpi-label">Total Ventas</span>
+          <span class="kpi-valor" id="kpiTotalVentas">—</span>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-label">Meta del Mes</span>
+          <span class="kpi-valor" id="kpiMeta">—</span>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-label">Descuentos</span>
+          <span class="kpi-valor" id="kpiDescuento">—</span>
+        </div>
+        <div class="kpi-card kpi-card--progress">
+          <span class="kpi-label">Progreso Meta</span>
+          <span class="kpi-valor" id="kpiProgresoPct">—</span>
+          <div class="progreso-bar"><div id="progresoFill" class="progreso-fill"></div></div>
+        </div>
+      </section>
+
+      <!-- Gráfico -->
+      <section class="grafico-section">
+        <h2 class="section-title">Evolución de Ventas</h2>
+        <div class="grafico-wrapper">
+          <canvas id="graficoVentas"></canvas>
+        </div>
+      </section>
+
+      <!-- Tabla Vendedores: 6 columnas -->
+      <section class="tabla-section">
+        <h2 class="section-title">Ventas por Vendedor</h2>
+        <div class="tabla-scroll">
+          <table class="ventas-tabla tabla-vendedores">
+            <thead>
+              <tr>
+                <th>Cód. Vendedor</th>
+                <th>Nombre Vendedor</th>
+                <th>Folios</th>
+                <th>Total Ventas</th>
+                <th>Venta Real</th>
+                <th>Descuento</th>
+              </tr>
+            </thead>
+            <tbody id="tbodyVendedores">
+              <tr class="tabla-empty"><td colspan="6">Aplica los filtros para ver los datos</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Tabla Ventas del Mes -->
+      <section class="tabla-section">
+        <div class="tabla-header">
+          <h2 class="section-title">Ventas del Mes</h2>
+          <div class="tabla-controles">
+            <input type="text" id="tablaBusqueda" class="tabla-busqueda" placeholder="Buscar folio o cliente…" />
+            <span class="tabla-total" id="tablaTotal"></span>
+          </div>
+        </div>
+        <div class="tabla-scroll">
+          <table class="ventas-tabla">
+            <thead>
+              <tr>
+                <th data-col="Folio">Folio</th>
+                <th data-col="fecha_formato">Fecha</th>
+                <th data-col="cliente">Cliente</th>
+                <th data-col="CodVendedor">Vendedor</th>
+                <th data-col="monto">Monto</th>
+                <th data-col="descuento">Descuento</th>
+                <th>Detalle</th>
+              </tr>
+            </thead>
+            <tbody id="ventasTbody">
+              <tr class="tabla-empty"><td colspan="7">Aplica los filtros para ver las ventas</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="paginacion" id="paginacion"></div>
+      </section>
+
+      <!-- Modal detalle folio -->
+      <div class="modal-overlay" id="modalOverlay" aria-hidden="true" role="dialog" aria-modal="true">
+        <div class="modal-panel">
+          <div class="modal-header">
+            <div>
+              <h3 class="modal-titulo" id="modalTitulo">Detalle Folio</h3>
+              <p class="modal-subtitulo" id="modalSubtitulo"></p>
+            </div>
+            <button class="modal-cerrar" id="modalCerrar" aria-label="Cerrar modal">✕</button>
+          </div>
+          <div class="modal-resumen" id="modalResumen"></div>
+          <div class="tabla-scroll">
+            <table class="ventas-tabla modal-tabla">
+              <thead>
+                <tr>
+                  <th>Código</th>
+                  <th>Descripción</th>
+                  <th>Cantidad</th>
+                  <th>Precio Cobrado</th>
+                  <th>Precio Histórico</th>
+                  <th>% Desc.</th>
+                  <th>Total Línea</th>
+                </tr>
+              </thead>
+              <tbody id="modalTbody"></tbody>
+            </table>
+          </div>
+          <div class="modal-footer">
+            <span>Total Folio</span>
+            <strong id="modalTotalValor">—</strong>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
   // ── Carga principal ──────────────────────────────────────────────────────────
   async function buscar() {
     const params = getParams();
@@ -459,7 +604,6 @@
           tbody.innerHTML = '<tr class="tabla-empty"><td colspan="6">Sin datos</td></tr>';
         } else {
           tbody.innerHTML = dataVend.vendedores.map(v => {
-            // ventaReal = totalVentas - totalDescuento para ese vendedor
             const ventaReal = (Number(v.totalVentas) || 0) - (Number(v.totalDescuento) || 0);
             return `
               <tr>
@@ -491,6 +635,7 @@
     if (!usuario) return;
     estado.usuario = usuario;
 
+    buildLayout();
     cargarSidebar(usuario);
     initFiltros(usuario);
     initSort();
