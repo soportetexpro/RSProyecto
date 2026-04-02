@@ -392,15 +392,21 @@ router.get('/vendedores', async (req, res) => {
 });
 
 // ── GET /api/dashboard/vendedores-todos ──────────────────────────────
+// Retorna UN registro por usuario usando su código principal (u.codigo).
+// El JOIN con usuario_vendedor se usa solo para el match operacional,
+// filtrando uv.cod_vendedor = u.codigo para excluir códigos secundarios.
 router.get('/vendedores-todos', async (req, res) => {
   try {
     const [rows] = await db.pool.query(`
       SELECT
-        uv.cod_vendedor  AS cod,
-        u.nombre         AS nombre
-      FROM usuario_vendedor uv
-      INNER JOIN usuario u ON u.id = uv.usuario_id
+        u.codigo   AS cod,
+        u.nombre   AS nombre
+      FROM usuario u
+      INNER JOIN usuario_vendedor uv
+        ON uv.usuario_id    = u.id
+       AND uv.cod_vendedor  = u.codigo
       WHERE uv.tipo <> 'C'
+        AND u.is_active = 1
       ORDER BY u.nombre
     `);
     res.json({ ok: true, vendedores: rows });
@@ -688,13 +694,11 @@ router.post('/compartir', async (req, res) => {
     );
 
     // ── Notificaciones de folio compartido ───────────────────────────
-    // Diagnóstico: loguear qué cod_vendedor llega y qué usuario se resuelve
     console.log(`[compartir] cod_vendedor_compartido recibido: '${cod_vendedor_compartido}'`);
 
     const usuarioIdReceptor = await notificacionModel.usuarioIdDesdeCodVendedor(cod_vendedor_compartido);
     console.log(`[compartir] usuarioIdReceptor resuelto: ${usuarioIdReceptor}`);
 
-    // Notificar al receptor (await explícito para ver errores reales)
     if (usuarioIdReceptor) {
       try {
         await notificacionModel.notificarFolioRecibido({
@@ -714,7 +718,6 @@ router.post('/compartir', async (req, res) => {
       console.warn(`[compartir] ⚠️ No se pudo notificar al receptor: cod_vendedor='${cod_vendedor_compartido}' no tiene usuario_id`);
     }
 
-    // Notificar al coordinador (await explícito para ver errores reales)
     try {
       await notificacionModel.notificarFolioAsignado({
         usuarioIdCoordinador: usuario.sub,
