@@ -17,7 +17,7 @@
  * GET /api/ventas                    — lista de folios del mes
  * GET /api/ventas/total              — total ventas del mes
  * GET /api/ventas/resumen            — resumen por vendedor
- * GET /api/ventas/resumen-vendedores — ventas agrupadas por cod_vendedor (SIN filtro mes/año)
+ * GET /api/ventas/resumen-vendedores — ventas agrupadas por cod_vendedor (con filtro mes/año)
  * GET /api/ventas/evolucion          — ventas mes a mes del año (gráfico)
  * GET /api/ventas/meta               — meta anual/mensual desde bdtexpro
  * GET /api/ventas/clientes           — clientes por vendedor
@@ -112,27 +112,39 @@ router.get('/meta', requireAuth, async (req, res) => {
 
 // ── GET /api/ventas/resumen-vendedores ────────────────────────────────────────────────────────────────────────────
 //
-// Nueva consulta (sin filtro mes/año):
+// Retorna ventas agrupadas por vendedor filtrando por mes y año.
+//
+//   Query params requeridos:
+//     ?mes=<1-12>&anio=<YYYY>    (validados por validarMesAnio)
 //
 //   Campos retornados:
 //     codVendedor          = h.CodVendedor
-//     nombreVendedor       = MIN(h.NomAux)  — nombre del cliente/auxiliar más frecuente
+//     nombreVendedor       = MIN(h.NomAux)
 //     totalFolios          = COUNT(DISTINCT h.Folio)
-//     totalVentasCobrado   = ROUND(SUM(m.TotLinea), 0)                      → lo que pagó el cliente
+//     totalVentasCobrado   = ROUND(SUM(m.TotLinea), 0)                      → monto cobrado al cliente
 //     ventaRealLista       = ROUND(SUM(t.PrecioVta * m.CantFacturada), 0)   → precio lista sin descuento
-//     pctDescuento         = (1 - totalVentasCobrado / ventaRealLista) * 100 → % descuento real otorgado
+//     pctDescuento         = (1 - totalVentasCobrado / ventaRealLista) * 100 → % descuento otorgado
 //
 //   Tablas: iw_gsaen (h) + iw_gmovi (m) + iw_tprod (t)
 //   Filtro de seguridad: h.CodVendedor IN (codigos del usuario autenticado)
-//   Sin filtro de fecha — devuelve histórico completo del vendedor
+//   Filtro de período:   MONTH(h.Fecha) = @mes  AND  YEAR(h.Fecha) = @anio
 //
 router.get('/resumen-vendedores', requireAuth, async (req, res) => {
   try {
     const codigos = getCodigos(req);
     if (!codigos.length) return res.json({ ok: true, vendedores: [] });
 
+    let mes, anio;
+    try {
+      ({ mes, anio } = validarMesAnio(req.query.mes, req.query.anio));
+    } catch (err) {
+      return res.status(400).json({ ok: false, error: err.message });
+    }
+
     const pool   = await getSoftlandPool();
     const result = await pool.request()
+      .input('mes',  sql.Int, mes)
+      .input('anio', sql.Int, anio)
       .query(`
         SELECT
           h.CodVendedor                                                      AS codVendedor,
@@ -156,6 +168,8 @@ router.get('/resumen-vendedores', requireAuth, async (req, res) => {
         WHERE h.CodVendedor IN (${codigos.map(c => `'${c}'`).join(',')})
           AND h.Tipo    IN ('F','N','D')
           AND h.Estado <>  'A'
+          AND MONTH(h.Fecha) = @mes
+          AND YEAR(h.Fecha)  = @anio
         GROUP BY h.CodVendedor
         ORDER BY totalVentasCobrado DESC
       `);
