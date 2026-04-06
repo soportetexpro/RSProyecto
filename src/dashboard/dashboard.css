@@ -269,10 +269,12 @@ html, body { height: 100%; font-family: var(--font-secondary,'Open Sans',sans-se
   color: var(--color-gray-dark,#6B7280);
 }
 
-/* Grid de 3 columnas iguales */
+/* Grid de 3 columnas iguales — align-items:start evita que las cards
+   se estiren a la altura de la más alta cuando una lista está abierta */
 .cartera-cards {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
+  align-items: start;
   gap: 16px;
 }
 
