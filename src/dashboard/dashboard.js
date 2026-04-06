@@ -23,9 +23,7 @@
  * - Cards cartera: toggle INDEPENDIENTE — cada card se despliega por separado
  * - Lazy render: la tabla se renderiza solo cuando el usuario abre la card
  * - Cartera filtrada por VenCod del usuario logueado (match usuario_vendedor)
- * - Columnas activos: CodAux, NomAux, TotalCompras, UltimaFactura
- * - Columnas inactivos: CodAux, NomAux, TotalCompras, DiasInactivo
- * - Columnas recuperados: CodAux, NomAux, TotalCompras, UltimaFactura, DiasRecuperado
+ * - Columnas unificadas para los 3 tipos: CodAux, NomAux, Email, Telefono
  */
 
 (function () {
@@ -390,76 +388,52 @@
    */
   function renderCartaTipo(tipo, filtro) {
     const q = (filtro || '').toLowerCase();
+    const filtrarLista = (lista) => q
+      ? lista.filter(c =>
+          (c.CodAux||'').toLowerCase().includes(q) ||
+          (c.NomAux||'').toLowerCase().includes(q) ||
+          (c.Email||'').toLowerCase().includes(q) ||
+          (c.Telefono||'').toLowerCase().includes(q))
+      : lista;
+
     if (tipo === 'activo') {
-      const lista = q
-        ? carteraData.activos.filter(c =>
-            (c.CodAux||'').toLowerCase().includes(q) ||
-            (c.NomAux||'').toLowerCase().includes(q))
-        : carteraData.activos;
-      renderTablaActivos(lista);
+      renderTablaCartera('tbodyActivo', filtrarLista(carteraData.activos), 'Sin clientes activos');
     } else if (tipo === 'inactivo') {
-      const lista = q
-        ? carteraData.inactivos.filter(c =>
-            (c.CodAux||'').toLowerCase().includes(q) ||
-            (c.NomAux||'').toLowerCase().includes(q))
-        : carteraData.inactivos;
-      renderTablaInactivos(lista);
+      renderTablaCartera('tbodyInactivo', filtrarLista(carteraData.inactivos), 'Sin clientes inactivos');
     } else if (tipo === 'recuperado') {
-      const lista = q
-        ? carteraData.recuperados.filter(c =>
-            (c.CodAux||'').toLowerCase().includes(q) ||
-            (c.NomAux||'').toLowerCase().includes(q))
-        : carteraData.recuperados;
-      renderTablaRecuperados(lista);
+      renderTablaCartera('tbodyRecuperado', filtrarLista(carteraData.recuperados), 'Sin clientes recuperados');
     }
     carteraRendered[tipo] = true;
   }
 
-  function renderTablaActivos(lista) {
-    const tbody = document.getElementById('tbodyActivo');
+  /**
+   * Renderiza filas de la tabla cartera.
+   * Columnas: Cód. Cliente | Nombre | Email | Teléfono
+   * Aplica para los 3 tipos (activos, inactivos, recuperados).
+   */
+  function renderTablaCartera(tbodyId, lista, mensajeVacio) {
+    const tbody = document.getElementById(tbodyId);
     if (!lista.length) {
-      tbody.innerHTML = '<tr class="tabla-empty"><td colspan="4">Sin clientes activos</td></tr>'; return;
+      tbody.innerHTML = `<tr class="tabla-empty"><td colspan="4">${mensajeVacio}</td></tr>`;
+      return;
     }
-    tbody.innerHTML = lista.map(c => `
-      <tr>
-        <td><code>${c.CodAux||'—'}</code></td>
-        <td>${c.NomAux||'—'}</td>
-        <td style="text-align:center">${c.TotalCompras??'—'}</td>
-        <td style="text-align:right">${formatFecha(c.UltimaFactura)}</td>
-      </tr>`).join('');
-  }
-
-  function renderTablaInactivos(lista) {
-    const tbody = document.getElementById('tbodyInactivo');
-    if (!lista.length) {
-      tbody.innerHTML = '<tr class="tabla-empty"><td colspan="4">Sin clientes inactivos</td></tr>'; return;
-    }
-    tbody.innerHTML = lista.map(c => `
-      <tr>
-        <td><code>${c.CodAux||'—'}</code></td>
-        <td>${c.NomAux||'—'}</td>
-        <td style="text-align:center">${c.TotalCompras??'—'}</td>
-        <td style="text-align:center">
-          <span class="badge-dias badge-dias--warn">${c.DiasInactivo??'—'} días</span>
-        </td>
-      </tr>`).join('');
-  }
-
-  function renderTablaRecuperados(lista) {
-    const tbody = document.getElementById('tbodyRecuperado');
-    if (!lista.length) {
-      tbody.innerHTML = '<tr class="tabla-empty"><td colspan="5">Sin clientes recuperados</td></tr>'; return;
-    }
-    tbody.innerHTML = lista.map(c => `
-      <tr>
-        <td><code>${c.CodAux||'—'}</code></td>
-        <td>${c.NomAux||'—'}</td>
-        <td style="text-align:center">${c.TotalCompras??'—'}</td>
-        <td style="text-align:right">${formatFecha(c.UltimaFactura)}</td>
-        <td style="text-align:center">
-          <span class="badge-dias badge-dias--ok">${c.DiasRecuperado??'—'} días</span>
-        </td>
-      </tr>`).join('');
+    tbody.innerHTML = lista.map(c => {
+      // Email con enlace mailto si existe
+      const emailHtml = c.Email
+        ? `<a href="mailto:${c.Email}" style="color:var(--color-primary);text-decoration:none" title="${c.Email}">${c.Email}</a>`
+        : '—';
+      // Teléfono con enlace tel: si existe
+      const telHtml = c.Telefono
+        ? `<a href="tel:${c.Telefono}" style="color:var(--color-primary);text-decoration:none">${c.Telefono}</a>`
+        : '—';
+      return `
+        <tr>
+          <td><code>${c.CodAux||'—'}</code></td>
+          <td>${c.NomAux||'—'}</td>
+          <td>${emailHtml}</td>
+          <td>${telHtml}</td>
+        </tr>`;
+    }).join('');
   }
 
   /**
