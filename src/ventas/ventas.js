@@ -179,13 +179,12 @@
 
   /**
    * Garantiza que el card del gráfico exista en el DOM.
-   * Recibe el título dinámico para mostrarlo desde el primer render.
+   * Usa textContent para evitar whitespace o texto residual en el título.
    * Si el card ya existe solo actualiza el título.
    */
   function asegurarCardGrafico(titulo) {
     const cardExistente = document.getElementById('graficoCard');
     if (cardExistente) {
-      // Card ya existe: solo actualizar el título
       const tituloEl = document.getElementById('graficoTitulo');
       if (tituloEl) tituloEl.textContent = titulo;
       return;
@@ -195,15 +194,22 @@
     card.id        = 'graficoCard';
     card.className = 'card';
     card.style.cssText = 'margin-bottom:1.5rem;padding:1.25rem 1.5rem;';
-    card.innerHTML = `
-      <h2 id="graficoTitulo" style="font-size:0.95rem;font-weight:600;margin-bottom:1rem;color:var(--color-text);">
-        ${titulo}
-      </h2>
-      <div style="position:relative;height:260px;">
-        <canvas id="graficoEvolucion"></canvas>
-      </div>`;
 
-    // Insertar antes de la primera sección de tablas, o al final de mainContent
+    const h2 = document.createElement('h2');
+    h2.id = 'graficoTitulo';
+    h2.style.cssText = 'font-size:0.95rem;font-weight:600;margin-bottom:1rem;color:var(--color-text);';
+    h2.textContent = titulo;
+
+    const wrapper = document.createElement('div');
+    wrapper.style.cssText = 'position:relative;height:260px;';
+
+    const canvas = document.createElement('canvas');
+    canvas.id = 'graficoEvolucion';
+
+    wrapper.appendChild(canvas);
+    card.appendChild(h2);
+    card.appendChild(wrapper);
+
     const ancla = document.querySelector('.ventas-section, .tablas-section, #tablaVendedores, #ventasSection')
                 || document.getElementById('mainContent');
     if (ancla && ancla.parentNode && ancla !== document.getElementById('mainContent')) {
@@ -213,13 +219,15 @@
     }
   }
 
-  async function cargarGrafico() {
+  /**
+   * Carga y renderiza el gráfico de evolución anual.
+   * Recibe mes y anio como parámetros explícitos para no depender de getParams().
+   */
+  async function cargarGrafico(mes, anio) {
     try {
-      const { mes, anio } = getParams();
       const nombreMes     = MESES_NOMBRE[Number(mes) - 1] || '';
       const tituloGrafico = `Evolución Mensual — ${nombreMes} ${anio}`;
 
-      // Asegurar card y actualizar título ANTES del fetch
       asegurarCardGrafico(tituloGrafico);
 
       const res  = await fetch(`${API}/evolucion?${new URLSearchParams({ anio })}`,
@@ -595,7 +603,8 @@
         renderTabla();
       }
 
-      await cargarGrafico();
+      // Pasar mes y anio explícitamente para evitar dependencia de getParams() dentro del gráfico
+      await cargarGrafico(mes, anio);
     }
 
     await cargarTodo();
