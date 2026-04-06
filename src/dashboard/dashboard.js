@@ -25,6 +25,7 @@
  * - Tabla asignados: CRUD inline (editar vendedor+%, guardar, cancelar, eliminar)
  * - Al eliminar asignacion: el folio vuelve a aparecer en coordFolio
  * - Tabla vendedores: se agregan columnas Venta Real y Descuento
+ * - Título del gráfico de evolución ahora es dinámico: "Evolución Mensual — {Mes} {Año}"
  */
 
 (function () {
@@ -35,6 +36,8 @@
   let graficoEvolucion  = null;
   let ventasMes         = [];
   let todosVendedores   = [];  // [{ cod, nombre }]
+
+  const MESES_NOMBRE = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
   function formatCLP(v) {
     if (v == null || v === '') return '—';
@@ -109,9 +112,8 @@
   // ── Selectores mes/año ──────────────────────────────────────────────────────
   function initSelectores() {
     const hoy   = new Date();
-    const meses = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
     const selMes = document.getElementById('filtroMes');
-    meses.forEach((m, i) => {
+    MESES_NOMBRE.forEach((m, i) => {
       const o = document.createElement('option');
       o.value = i + 1; o.textContent = m;
       if (i + 1 === hoy.getMonth() + 1) o.selected = true;
@@ -153,7 +155,15 @@
 
   async function cargarGrafico() {
     try {
-      const res  = await fetch(`${API}/evolucion?${new URLSearchParams(getParams())}`, { headers:{ Authorization:`Bearer ${token()}` } });
+      const { mes, anio } = getParams();
+
+      // Actualizar título dinámico del gráfico
+      const tituloEl = document.getElementById('graficoTitulo');
+      if (tituloEl) {
+        tituloEl.textContent = `Evolución Mensual — ${MESES_NOMBRE[Number(mes) - 1]} ${anio}`;
+      }
+
+      const res  = await fetch(`${API}/evolucion?${new URLSearchParams({ mes, anio })}`, { headers:{ Authorization:`Bearer ${token()}` } });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error);
       const labels = data.evolucion.map(e => MESES_LABEL[e.mes - 1]);
