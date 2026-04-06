@@ -30,6 +30,7 @@ const ventasRoutes          = require('./routes/ventas');
 const dashboardRoutes       = require('./routes/dashboard');
 const adminRoutes           = require('./routes/admin');
 const notificacionesRoutes  = require('./routes/notificaciones');
+const carteraRoutes         = require('./routes/cartera');
 
 const app  = express();
 const PORT = Number(process.env.PORT || 3000);
@@ -126,6 +127,7 @@ app.use('/api/ventas',          ventasRoutes);
 app.use('/api/dashboard',       dashboardRoutes);
 app.use('/api/admin',           adminRoutes);
 app.use('/api/notificaciones',  notificacionesRoutes);
+app.use('/api/cartera',         carteraRoutes);
 
 // ── 404 ───────────────────────────────────────────────────────────────
 app.use((req, res) => {
