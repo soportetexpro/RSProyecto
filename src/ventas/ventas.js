@@ -173,7 +173,11 @@
   }
 
   // ── Gráfico de líneas ──────────────────────────────────────────────────────────────────────
+ fix/grafico-titulo-mes-anio
   const MESES_LABEL  = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+
+  const MESES_LABEL = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+main
   const MESES_NOMBRE = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
                         'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
@@ -181,7 +185,11 @@
     try {
       const { mes, anio } = getParams();
       const nombreMes     = MESES_NOMBRE[Number(mes) - 1] || '';
+ fix/grafico-titulo-mes-anio
       const tituloGrafico = `Evolución Mensual — ${nombreMes} ${anio}`;
+
+      const tituloGrafico = `Evolución Mensual — Ventas vs Meta | ${nombreMes} ${anio}`;
+main
 
       const res  = await fetch(`${API}/evolucion?${new URLSearchParams({ anio })}`,
         { headers: { Authorization: `Bearer ${token()}` } });
