@@ -179,11 +179,17 @@
 
   /**
    * Garantiza que el card del gráfico exista en el DOM.
-   * Si el contenedor #graficoCard no está presente lo crea e inserta
-   * antes de la sección de tablas (o al final de mainContent como fallback).
+   * Recibe el título dinámico para mostrarlo desde el primer render.
+   * Si el card ya existe solo actualiza el título.
    */
-  function asegurarCardGrafico() {
-    if (document.getElementById('graficoCard')) return;
+  function asegurarCardGrafico(titulo) {
+    const cardExistente = document.getElementById('graficoCard');
+    if (cardExistente) {
+      // Card ya existe: solo actualizar el título
+      const tituloEl = document.getElementById('graficoTitulo');
+      if (tituloEl) tituloEl.textContent = titulo;
+      return;
+    }
 
     const card = document.createElement('div');
     card.id        = 'graficoCard';
@@ -191,7 +197,7 @@
     card.style.cssText = 'margin-bottom:1.5rem;padding:1.25rem 1.5rem;';
     card.innerHTML = `
       <h2 id="graficoTitulo" style="font-size:0.95rem;font-weight:600;margin-bottom:1rem;color:var(--color-text);">
-        Evolución Mensual — Ventas vs Meta
+        ${titulo}
       </h2>
       <div style="position:relative;height:260px;">
         <canvas id="graficoEvolucion"></canvas>
@@ -213,6 +219,9 @@
       const nombreMes     = MESES_NOMBRE[Number(mes) - 1] || '';
       const tituloGrafico = `Evolución Mensual — ${nombreMes} ${anio}`;
 
+      // Asegurar card y actualizar título ANTES del fetch
+      asegurarCardGrafico(tituloGrafico);
+
       const res  = await fetch(`${API}/evolucion?${new URLSearchParams({ anio })}`,
         { headers: { Authorization: `Bearer ${token()}` } });
       const data = await res.json();
@@ -221,11 +230,6 @@
       const labels = data.evolucion.map(e => MESES_LABEL[e.mes - 1]);
       const ventas = data.evolucion.map(e => e.ventas);
       const meta   = data.evolucion.map(e => e.meta);
-
-      // Asegurar que el card exista antes de buscar sus elementos
-      asegurarCardGrafico();
-
-      document.getElementById('graficoTitulo').textContent = tituloGrafico;
 
       const ctx = document.getElementById('graficoEvolucion').getContext('2d');
       if (grafico) grafico.destroy();
