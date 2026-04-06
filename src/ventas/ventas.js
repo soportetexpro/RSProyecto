@@ -177,6 +177,36 @@
   const MESES_NOMBRE = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
                         'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
+  /**
+   * Garantiza que el card del gráfico exista en el DOM.
+   * Si el contenedor #graficoCard no está presente lo crea e inserta
+   * antes de la sección de tablas (o al final de mainContent como fallback).
+   */
+  function asegurarCardGrafico() {
+    if (document.getElementById('graficoCard')) return;
+
+    const card = document.createElement('div');
+    card.id        = 'graficoCard';
+    card.className = 'card';
+    card.style.cssText = 'margin-bottom:1.5rem;padding:1.25rem 1.5rem;';
+    card.innerHTML = `
+      <h2 id="graficoTitulo" style="font-size:0.95rem;font-weight:600;margin-bottom:1rem;color:var(--color-text);">
+        Evolución Mensual — Ventas vs Meta
+      </h2>
+      <div style="position:relative;height:260px;">
+        <canvas id="graficoEvolucion"></canvas>
+      </div>`;
+
+    // Insertar antes de la primera sección de tablas, o al final de mainContent
+    const ancla = document.querySelector('.ventas-section, .tablas-section, #tablaVendedores, #ventasSection')
+                || document.getElementById('mainContent');
+    if (ancla && ancla.parentNode && ancla !== document.getElementById('mainContent')) {
+      ancla.parentNode.insertBefore(card, ancla);
+    } else {
+      (document.getElementById('mainContent') || document.body).appendChild(card);
+    }
+  }
+
   async function cargarGrafico() {
     try {
       const { mes, anio } = getParams();
@@ -192,9 +222,10 @@
       const ventas = data.evolucion.map(e => e.ventas);
       const meta   = data.evolucion.map(e => e.meta);
 
-      // Actualizar título DOM
-      const elTitulo = document.getElementById('graficoTitulo');
-      if (elTitulo) elTitulo.textContent = tituloGrafico;
+      // Asegurar que el card exista antes de buscar sus elementos
+      asegurarCardGrafico();
+
+      document.getElementById('graficoTitulo').textContent = tituloGrafico;
 
       const ctx = document.getElementById('graficoEvolucion').getContext('2d');
       if (grafico) grafico.destroy();
@@ -233,9 +264,7 @@
           maintainAspectRatio: false,
           interaction: { mode: 'index', intersect: false },
           plugins: {
-            title: {
-              display: false,
-            },
+            title: { display: false },
             legend: {
               position: 'top',
               labels: { font: { family: 'Montserrat', size: 12 }, usePointStyle: true }
