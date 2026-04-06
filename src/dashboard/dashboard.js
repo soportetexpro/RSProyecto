@@ -11,38 +11,45 @@
  *   - Renderizar tablas y gráfico Chart.js
  *   - Gestionar modal de detalle por folio
  *   - Habilitar panel de coordinación para facturas compartidas
+ *   - Mostrar cards de cartera (Activos / Inactivos / Recuperados)
+ *     con tabla colapsable y búsqueda por cliente
  *
  * Fuentes de datos consumidas:
  *   - /api/auth/me
  *   - /api/dashboard/*
- *
- * Estado local principal:
- *   ventasMes, todosVendedores y referencia del gráfico activo.
+ *   - /api/cartera
  *
  * Cambios:
- * - Layout: tabla vendedores encima de ventas mes (una sola columna)
- * - coordVendedor: ahora es <select> con lista de todos los vendedores
- * - Tabla asignados: CRUD inline (editar vendedor+%, guardar, cancelar, eliminar)
- * - Al eliminar asignacion: el folio vuelve a aparecer en coordFolio
- * - Tabla vendedores: se agregan columnas Venta Real y Descuento
- * - Título del gráfico de evolución ahora es dinámico: "Evolución Mensual — {Mes} {Año}"
- * - Spinner de carga corporativo al actualizar filtros y en carga inicial
+ * - Cards cartera: Activos, Inactivos, Recuperados con toggle colapsable
+ * - Cartera filtrada por VenCod del usuario logueado (match usuario_vendedor)
+ * - Columnas activos: CodAux, NomAux, TotalCompras, UltimaFactura
+ * - Columnas inactivos: CodAux, NomAux, TotalCompras, DiasInactivo
+ * - Columnas recuperados: CodAux, NomAux, TotalCompras, UltimaFactura, DiasRecuperado
  */
 
 (function () {
 
-  const API   = '/api/dashboard';
-  const token = () => localStorage.getItem('token');
+  const API        = '/api/dashboard';
+  const API_CART   = '/api/cartera';
+  const token      = () => localStorage.getItem('token');
 
   let graficoEvolucion  = null;
   let ventasMes         = [];
   let todosVendedores   = [];  // [{ cod, nombre }]
+
+  // Datos cartera en memoria para búsqueda local
+  let carteraData = { activos: [], inactivos: [], recuperados: [] };
 
   const MESES_NOMBRE = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
   function formatCLP(v) {
     if (v == null || v === '') return '—';
     return new Intl.NumberFormat('es-CL', { style:'currency', currency:'CLP', maximumFractionDigits:0 }).format(Number(v));
+  }
+
+  function formatFecha(f) {
+    if (!f) return '—';
+    try { return new Date(f).toLocaleDateString('es-CL'); } catch { return f; }
   }
 
   // ── Spinner de carga ──────────────────────────────────────────────────
@@ -71,13 +78,10 @@
 
   function mostrarCarga() {
     if (!cargaOverlay) cargaOverlay = crearSpinner();
-    // Sincronizar left con estado del sidebar
     const colapsado = document.getElementById('sidebar')?.classList.contains('sidebar--collapsed');
     cargaOverlay.classList.toggle('carga-overlay--sidebar-collapsed', !!colapsado);
-    // Forzar reflow para que la transición funcione si era display:none
     cargaOverlay.offsetHeight;
     cargaOverlay.classList.add('carga-overlay--visible');
-    // Deshabilitar botón
     const btn = document.getElementById('btnActualizar');
     if (btn) btn.disabled = true;
   }
@@ -200,13 +204,10 @@
   async function cargarGrafico() {
     try {
       const { mes, anio } = getParams();
-
-      // Actualizar título dinámico del gráfico
       const tituloEl = document.getElementById('graficoTitulo');
       if (tituloEl) {
         tituloEl.textContent = `Evolución Mensual — ${MESES_NOMBRE[Number(mes) - 1]} ${anio}`;
       }
-
       const res  = await fetch(`${API}/evolucion?${new URLSearchParams({ mes, anio })}`, { headers:{ Authorization:`Bearer ${token()}` } });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error);
@@ -237,7 +238,7 @@
     } catch (err) { console.error('[cargarGrafico]', err); }
   }
 
-  // ── Tabla vendedores (6 columnas: Cód, Nombre, Folios, Total Ventas, Venta Real, Descuento) ──
+  // ── Tabla vendedores ─────────────────────────────────────────────────────
   async function cargarVendedores() {
     try {
       const res  = await fetch(`${API}/vendedores?${new URLSearchParams(getParams())}`, { headers:{ Authorization:`Bearer ${token()}` } });
@@ -247,9 +248,9 @@
         tbody.innerHTML = '<tr class="tabla-empty"><td colspan="6">Sin datos</td></tr>'; return;
       }
       tbody.innerHTML = data.vendedores.map(v => {
-        const totalVentas  = Number(v.totalVentas  || 0);
+        const totalVentas    = Number(v.totalVentas  || 0);
         const totalDescuento = Number(v.totalDescuento || 0);
-        const ventaReal    = totalVentas - totalDescuento;
+        const ventaReal      = totalVentas - totalDescuento;
         return `
         <tr>
           <td><strong>${v.codVendedor}</strong></td>
@@ -303,7 +304,7 @@
     );
   }
 
-  // ── Modal detalle ─────────────────────────────────────────────────────────
+  // ── Modal detalle folio ───────────────────────────────────────────────────
   async function abrirDetalle(folio) {
     const overlay = document.getElementById('modalOverlay');
     const tbody   = document.getElementById('modalTbody');
@@ -339,15 +340,150 @@
     document.body.style.overflow = '';
   }
 
-  // ══ PANEL COORDINADOR (tipo C) ═══════════════════════════════════════════
+  // ══ CARTERA DE CLIENTES ══════════════════════════════════════════════════
 
-  /** Carga lista de todos los vendedores y puebla el <select> coordVendedor */
+  /**
+   * Carga la cartera desde /api/cartera y renderiza las 3 cards.
+   * Los datos se almacenan en carteraData para búsqueda local.
+   */
+  async function cargarCartera() {
+    try {
+      const res  = await fetch(API_CART, { headers:{ Authorization:`Bearer ${token()}` } });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || 'Error cartera');
+
+      carteraData.activos     = data.activos     || [];
+      carteraData.inactivos   = data.inactivos   || [];
+      carteraData.recuperados = data.recuperados || [];
+
+      // Actualizar contadores en las cards
+      document.getElementById('countActivo').textContent     = carteraData.activos.length;
+      document.getElementById('countInactivo').textContent   = carteraData.inactivos.length;
+      document.getElementById('countRecuperado').textContent = carteraData.recuperados.length;
+
+      // Renderizar tablas (inicialmente vacías hasta que el usuario abra la card)
+      renderTablaActivos(carteraData.activos);
+      renderTablaInactivos(carteraData.inactivos);
+      renderTablaRecuperados(carteraData.recuperados);
+
+    } catch (err) {
+      console.error('[cargarCartera]', err);
+      document.getElementById('countActivo').textContent     = '—';
+      document.getElementById('countInactivo').textContent   = '—';
+      document.getElementById('countRecuperado').textContent = '—';
+    }
+  }
+
+  function renderTablaActivos(lista) {
+    const tbody = document.getElementById('tbodyActivo');
+    if (!lista.length) {
+      tbody.innerHTML = '<tr class="tabla-empty"><td colspan="4">Sin clientes activos</td></tr>'; return;
+    }
+    tbody.innerHTML = lista.map(c => `
+      <tr>
+        <td><code>${c.CodAux||'—'}</code></td>
+        <td>${c.NomAux||'—'}</td>
+        <td style="text-align:center">${c.TotalCompras??'—'}</td>
+        <td style="text-align:right">${formatFecha(c.UltimaFactura)}</td>
+      </tr>`).join('');
+  }
+
+  function renderTablaInactivos(lista) {
+    const tbody = document.getElementById('tbodyInactivo');
+    if (!lista.length) {
+      tbody.innerHTML = '<tr class="tabla-empty"><td colspan="4">Sin clientes inactivos</td></tr>'; return;
+    }
+    tbody.innerHTML = lista.map(c => `
+      <tr>
+        <td><code>${c.CodAux||'—'}</code></td>
+        <td>${c.NomAux||'—'}</td>
+        <td style="text-align:center">${c.TotalCompras??'—'}</td>
+        <td style="text-align:center">
+          <span class="badge-dias badge-dias--warn">${c.DiasInactivo??'—'} días</span>
+        </td>
+      </tr>`).join('');
+  }
+
+  function renderTablaRecuperados(lista) {
+    const tbody = document.getElementById('tbodyRecuperado');
+    if (!lista.length) {
+      tbody.innerHTML = '<tr class="tabla-empty"><td colspan="5">Sin clientes recuperados</td></tr>'; return;
+    }
+    tbody.innerHTML = lista.map(c => `
+      <tr>
+        <td><code>${c.CodAux||'—'}</code></td>
+        <td>${c.NomAux||'—'}</td>
+        <td style="text-align:center">${c.TotalCompras??'—'}</td>
+        <td style="text-align:right">${formatFecha(c.UltimaFactura)}</td>
+        <td style="text-align:center">
+          <span class="badge-dias badge-dias--ok">${c.DiasRecuperado??'—'} días</span>
+        </td>
+      </tr>`).join('');
+  }
+
+  /**
+   * Inicializa los toggles y búsquedas de las cards de cartera.
+   * Se llama una sola vez en init().
+   */
+  function initCarteraCards() {
+    // Toggle collapse
+    document.querySelectorAll('.cartera-card-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tipo   = btn.dataset.tipo;  // 'activo' | 'inactivo' | 'recuperado'
+        const lista  = document.getElementById(`lista${capitalize(tipo)}`);
+        const abierto = !lista.hidden;
+        lista.hidden = abierto;
+        btn.setAttribute('aria-expanded', String(!abierto));
+        btn.closest('.cartera-card').classList.toggle('cartera-card--abierta', !abierto);
+      });
+    });
+
+    // Búsqueda local — activos
+    document.getElementById('busquedaActivo').addEventListener('input', e => {
+      const q = e.target.value.toLowerCase();
+      renderTablaActivos(
+        carteraData.activos.filter(c =>
+          (c.CodAux||'').toLowerCase().includes(q) ||
+          (c.NomAux||'').toLowerCase().includes(q)
+        )
+      );
+    });
+
+    // Búsqueda local — inactivos
+    document.getElementById('busquedaInactivo').addEventListener('input', e => {
+      const q = e.target.value.toLowerCase();
+      renderTablaInactivos(
+        carteraData.inactivos.filter(c =>
+          (c.CodAux||'').toLowerCase().includes(q) ||
+          (c.NomAux||'').toLowerCase().includes(q)
+        )
+      );
+    });
+
+    // Búsqueda local — recuperados
+    document.getElementById('busquedaRecuperado').addEventListener('input', e => {
+      const q = e.target.value.toLowerCase();
+      renderTablaRecuperados(
+        carteraData.recuperados.filter(c =>
+          (c.CodAux||'').toLowerCase().includes(q) ||
+          (c.NomAux||'').toLowerCase().includes(q)
+        )
+      );
+    });
+  }
+
+  function capitalize(s) {
+    return s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
+  }
+
+  // ══ PANEL COORDINADOR ════════════════════════════════════════════════════
+
   async function cargarListaVendedores() {
     try {
       const res  = await fetch(`${API}/vendedores-todos`, { headers:{ Authorization:`Bearer ${token()}` } });
       const data = await res.json();
       if (!data.ok || !data.vendedores?.length) return;
-      todosVendedores = data.vendedores; // [{ cod, nombre }]
+      todosVendedores = data.vendedores;
       const sel = document.getElementById('coordVendedor');
       sel.innerHTML = '<option value="">— Selecciona vendedor —</option>' +
         data.vendedores.map(v =>
@@ -400,8 +536,6 @@
         ).join('');
     } catch(err) { console.error('[cargarFoliosParaCompartir]',err); }
   }
-
-  // ─── CRUD asignaciones coordinador ───────────────────────────────────────────────
 
   function opcionesVendedores(seleccionado) {
     return todosVendedores.map(v =>
@@ -463,7 +597,6 @@
   }
 
   function bindCrudEvents(tbody, asignados) {
-    // Botones EDITAR
     tbody.querySelectorAll('.btn-crud--edit').forEach(btn => {
       btn.addEventListener('click', () => {
         const id  = btn.dataset.id;
@@ -471,19 +604,16 @@
         const tr  = tbody.querySelector(`tr[data-id="${id}"]`);
         if (!c || !tr) return;
         tr.innerHTML = filaAsignadoEdicion(c);
-        bindCrudEvents(tbody, asignados); // rebind para save/cancel
+        bindCrudEvents(tbody, asignados);
       });
     });
 
-    // Botones GUARDAR
     tbody.querySelectorAll('.btn-crud--save').forEach(btn => {
       btn.addEventListener('click', async () => {
         const id      = btn.dataset.id;
         const vendSel = document.getElementById(`editVend_${id}`)?.value;
         const pctSel  = document.getElementById(`editPct_${id}`)?.value;
-        if (!vendSel || !pctSel) {
-          alert('Selecciona vendedor y porcentaje'); return;
-        }
+        if (!vendSel || !pctSel) { alert('Selecciona vendedor y porcentaje'); return; }
         try {
           const res  = await fetch(`${API}/compartir/${id}`, {
             method:'PUT',
@@ -497,12 +627,10 @@
       });
     });
 
-    // Botones CANCELAR
     tbody.querySelectorAll('.btn-crud--cancel').forEach(btn => {
       btn.addEventListener('click', async () => { await cargarFoliosAsignados(); });
     });
 
-    // Botones ELIMINAR
     tbody.querySelectorAll('.btn-crud--del').forEach(btn => {
       btn.addEventListener('click', async () => {
         const id    = btn.dataset.id;
@@ -515,14 +643,13 @@
           });
           const data = await res.json();
           if (!data.ok) throw new Error(data.error);
-          // Recargar lista folios + asignados
           await Promise.all([ cargarFoliosParaCompartir(), cargarFoliosAsignados(), cargarResumen(), cargarVentasMes() ]);
         } catch(err) { alert(`Error al eliminar: ${err.message}`); }
       });
     });
   }
 
-  // ══ PANEL FOLIOS RECIBIDOS (tipo P) ═════════════════════════════════════
+  // ══ PANEL FOLIOS RECIBIDOS ═══════════════════════════════════════════════
 
   async function iniciarPanelCompartidos() {
     document.getElementById('panelCompartidos').style.display = 'block';
@@ -555,7 +682,13 @@
   async function cargarTodo(usuario) {
     mostrarCarga();
     try {
-      const tareas = [ cargarResumen(), cargarGrafico(), cargarVendedores(), cargarVentasMes() ];
+      const tareas = [
+        cargarResumen(),
+        cargarGrafico(),
+        cargarCartera(),
+        cargarVendedores(),
+        cargarVentasMes()
+      ];
       if (esCoordinador(usuario)) tareas.push(cargarFoliosParaCompartir(), cargarFoliosAsignados());
       else tareas.push(cargarFoliosCompartidos());
       await Promise.all(tareas);
@@ -570,6 +703,7 @@
     if (!usuario) return;
     cargarSidebar(usuario);
     initSelectores();
+    initCarteraCards();
 
     if (esCoordinador(usuario)) await iniciarPanelCoordinador();
     else                        await iniciarPanelCompartidos();
