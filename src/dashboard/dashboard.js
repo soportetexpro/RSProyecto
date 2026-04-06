@@ -12,7 +12,7 @@
  *   - Gestionar modal de detalle por folio
  *   - Habilitar panel de coordinación para facturas compartidas
  *   - Mostrar cards de cartera (Activos / Inactivos / Recuperados)
- *     con tabla colapsable y búsqueda por cliente
+ *     con tabla colapsable INDIVIDUAL y búsqueda por cliente
  *
  * Fuentes de datos consumidas:
  *   - /api/auth/me
@@ -20,7 +20,8 @@
  *   - /api/cartera
  *
  * Cambios:
- * - Cards cartera: Activos, Inactivos, Recuperados con toggle colapsable
+ * - Cards cartera: toggle INDEPENDIENTE — cada card se despliega por separado
+ * - Lazy render: la tabla se renderiza solo cuando el usuario abre la card
  * - Cartera filtrada por VenCod del usuario logueado (match usuario_vendedor)
  * - Columnas activos: CodAux, NomAux, TotalCompras, UltimaFactura
  * - Columnas inactivos: CodAux, NomAux, TotalCompras, DiasInactivo
@@ -39,6 +40,9 @@
 
   // Datos cartera en memoria para búsqueda local
   let carteraData = { activos: [], inactivos: [], recuperados: [] };
+
+  // Control de lazy render: indica si la tabla de cada card ya fue renderizada
+  let carteraRendered = { activo: false, inactivo: false, recuperado: false };
 
   const MESES_NOMBRE = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
@@ -343,8 +347,8 @@
   // ══ CARTERA DE CLIENTES ══════════════════════════════════════════════════
 
   /**
-   * Carga la cartera desde /api/cartera y renderiza las 3 cards.
-   * Los datos se almacenan en carteraData para búsqueda local.
+   * Carga la cartera desde /api/cartera y guarda los datos en memoria.
+   * NO renderiza las tablas — cada card lo hace de forma lazy al abrirse.
    */
   async function cargarCartera() {
     try {
@@ -356,15 +360,21 @@
       carteraData.inactivos   = data.inactivos   || [];
       carteraData.recuperados = data.recuperados || [];
 
+      // Resetear estado de render (útil si se recarga con btnActualizar)
+      carteraRendered = { activo: false, inactivo: false, recuperado: false };
+
       // Actualizar contadores en las cards
       document.getElementById('countActivo').textContent     = carteraData.activos.length;
       document.getElementById('countInactivo').textContent   = carteraData.inactivos.length;
       document.getElementById('countRecuperado').textContent = carteraData.recuperados.length;
 
-      // Renderizar tablas (inicialmente vacías hasta que el usuario abra la card)
-      renderTablaActivos(carteraData.activos);
-      renderTablaInactivos(carteraData.inactivos);
-      renderTablaRecuperados(carteraData.recuperados);
+      // Si alguna card ya está abierta (ej: recarga), renderizar solo esa
+      ['activo', 'inactivo', 'recuperado'].forEach(tipo => {
+        const lista = document.getElementById(`lista${capitalize(tipo)}`);
+        if (lista && !lista.hidden) {
+          renderCartaTipo(tipo);
+        }
+      });
 
     } catch (err) {
       console.error('[cargarCartera]', err);
@@ -372,6 +382,37 @@
       document.getElementById('countInactivo').textContent   = '—';
       document.getElementById('countRecuperado').textContent = '—';
     }
+  }
+
+  /**
+   * Renderiza la tabla de una card específica según su tipo.
+   * Solo se llama cuando la card se abre (lazy render).
+   */
+  function renderCartaTipo(tipo, filtro) {
+    const q = (filtro || '').toLowerCase();
+    if (tipo === 'activo') {
+      const lista = q
+        ? carteraData.activos.filter(c =>
+            (c.CodAux||'').toLowerCase().includes(q) ||
+            (c.NomAux||'').toLowerCase().includes(q))
+        : carteraData.activos;
+      renderTablaActivos(lista);
+    } else if (tipo === 'inactivo') {
+      const lista = q
+        ? carteraData.inactivos.filter(c =>
+            (c.CodAux||'').toLowerCase().includes(q) ||
+            (c.NomAux||'').toLowerCase().includes(q))
+        : carteraData.inactivos;
+      renderTablaInactivos(lista);
+    } else if (tipo === 'recuperado') {
+      const lista = q
+        ? carteraData.recuperados.filter(c =>
+            (c.CodAux||'').toLowerCase().includes(q) ||
+            (c.NomAux||'').toLowerCase().includes(q))
+        : carteraData.recuperados;
+      renderTablaRecuperados(lista);
+    }
+    carteraRendered[tipo] = true;
   }
 
   function renderTablaActivos(lista) {
@@ -423,52 +464,52 @@
 
   /**
    * Inicializa los toggles y búsquedas de las cards de cartera.
+   * Cada card opera de forma INDEPENDIENTE.
+   * La tabla se renderiza la primera vez que el usuario abre la card (lazy render).
    * Se llama una sola vez en init().
    */
   function initCarteraCards() {
-    // Toggle collapse
+    // Toggle collapse INDEPENDIENTE por card
     document.querySelectorAll('.cartera-card-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         const tipo   = btn.dataset.tipo;  // 'activo' | 'inactivo' | 'recuperado'
         const lista  = document.getElementById(`lista${capitalize(tipo)}`);
+        if (!lista) return;
+
         const abierto = !lista.hidden;
-        lista.hidden = abierto;
-        btn.setAttribute('aria-expanded', String(!abierto));
-        btn.closest('.cartera-card').classList.toggle('cartera-card--abierta', !abierto);
+
+        if (abierto) {
+          // Cerrar esta card
+          lista.hidden = true;
+          btn.setAttribute('aria-expanded', 'false');
+          btn.closest('.cartera-card').classList.remove('cartera-card--abierta');
+        } else {
+          // Abrir esta card
+          lista.hidden = false;
+          btn.setAttribute('aria-expanded', 'true');
+          btn.closest('.cartera-card').classList.add('cartera-card--abierta');
+
+          // Lazy render: solo renderizar si aún no se ha mostrado
+          if (!carteraRendered[tipo]) {
+            renderCartaTipo(tipo);
+          }
+        }
       });
     });
 
     // Búsqueda local — activos
     document.getElementById('busquedaActivo').addEventListener('input', e => {
-      const q = e.target.value.toLowerCase();
-      renderTablaActivos(
-        carteraData.activos.filter(c =>
-          (c.CodAux||'').toLowerCase().includes(q) ||
-          (c.NomAux||'').toLowerCase().includes(q)
-        )
-      );
+      renderCartaTipo('activo', e.target.value);
     });
 
     // Búsqueda local — inactivos
     document.getElementById('busquedaInactivo').addEventListener('input', e => {
-      const q = e.target.value.toLowerCase();
-      renderTablaInactivos(
-        carteraData.inactivos.filter(c =>
-          (c.CodAux||'').toLowerCase().includes(q) ||
-          (c.NomAux||'').toLowerCase().includes(q)
-        )
-      );
+      renderCartaTipo('inactivo', e.target.value);
     });
 
     // Búsqueda local — recuperados
     document.getElementById('busquedaRecuperado').addEventListener('input', e => {
-      const q = e.target.value.toLowerCase();
-      renderTablaRecuperados(
-        carteraData.recuperados.filter(c =>
-          (c.CodAux||'').toLowerCase().includes(q) ||
-          (c.NomAux||'').toLowerCase().includes(q)
-        )
-      );
+      renderCartaTipo('recuperado', e.target.value);
     });
   }
 
