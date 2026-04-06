@@ -192,10 +192,11 @@
       const ventas = data.evolucion.map(e => e.ventas);
       const meta   = data.evolucion.map(e => e.meta);
 
+      // Actualizar título DOM
       const elTitulo = document.getElementById('graficoTitulo');
       if (elTitulo) elTitulo.textContent = tituloGrafico;
 
-      const ctx = document.getElementById('graficoVentas').getContext('2d');
+      const ctx = document.getElementById('graficoEvolucion').getContext('2d');
       if (grafico) grafico.destroy();
 
       grafico = new Chart(ctx, {
@@ -233,11 +234,7 @@
           interaction: { mode: 'index', intersect: false },
           plugins: {
             title: {
-              display: true,
-              text: tituloGrafico,
-              font: { family: 'Montserrat', size: 14, weight: '600' },
-              color: 'var(--color-text, #1a1a2e)',
-              padding: { bottom: 12 },
+              display: false,
             },
             legend: {
               position: 'top',
