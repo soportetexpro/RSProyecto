@@ -174,10 +174,14 @@
 
   // ── Gráfico de líneas ──────────────────────────────────────────────────────────────────────
   const MESES_LABEL = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const MESES_NOMBRE = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
+                        'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
   async function cargarGrafico() {
     try {
-      const anio = getParams().anio;
+      const { mes, anio } = getParams();
+      const nombreMes     = MESES_NOMBRE[Number(mes) - 1] || '';
+      const tituloGrafico = `Evolución Mensual — Ventas vs Meta | ${nombreMes} ${anio}`;
 
       const res  = await fetch(`${API}/evolucion?${new URLSearchParams({ anio })}`,
         { headers: { Authorization: `Bearer ${token()}` } });
@@ -190,7 +194,7 @@
 
       // Actualizar título DOM si existe el elemento
       const elTitulo = document.getElementById('graficoTitulo');
-      if (elTitulo) elTitulo.textContent = `Evolución Mensual — Año ${anio}`;
+      if (elTitulo) elTitulo.textContent = tituloGrafico;
 
       const ctx = document.getElementById('graficoVentas').getContext('2d');
       if (grafico) grafico.destroy();
@@ -231,7 +235,7 @@
           plugins: {
             title: {
               display: true,
-              text: `Evolución Mensual — Año ${anio}`,
+              text: tituloGrafico,
               font: { family: 'Montserrat', size: 14, weight: '600' },
               color: 'var(--color-text, #1a1a2e)',
               padding: { bottom: 12 },
