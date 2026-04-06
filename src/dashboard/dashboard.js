@@ -26,6 +26,7 @@
  * - Al eliminar asignacion: el folio vuelve a aparecer en coordFolio
  * - Tabla vendedores: se agregan columnas Venta Real y Descuento
  * - Título del gráfico de evolución ahora es dinámico: "Evolución Mensual — {Mes} {Año}"
+ * - Spinner de carga corporativo al actualizar filtros y en carga inicial
  */
 
 (function () {
@@ -42,6 +43,49 @@
   function formatCLP(v) {
     if (v == null || v === '') return '—';
     return new Intl.NumberFormat('es-CL', { style:'currency', currency:'CLP', maximumFractionDigits:0 }).format(Number(v));
+  }
+
+  // ── Spinner de carga ──────────────────────────────────────────────────
+
+  let cargaOverlay = null;
+
+  function crearSpinner() {
+    const el = document.createElement('div');
+    el.id = 'cargaOverlay';
+    el.className = 'carga-overlay';
+    el.setAttribute('role', 'status');
+    el.setAttribute('aria-label', 'Cargando datos');
+    el.innerHTML = `
+      <div class="carga-ring">
+        <svg viewBox="0 0 72 72" aria-hidden="true">
+          <circle class="carga-track" cx="36" cy="36" r="27"/>
+          <circle class="carga-arc"  cx="36" cy="36" r="27"/>
+        </svg>
+        <div class="carga-dot"></div>
+      </div>
+      <span class="carga-texto">Cargando datos...</span>
+    `;
+    document.body.appendChild(el);
+    return el;
+  }
+
+  function mostrarCarga() {
+    if (!cargaOverlay) cargaOverlay = crearSpinner();
+    // Sincronizar left con estado del sidebar
+    const colapsado = document.getElementById('sidebar')?.classList.contains('sidebar--collapsed');
+    cargaOverlay.classList.toggle('carga-overlay--sidebar-collapsed', !!colapsado);
+    // Forzar reflow para que la transición funcione si era display:none
+    cargaOverlay.offsetHeight;
+    cargaOverlay.classList.add('carga-overlay--visible');
+    // Deshabilitar botón
+    const btn = document.getElementById('btnActualizar');
+    if (btn) btn.disabled = true;
+  }
+
+  function ocultarCarga() {
+    if (cargaOverlay) cargaOverlay.classList.remove('carga-overlay--visible');
+    const btn = document.getElementById('btnActualizar');
+    if (btn) btn.disabled = false;
   }
 
   async function verificarSesion() {
@@ -509,10 +553,15 @@
 
   // ── Cargar todo ────────────────────────────────────────────────────────────
   async function cargarTodo(usuario) {
-    const tareas = [ cargarResumen(), cargarGrafico(), cargarVendedores(), cargarVentasMes() ];
-    if (esCoordinador(usuario)) tareas.push(cargarFoliosParaCompartir(), cargarFoliosAsignados());
-    else tareas.push(cargarFoliosCompartidos());
-    await Promise.all(tareas);
+    mostrarCarga();
+    try {
+      const tareas = [ cargarResumen(), cargarGrafico(), cargarVendedores(), cargarVentasMes() ];
+      if (esCoordinador(usuario)) tareas.push(cargarFoliosParaCompartir(), cargarFoliosAsignados());
+      else tareas.push(cargarFoliosCompartidos());
+      await Promise.all(tareas);
+    } finally {
+      ocultarCarga();
+    }
   }
 
   // ── Init ──────────────────────────────────────────────────────────────────
