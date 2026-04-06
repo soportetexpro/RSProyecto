@@ -173,7 +173,7 @@
   }
 
   // ── Gráfico de líneas ──────────────────────────────────────────────────────────────────────
-  const MESES_LABEL = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const MESES_LABEL  = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
   const MESES_NOMBRE = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
                         'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
@@ -181,7 +181,7 @@
     try {
       const { mes, anio } = getParams();
       const nombreMes     = MESES_NOMBRE[Number(mes) - 1] || '';
-      const tituloGrafico = `Evolución Mensual — Ventas vs Meta | ${nombreMes} ${anio}`;
+      const tituloGrafico = `Evolución Mensual — ${nombreMes} ${anio}`;
 
       const res  = await fetch(`${API}/evolucion?${new URLSearchParams({ anio })}`,
         { headers: { Authorization: `Bearer ${token()}` } });
@@ -192,7 +192,6 @@
       const ventas = data.evolucion.map(e => e.ventas);
       const meta   = data.evolucion.map(e => e.meta);
 
-      // Actualizar título DOM si existe el elemento
       const elTitulo = document.getElementById('graficoTitulo');
       if (elTitulo) elTitulo.textContent = tituloGrafico;
 
@@ -370,17 +369,7 @@
     });
   }
 
-  // ── Tabla 1: Ventas por Vendedor (filtrada por mes/año) ──────────────────────────────────
-  //
-  // Campos del response (resumen-vendedores):
-  //   v.codVendedor        — código del vendedor
-  //   v.nombreVendedor     — MIN(h.NomAux) desde iw_gsaen
-  //   v.totalFolios        — COUNT(DISTINCT h.Folio)
-  //   v.totalVentasCobrado — ROUND(SUM(m.TotLinea), 0)         → lo cobrado al cliente
-  //   v.ventaRealLista     — ROUND(SUM(t.PrecioVta * Cant), 0) → precio lista sin desc.
-  //   v.pctDescuento       — % descuento real otorgado
-  //   descuentoAbsoluto    — ventaRealLista - totalVentasCobrado (calculado en frontend)
-  //
+  // ── Tabla 1: Ventas por Vendedor ──────────────────────────────────────────────────────────
   function renderTablaVendedores(vendedores) {
     const tbody = document.getElementById('tbodyVendedores');
 
@@ -466,67 +455,65 @@
         cuerpo.innerHTML = `
           <div class="modal-info-grid">
             <div class="modal-info-item"><span class="modal-info-label">Cliente</span><span class="modal-info-val">${cabecera.cliente || '—'}</span></div>
-            <div class="modal-info-item"><span class="modal-info-label">Fecha</span><span class="modal-info-val">${cabecera.fecha_formato || '—'}</span></div>
             <div class="modal-info-item"><span class="modal-info-label">Vendedor</span><span class="modal-info-val">${cabecera.CodVendedor || '—'}</span></div>
+            <div class="modal-info-item"><span class="modal-info-label">Fecha</span><span class="modal-info-val">${cabecera.fecha_formato || '—'}</span></div>
+            <div class="modal-info-item"><span class="modal-info-label">Total Folio</span><span class="modal-info-val">${formatCLP(cabecera.monto)}</span></div>
           </div>
-          <div class="tabla-wrapper" style="margin-top:var(--space-4)">
-            <table class="ventas-tabla">
-              <thead><tr>
-                <th>Producto</th><th>Descripción</th>
+          <table class="modal-tabla">
+            <thead>
+              <tr>
+                <th>Producto</th>
+                <th>Descripción</th>
                 <th style="text-align:right">Cant.</th>
                 <th style="text-align:right">P. Lista</th>
                 <th style="text-align:right">P. Cobrado</th>
-                <th style="text-align:right">Descuento</th>
+                <th style="text-align:right">Desc. %</th>
                 <th style="text-align:right">Total Línea</th>
-              </tr></thead>
-              <tbody>
-                ${data.detalle.map(d => `
-                  <tr>
-                    <td>${d.CodArticulo || '—'}</td>
-                    <td>${d.descripcion || '—'}</td>
-                    <td style="text-align:right">${d.cantidad ?? '—'}</td>
-                    <td style="text-align:right">${formatCLP(d.precioLista)}</td>
-                    <td style="text-align:right">${formatCLP(d.precioCobrado)}</td>
-                    <td style="text-align:right">${formatCLP(d.descuento)}</td>
-                    <td style="text-align:right">${formatCLP(d.totalLinea)}</td>
-                  </tr>`).join('')}
-              </tbody>
-            </table>
-          </div>`;
+              </tr>
+            </thead>
+            <tbody>
+              ${data.detalle.map(d => `
+                <tr>
+                  <td>${d.CodProducto  || '—'}</td>
+                  <td>${d.descripcion  || '—'}</td>
+                  <td style="text-align:right">${d.CantFacturada ?? '—'}</td>
+                  <td style="text-align:right">${formatCLP(d.precioLista)}</td>
+                  <td style="text-align:right">${formatCLP(d.PrecioUnitario)}</td>
+                  <td style="text-align:right">${formatPct(d.pctDescLinea)}</td>
+                  <td style="text-align:right">${formatCLP(d.TotLinea)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>`;
       }
 
-      modal.classList.remove('hidden');
-      modal.setAttribute('aria-hidden', 'false');
+      modal.classList.add('modal--open');
     } catch (err) {
       console.error('[abrirDetalle]', err);
     }
   }
 
   function cerrarModal() {
-    const modal = document.getElementById('modalDetalle');
-    modal.classList.add('hidden');
-    modal.setAttribute('aria-hidden', 'true');
+    document.getElementById('modalDetalle').classList.remove('modal--open');
   }
 
   // ── Exportar CSV ─────────────────────────────────────────────────────────────────────────
   function exportarCSV() {
-    const datos = sortVentas(estado.ventasFiltradas);
+    const datos = estado.ventasFiltradas;
     if (!datos.length) return;
 
-    const cab  = ['Folio','Fecha','Cliente','Vendedor','Monto','Descuento'];
-    const rows = datos.map(v => [
+    const cabecera = ['Folio','Fecha','Cliente','Vendedor','Monto','Descuento'];
+    const filas = datos.map(v => [
       v.Folio, v.fecha_formato, v.cliente, v.CodVendedor,
       v.monto, v.descuento
-    ].map(c => `"${String(c ?? '').replace(/"/g,'""')}"`).join(','));
+    ].map(c => `"${String(c ?? '').replace(/"/g, '""')}"`).join(','));
 
-    const csv  = [cab.join(','), ...rows].join('\n');
+    const csv  = [cabecera.join(','), ...filas].join('\n');
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
-    a.href     = url;
-    a.download = `ventas_${getParams().mes}_${getParams().anio}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    a.href = url; a.download = `ventas_${getParams().mes}_${getParams().anio}.csv`;
+    a.click(); URL.revokeObjectURL(url);
   }
 
   // ── Búsqueda ─────────────────────────────────────────────────────────────────────────────
@@ -539,45 +526,60 @@
   async function init() {
     const usuario = await verificarSesion();
     if (!usuario) return;
-
     estado.usuario = usuario;
+
     cargarSidebar(usuario);
     initFiltros(usuario);
+    initSort();
+
+    document.getElementById('btnBuscar')?.addEventListener('click', buscar);
+    document.getElementById('tablaBusqueda')?.addEventListener('keydown', e => {
+      if (e.key === 'Enter') buscar();
+    });
+    document.getElementById('btnExportarCSV')?.addEventListener('click', exportarCSV);
+    document.getElementById('modalCerrar')?.addEventListener('click', cerrarModal);
+    document.getElementById('modalOverlay')?.addEventListener('click', cerrarModal);
 
     async function cargarTodo() {
       const { mes, anio } = getParams();
-      const qs = new URLSearchParams({ mes, anio });
 
-      const [resKpi, resVentas, resVendedores] = await Promise.all([
-        fetch(`${API}/kpis?${qs}`,               { headers: { Authorization: `Bearer ${token()}` } }),
-        fetch(`${API}/ventas-mes?${qs}`,          { headers: { Authorization: `Bearer ${token()}` } }),
-        fetch(`${API}/resumen-vendedores?${qs}`,  { headers: { Authorization: `Bearer ${token()}` } }),
+      const [resKpi, resVend, resVentas] = await Promise.all([
+        fetch(`${API}/kpis?${new URLSearchParams({ mes, anio })}`,
+          { headers: { Authorization: `Bearer ${token()}` } }),
+        fetch(`${API}/resumen-vendedores?${new URLSearchParams({ mes, anio })}`,
+          { headers: { Authorization: `Bearer ${token()}` } }),
+        fetch(`${API}/ventas-mes?${new URLSearchParams({ mes, anio })}`,
+          { headers: { Authorization: `Bearer ${token()}` } }),
       ]);
 
-      const [dKpi, dVentas, dVendedores] = await Promise.all([
-        resKpi.json(), resVentas.json(), resVendedores.json()
+      const [dataKpi, dataVend, dataVentas] = await Promise.all([
+        resKpi.json(), resVend.json(), resVentas.json()
       ]);
 
-      if (dKpi.ok)       renderKpis(dKpi.totalVentas, dKpi.metaMes, dKpi.totalDescuento);
-      if (dVentas.ok)    { estado.ventas = dVentas.ventas; estado.ventasFiltradas = dVentas.ventas; renderTabla(); }
-      if (dVendedores.ok) renderTablaVendedores(dVendedores.vendedores);
+      if (dataKpi.ok)    renderKpis(dataKpi.totalVentas, dataKpi.metaMes, dataKpi.totalDescuento);
+      if (dataVend.ok)   renderTablaVendedores(dataVend.vendedores);
+      if (dataVentas.ok) {
+        estado.ventas          = dataVentas.ventas || [];
+        estado.ventasFiltradas = estado.ventas;
+        estado.paginaActual    = 1;
+        renderTabla();
+      }
 
       await cargarGrafico();
-
-      document.getElementById('pageLoader')?.classList.add('hidden');
     }
 
     await cargarTodo();
-    initSort();
 
-    document.getElementById('btnAplicar')?.addEventListener('click', cargarTodo);
-    document.getElementById('tablaBusqueda')?.addEventListener('input', buscar);
-    document.getElementById('btnExportar')?.addEventListener('click', exportarCSV);
-    document.getElementById('btnCerrarModal')?.addEventListener('click', cerrarModal);
-    document.getElementById('modalDetalle')?.addEventListener('click', e => {
-      if (e.target === e.currentTarget) cerrarModal();
+    document.getElementById('filtroMes')?.addEventListener('change', cargarTodo);
+    document.getElementById('filtroAnio')?.addEventListener('change', cargarTodo);
+    document.getElementById('filtroVendedor')?.addEventListener('change', () => {
+      const cod = document.getElementById('filtroVendedor').value;
+      estado.ventasFiltradas = cod
+        ? estado.ventas.filter(v => String(v.CodVendedor) === String(cod))
+        : estado.ventas;
+      estado.paginaActual = 1;
+      renderTabla();
     });
-    document.addEventListener('keydown', e => { if (e.key === 'Escape') cerrarModal(); });
   }
 
   document.addEventListener('DOMContentLoaded', init);
