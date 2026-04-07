@@ -23,7 +23,11 @@
  * - Cards cartera: toggle INDEPENDIENTE — cada card se despliega por separado
  * - Lazy render: la tabla se renderiza solo cuando el usuario abre la card
  * - Cartera filtrada por VenCod del usuario logueado (match usuario_vendedor)
+ fix/lint-errors-abril-2026
+ * - Columnas: CodAux, NomAux, EMail, FonAux1, FonAux2 (desde cwtauxi)
+
  * - Columnas: CodAux, NomAux, FONAUX1 (Tel 1), FonAux2 (Tel 2), EMail
+ main
  */
 
 (function () {
@@ -378,7 +382,11 @@
           (c.CodAux  || '').toLowerCase().includes(q) ||
           (c.NomAux  || '').toLowerCase().includes(q) ||
           (c.EMail   || '').toLowerCase().includes(q) ||
+ fix/lint-errors-abril-2026
+          (c.FonAux1 || '').toLowerCase().includes(q) ||
+
           (c.FONAUX1 || '').toLowerCase().includes(q) ||
+main
           (c.FonAux2 || '').toLowerCase().includes(q))
       : lista;
 
@@ -394,7 +402,12 @@
 
   /**
    * Renderiza filas de la tabla cartera.
+ fix/lint-errors-abril-2026
+   * Columnas: Cód. Cliente | Nombre | Email | Teléfono 1 | Teléfono 2
+   * Campos desde cwtauxi: CodAux, NomAux, EMail, FonAux1, FonAux2
+
    * Columnas: Cód. Cliente | Nombre | Tel. 1 (FONAUX1) | Tel. 2 (FonAux2) | Email (EMail)
+ main
    */
   function renderTablaCartera(tbodyId, lista, mensajeVacio) {
     const tbody = document.getElementById(tbodyId);
@@ -403,6 +416,27 @@
       return;
     }
     tbody.innerHTML = lista.map(c => {
+ fix/lint-errors-abril-2026
+      // Email con enlace mailto: si existe
+      const emailHtml = c.EMail && c.EMail.trim()
+        ? `<a href="mailto:${c.EMail.trim()}" style="color:var(--color-primary);text-decoration:none" title="${c.EMail.trim()}">${c.EMail.trim()}</a>`
+        : '—';
+      // Teléfono 1 con enlace tel: si existe
+      const tel1Html = c.FonAux1 && c.FonAux1.trim()
+        ? `<a href="tel:${c.FonAux1.trim()}" style="color:var(--color-primary);text-decoration:none">${c.FonAux1.trim()}</a>`
+        : '—';
+      // Teléfono 2 con enlace tel: si existe
+      const tel2Html = c.FonAux2 && c.FonAux2.trim()
+        ? `<a href="tel:${c.FonAux2.trim()}" style="color:var(--color-primary);text-decoration:none">${c.FonAux2.trim()}</a>`
+        : '—';
+      return `
+        <tr>
+          <td><code>${c.CodAux || '—'}</code></td>
+          <td>${c.NomAux || '—'}</td>
+          <td>${emailHtml}</td>
+          <td>${tel1Html}</td>
+          <td>${tel2Html}</td>
+
       const emailHtml = c.EMail
         ? `<a href="mailto:${c.EMail}" style="color:var(--color-primary);text-decoration:none" title="${c.EMail}">${c.EMail}</a>`
         : '—';
@@ -419,10 +453,18 @@
           <td>${tel1Html}</td>
           <td>${tel2Html}</td>
           <td>${emailHtml}</td>
+ main
         </tr>`;
     }).join('');
   }
 
+ fix/lint-errors-abril-2026
+  /**
+   * Inicializa los toggles y búsquedas de las cards de cartera.
+   * Cada card opera de forma INDEPENDIENTE.
+   */
+
+ main
   function initCarteraCards() {
     document.querySelectorAll('.cartera-card-btn').forEach(btn => {
       btn.addEventListener('click', () => {
