@@ -23,11 +23,19 @@
  * - Cards cartera: toggle INDEPENDIENTE — cada card se despliega por separado
  * - Lazy render: la tabla se renderiza solo cuando el usuario abre la card
  * - Cartera filtrada por VenCod del usuario logueado (match usuario_vendedor)
+ fix/cartera-columnas-contacto
 fix/cartera-columnas-contacto
  * - Columnas: CodAux, NomAux, EMail, FonAux1, FonAux2 (desde cwtauxi)
 
  * - Columnas: CodAux, NomAux, FONAUX1 (Tel 1), FonAux2 (Tel 2), EMail
 main
+
+ fix/lint-errors-abril-2026
+ * - Columnas: CodAux, NomAux, EMail, FonAux1, FonAux2 (desde cwtauxi)
+
+ * - Columnas: CodAux, NomAux, FONAUX1 (Tel 1), FonAux2 (Tel 2), EMail
+ main
+ main
  */
 
 (function () {
@@ -382,7 +390,11 @@ main
           (c.CodAux  || '').toLowerCase().includes(q) ||
           (c.NomAux  || '').toLowerCase().includes(q) ||
           (c.EMail   || '').toLowerCase().includes(q) ||
+fix/cartera-columnas-contacto
  fix/cartera-columnas-contacto
+
+ fix/lint-errors-abril-2026
+ main
           (c.FonAux1 || '').toLowerCase().includes(q) ||
 
           (c.FONAUX1 || '').toLowerCase().includes(q) ||
@@ -403,6 +415,10 @@ main
   /**
    * Renderiza filas de la tabla cartera.
 fix/cartera-columnas-contacto
+fix/cartera-columnas-contacto
+
+ fix/lint-errors-abril-2026
+ main
    * Columnas: Cód. Cliente | Nombre | Email | Teléfono 1 | Teléfono 2
    * Campos desde cwtauxi: CodAux, NomAux, EMail, FonAux1, FonAux2
 
@@ -417,6 +433,10 @@ fix/cartera-columnas-contacto
     }
     tbody.innerHTML = lista.map(c => {
  fix/cartera-columnas-contacto
+ fix/cartera-columnas-contacto
+
+ fix/lint-errors-abril-2026
+ main
       // Email con enlace mailto: si existe
       const emailHtml = c.EMail && c.EMail.trim()
         ? `<a href="mailto:${c.EMail.trim()}" style="color:var(--color-primary);text-decoration:none" title="${c.EMail.trim()}">${c.EMail.trim()}</a>`
@@ -458,7 +478,11 @@ fix/cartera-columnas-contacto
     }).join('');
   }
 
+fix/cartera-columnas-contacto
  fix/cartera-columnas-contacto
+
+ fix/lint-errors-abril-2026
+ main
   /**
    * Inicializa los toggles y búsquedas de las cards de cartera.
    * Cada card opera de forma INDEPENDIENTE.
