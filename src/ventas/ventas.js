@@ -32,8 +32,7 @@
   const POR_PAGINA = 20;
   const token      = () => localStorage.getItem('token');
 
-  let grafico    = null;
-  let ventasMes  = [];
+  let grafico = null;
 
   const estado = {
     ventas:          [],
@@ -177,11 +176,6 @@
   const MESES_NOMBRE = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
                         'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
-  /**
-   * Garantiza que el card del gráfico exista en el DOM.
-   * Usa textContent para evitar whitespace o texto residual en el título.
-   * Si el card ya existe solo actualiza el título.
-   */
   function asegurarCardGrafico(titulo) {
     const cardExistente = document.getElementById('graficoCard');
     if (cardExistente) {
@@ -219,10 +213,6 @@
     }
   }
 
-  /**
-   * Carga y renderiza el gráfico de evolución anual.
-   * Recibe mes y anio como parámetros explícitos para no depender de getParams().
-   */
   async function cargarGrafico(mes, anio) {
     try {
       const nombreMes     = MESES_NOMBRE[Number(mes) - 1] || '';
@@ -603,7 +593,6 @@
         renderTabla();
       }
 
-      // Pasar mes y anio explícitamente para evitar dependencia de getParams() dentro del gráfico
       await cargarGrafico(mes, anio);
     }
 
