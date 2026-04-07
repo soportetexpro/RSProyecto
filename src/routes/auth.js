@@ -26,9 +26,11 @@ const JWT_EXPIRES = process.env.JWT_EXPIRES_IN || '8h';
 
 // ── POST /api/auth/login ────────────────────────────────────────────
 router.post('/login', async (req, res) => {
-  const { usuario: email, password } = req.body;
+  // Acepta tanto { email } (frontend actual) como { usuario } (retrocompatibilidad)
+  const { email, usuario, password } = req.body;
+  const emailFinal = (email || usuario || '').trim().toLowerCase();
 
-  if (!email || !password) {
+  if (!emailFinal || !password) {
     return res.status(400).json({ ok: false, error: 'Email y contraseña requeridos' });
   }
 
@@ -38,7 +40,7 @@ router.post('/login', async (req, res) => {
        FROM usuario u
        WHERE u.email = ?
        LIMIT 1`,
-      [email.trim().toLowerCase()]
+      [emailFinal]
     );
 
     const user = rows[0];
