@@ -23,7 +23,7 @@
  * - Cards cartera: toggle INDEPENDIENTE — cada card se despliega por separado
  * - Lazy render: la tabla se renderiza solo cuando el usuario abre la card
  * - Cartera filtrada por VenCod del usuario logueado (match usuario_vendedor)
- * - Columnas unificadas para los 3 tipos: CodAux, NomAux, Email, Telefono
+ * - Columnas: CodAux, NomAux, EMail, FonAux1, FonAux2 (desde cwtauxi)
  */
 
 (function () {
@@ -390,10 +390,11 @@
     const q = (filtro || '').toLowerCase();
     const filtrarLista = (lista) => q
       ? lista.filter(c =>
-          (c.CodAux||'').toLowerCase().includes(q) ||
-          (c.NomAux||'').toLowerCase().includes(q) ||
-          (c.Email||'').toLowerCase().includes(q) ||
-          (c.Telefono||'').toLowerCase().includes(q))
+          (c.CodAux  || '').toLowerCase().includes(q) ||
+          (c.NomAux  || '').toLowerCase().includes(q) ||
+          (c.EMail   || '').toLowerCase().includes(q) ||
+          (c.FonAux1 || '').toLowerCase().includes(q) ||
+          (c.FonAux2 || '').toLowerCase().includes(q))
       : lista;
 
     if (tipo === 'activo') {
@@ -408,30 +409,35 @@
 
   /**
    * Renderiza filas de la tabla cartera.
-   * Columnas: Cód. Cliente | Nombre | Email | Teléfono
-   * Aplica para los 3 tipos (activos, inactivos, recuperados).
+   * Columnas: Cód. Cliente | Nombre | Email | Teléfono 1 | Teléfono 2
+   * Campos desde cwtauxi: CodAux, NomAux, EMail, FonAux1, FonAux2
    */
   function renderTablaCartera(tbodyId, lista, mensajeVacio) {
     const tbody = document.getElementById(tbodyId);
     if (!lista.length) {
-      tbody.innerHTML = `<tr class="tabla-empty"><td colspan="4">${mensajeVacio}</td></tr>`;
+      tbody.innerHTML = `<tr class="tabla-empty"><td colspan="5">${mensajeVacio}</td></tr>`;
       return;
     }
     tbody.innerHTML = lista.map(c => {
-      // Email con enlace mailto si existe
-      const emailHtml = c.Email
-        ? `<a href="mailto:${c.Email}" style="color:var(--color-primary);text-decoration:none" title="${c.Email}">${c.Email}</a>`
+      // Email con enlace mailto: si existe
+      const emailHtml = c.EMail && c.EMail.trim()
+        ? `<a href="mailto:${c.EMail.trim()}" style="color:var(--color-primary);text-decoration:none" title="${c.EMail.trim()}">${c.EMail.trim()}</a>`
         : '—';
-      // Teléfono con enlace tel: si existe
-      const telHtml = c.Telefono
-        ? `<a href="tel:${c.Telefono}" style="color:var(--color-primary);text-decoration:none">${c.Telefono}</a>`
+      // Teléfono 1 con enlace tel: si existe
+      const tel1Html = c.FonAux1 && c.FonAux1.trim()
+        ? `<a href="tel:${c.FonAux1.trim()}" style="color:var(--color-primary);text-decoration:none">${c.FonAux1.trim()}</a>`
+        : '—';
+      // Teléfono 2 con enlace tel: si existe
+      const tel2Html = c.FonAux2 && c.FonAux2.trim()
+        ? `<a href="tel:${c.FonAux2.trim()}" style="color:var(--color-primary);text-decoration:none">${c.FonAux2.trim()}</a>`
         : '—';
       return `
         <tr>
-          <td><code>${c.CodAux||'—'}</code></td>
-          <td>${c.NomAux||'—'}</td>
+          <td><code>${c.CodAux || '—'}</code></td>
+          <td>${c.NomAux || '—'}</td>
           <td>${emailHtml}</td>
-          <td>${telHtml}</td>
+          <td>${tel1Html}</td>
+          <td>${tel2Html}</td>
         </tr>`;
     }).join('');
   }
@@ -439,31 +445,25 @@
   /**
    * Inicializa los toggles y búsquedas de las cards de cartera.
    * Cada card opera de forma INDEPENDIENTE.
-   * La tabla se renderiza la primera vez que el usuario abre la card (lazy render).
-   * Se llama una sola vez en init().
    */
   function initCarteraCards() {
-    // Toggle collapse INDEPENDIENTE por card
     document.querySelectorAll('.cartera-card-btn').forEach(btn => {
       btn.addEventListener('click', () => {
-        const tipo   = btn.dataset.tipo;  // 'activo' | 'inactivo' | 'recuperado'
+        const tipo   = btn.dataset.tipo;
         const lista  = document.getElementById(`lista${capitalize(tipo)}`);
         if (!lista) return;
 
         const abierto = !lista.hidden;
 
         if (abierto) {
-          // Cerrar esta card
           lista.hidden = true;
           btn.setAttribute('aria-expanded', 'false');
           btn.closest('.cartera-card').classList.remove('cartera-card--abierta');
         } else {
-          // Abrir esta card
           lista.hidden = false;
           btn.setAttribute('aria-expanded', 'true');
           btn.closest('.cartera-card').classList.add('cartera-card--abierta');
 
-          // Lazy render: solo renderizar si aún no se ha mostrado
           if (!carteraRendered[tipo]) {
             renderCartaTipo(tipo);
           }
@@ -471,17 +471,12 @@
       });
     });
 
-    // Búsqueda local — activos
     document.getElementById('busquedaActivo').addEventListener('input', e => {
       renderCartaTipo('activo', e.target.value);
     });
-
-    // Búsqueda local — inactivos
     document.getElementById('busquedaInactivo').addEventListener('input', e => {
       renderCartaTipo('inactivo', e.target.value);
     });
-
-    // Búsqueda local — recuperados
     document.getElementById('busquedaRecuperado').addEventListener('input', e => {
       renderCartaTipo('recuperado', e.target.value);
     });

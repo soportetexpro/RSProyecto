@@ -14,10 +14,8 @@
  *     match con los cod_vendedor del usuario logueado, evitando
  *     datos basura o de vendedores ajenos.
  *
- * Columnas devueltas:
- *   activos:     CodAux, NomAux, TotalCompras, UltimaFactura
- *   inactivos:   CodAux, NomAux, TotalCompras, DiasInactivo
- *   recuperados: CodAux, NomAux, TotalCompras, UltimaFactura, DiasRecuperado
+ * Columnas devueltas (desde cwtauxi):
+ *   CodAux, NomAux, FonAux1, FonAux2, EMail
  */
 
 const express             = require('express');
@@ -63,13 +61,14 @@ router.get('/', async (req, res) => {
     const anioActual = hoy.getFullYear();
 
     // ── ACTIVOS: compraron en los últimos 90 días ─────────────────────────────
-    // Columnas: CodAux, NomAux, TotalCompras, UltimaFactura
+    // Columnas: CodAux, NomAux, FonAux1, FonAux2, EMail
     const resActivos = await pool.request().query(`
       SELECT
         h.CodAux                                  AS CodAux,
         MAX(RTRIM(c.NomAux))                      AS NomAux,
-        COUNT(DISTINCT h.Folio)                   AS TotalCompras,
-        MAX(h.Fecha)                              AS UltimaFactura
+        MAX(RTRIM(ISNULL(c.FonAux1, '')))         AS FonAux1,
+        MAX(RTRIM(ISNULL(c.FonAux2, '')))         AS FonAux2,
+        MAX(RTRIM(ISNULL(c.EMail,   '')))         AS EMail
       FROM [PRODIN].[softland].[iw_gsaen] h
       INNER JOIN [PRODIN].[softland].[cwtauxi] c ON c.CodAux = h.CodAux
       WHERE h.CodVendedor IN (${inClause})
@@ -81,13 +80,14 @@ router.get('/', async (req, res) => {
     `);
 
     // ── INACTIVOS: última compra entre 90 y 365 días ──────────────────────────
-    // Columnas: CodAux, NomAux, TotalCompras, DiasInactivo
+    // Columnas: CodAux, NomAux, FonAux1, FonAux2, EMail
     const resInactivos = await pool.request().query(`
       SELECT
         h.CodAux                                            AS CodAux,
         MAX(RTRIM(c.NomAux))                                AS NomAux,
-        COUNT(DISTINCT h.Folio)                             AS TotalCompras,
-        DATEDIFF(DAY, MAX(h.Fecha), GETDATE())              AS DiasInactivo
+        MAX(RTRIM(ISNULL(c.FonAux1, '')))                   AS FonAux1,
+        MAX(RTRIM(ISNULL(c.FonAux2, '')))                   AS FonAux2,
+        MAX(RTRIM(ISNULL(c.EMail,   '')))                   AS EMail
       FROM [PRODIN].[softland].[iw_gsaen] h
       INNER JOIN [PRODIN].[softland].[cwtauxi] c ON c.CodAux = h.CodAux
       WHERE h.CodVendedor IN (${inClause})
@@ -103,11 +103,11 @@ router.get('/', async (req, res) => {
             AND Tipo IN ('F','N','D') AND Estado <> 'A'
             AND Fecha >= DATEADD(DAY, -90, GETDATE())
         )
-      ORDER BY DiasInactivo ASC
+      ORDER BY DATEDIFF(DAY, MAX(h.Fecha), GETDATE()) ASC
     `);
 
     // ── RECUPERADOS: estuvieron +90 días sin comprar y volvieron este año ─────
-    // Columnas: CodAux, NomAux, TotalCompras, UltimaFactura, DiasRecuperado
+    // Columnas: CodAux, NomAux, FonAux1, FonAux2, EMail
     const resRecuperados = await pool.request().query(`
       WITH ultima AS (
         SELECT
@@ -134,9 +134,9 @@ router.get('/', async (req, res) => {
       SELECT
         u.CodAux                                                  AS CodAux,
         MAX(RTRIM(c.NomAux))                                      AS NomAux,
-        COUNT(DISTINCT h.Folio)                                   AS TotalCompras,
-        u.UltimaFecha                                             AS UltimaFactura,
-        DATEDIFF(DAY, p.PenultimaFecha, u.UltimaFecha)           AS DiasRecuperado
+        MAX(RTRIM(ISNULL(c.FonAux1, '')))                         AS FonAux1,
+        MAX(RTRIM(ISNULL(c.FonAux2, '')))                         AS FonAux2,
+        MAX(RTRIM(ISNULL(c.EMail,   '')))                         AS EMail
       FROM ultima u
       INNER JOIN penultima p ON p.CodAux = u.CodAux
       INNER JOIN [PRODIN].[softland].[iw_gsaen] h ON h.CodAux = u.CodAux
@@ -148,7 +148,7 @@ router.get('/', async (req, res) => {
         AND h.Tipo IN ('F','N','D')
         AND h.Estado <> 'A'
       GROUP BY u.CodAux, u.UltimaFecha, p.PenultimaFecha
-      ORDER BY DiasRecuperado DESC
+      ORDER BY DATEDIFF(DAY, p.PenultimaFecha, u.UltimaFecha) DESC
     `);
 
     res.json({
