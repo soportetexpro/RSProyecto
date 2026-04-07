@@ -23,7 +23,11 @@
  * - Cards cartera: toggle INDEPENDIENTE — cada card se despliega por separado
  * - Lazy render: la tabla se renderiza solo cuando el usuario abre la card
  * - Cartera filtrada por VenCod del usuario logueado (match usuario_vendedor)
+ fix/lint-errors-abril-2026
  * - Columnas: CodAux, NomAux, EMail, FonAux1, FonAux2 (desde cwtauxi)
+
+ * - Columnas: CodAux, NomAux, FONAUX1 (Tel 1), FonAux2 (Tel 2), EMail
+ main
  */
 
 (function () {
@@ -33,7 +37,6 @@
   const token      = () => localStorage.getItem('token');
 
   let graficoEvolucion  = null;
-  let ventasMes         = [];
   let todosVendedores   = [];  // [{ cod, nombre }]
 
   // Datos cartera en memoria para búsqueda local
@@ -47,11 +50,6 @@
   function formatCLP(v) {
     if (v == null || v === '') return '—';
     return new Intl.NumberFormat('es-CL', { style:'currency', currency:'CLP', maximumFractionDigits:0 }).format(Number(v));
-  }
-
-  function formatFecha(f) {
-    if (!f) return '—';
-    try { return new Date(f).toLocaleDateString('es-CL'); } catch { return f; }
   }
 
   // ── Spinner de carga ──────────────────────────────────────────────────
@@ -267,13 +265,15 @@
   }
 
   // ── Tabla ventas del mes ───────────────────────────────────────────────────
+  let ventasMesData = [];
+
   async function cargarVentasMes() {
     try {
       const res  = await fetch(`${API}/ventas-mes?${new URLSearchParams(getParams())}`, { headers:{ Authorization:`Bearer ${token()}` } });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error);
-      ventasMes = data.ventas || [];
-      renderVentasMes(ventasMes);
+      ventasMesData = data.ventas || [];
+      renderVentasMes(ventasMesData);
     } catch (err) { console.error('[cargarVentasMes]', err); }
   }
 
@@ -311,7 +311,7 @@
     const overlay = document.getElementById('modalOverlay');
     const tbody   = document.getElementById('modalTbody');
     document.getElementById('modalTitulo').textContent    = `Folio N° ${folio}`;
-    const venta = ventasMes.find(v => String(v.Folio) === String(folio));
+    const venta = ventasMesData.find(v => String(v.Folio) === String(folio));
     document.getElementById('modalSubtitulo').textContent = venta ? `${venta.cliente||''} • ${venta.fecha_formato||''}` : '';
     document.getElementById('modalTotalValor').textContent = '—';
     tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:2rem">Cargando...</td></tr>';
@@ -344,10 +344,6 @@
 
   // ══ CARTERA DE CLIENTES ══════════════════════════════════════════════════
 
-  /**
-   * Carga la cartera desde /api/cartera y guarda los datos en memoria.
-   * NO renderiza las tablas — cada card lo hace de forma lazy al abrirse.
-   */
   async function cargarCartera() {
     try {
       const res  = await fetch(API_CART, { headers:{ Authorization:`Bearer ${token()}` } });
@@ -358,15 +354,12 @@
       carteraData.inactivos   = data.inactivos   || [];
       carteraData.recuperados = data.recuperados || [];
 
-      // Resetear estado de render (útil si se recarga con btnActualizar)
       carteraRendered = { activo: false, inactivo: false, recuperado: false };
 
-      // Actualizar contadores en las cards
       document.getElementById('countActivo').textContent     = carteraData.activos.length;
       document.getElementById('countInactivo').textContent   = carteraData.inactivos.length;
       document.getElementById('countRecuperado').textContent = carteraData.recuperados.length;
 
-      // Si alguna card ya está abierta (ej: recarga), renderizar solo esa
       ['activo', 'inactivo', 'recuperado'].forEach(tipo => {
         const lista = document.getElementById(`lista${capitalize(tipo)}`);
         if (lista && !lista.hidden) {
@@ -382,10 +375,6 @@
     }
   }
 
-  /**
-   * Renderiza la tabla de una card específica según su tipo.
-   * Solo se llama cuando la card se abre (lazy render).
-   */
   function renderCartaTipo(tipo, filtro) {
     const q = (filtro || '').toLowerCase();
     const filtrarLista = (lista) => q
@@ -393,7 +382,11 @@
           (c.CodAux  || '').toLowerCase().includes(q) ||
           (c.NomAux  || '').toLowerCase().includes(q) ||
           (c.EMail   || '').toLowerCase().includes(q) ||
+ fix/lint-errors-abril-2026
           (c.FonAux1 || '').toLowerCase().includes(q) ||
+
+          (c.FONAUX1 || '').toLowerCase().includes(q) ||
+main
           (c.FonAux2 || '').toLowerCase().includes(q))
       : lista;
 
@@ -409,8 +402,12 @@
 
   /**
    * Renderiza filas de la tabla cartera.
+ fix/lint-errors-abril-2026
    * Columnas: Cód. Cliente | Nombre | Email | Teléfono 1 | Teléfono 2
    * Campos desde cwtauxi: CodAux, NomAux, EMail, FonAux1, FonAux2
+
+   * Columnas: Cód. Cliente | Nombre | Tel. 1 (FONAUX1) | Tel. 2 (FonAux2) | Email (EMail)
+ main
    */
   function renderTablaCartera(tbodyId, lista, mensajeVacio) {
     const tbody = document.getElementById(tbodyId);
@@ -419,6 +416,7 @@
       return;
     }
     tbody.innerHTML = lista.map(c => {
+ fix/lint-errors-abril-2026
       // Email con enlace mailto: si existe
       const emailHtml = c.EMail && c.EMail.trim()
         ? `<a href="mailto:${c.EMail.trim()}" style="color:var(--color-primary);text-decoration:none" title="${c.EMail.trim()}">${c.EMail.trim()}</a>`
@@ -438,14 +436,35 @@
           <td>${emailHtml}</td>
           <td>${tel1Html}</td>
           <td>${tel2Html}</td>
+
+      const emailHtml = c.EMail
+        ? `<a href="mailto:${c.EMail}" style="color:var(--color-primary);text-decoration:none" title="${c.EMail}">${c.EMail}</a>`
+        : '—';
+      const tel1Html = c.FONAUX1
+        ? `<a href="tel:${c.FONAUX1}" style="color:var(--color-primary);text-decoration:none">${c.FONAUX1}</a>`
+        : '—';
+      const tel2Html = c.FonAux2
+        ? `<a href="tel:${c.FonAux2}" style="color:var(--color-primary);text-decoration:none">${c.FonAux2}</a>`
+        : '—';
+      return `
+        <tr>
+          <td><code>${c.CodAux||'—'}</code></td>
+          <td>${c.NomAux||'—'}</td>
+          <td>${tel1Html}</td>
+          <td>${tel2Html}</td>
+          <td>${emailHtml}</td>
+ main
         </tr>`;
     }).join('');
   }
 
+ fix/lint-errors-abril-2026
   /**
    * Inicializa los toggles y búsquedas de las cards de cartera.
    * Cada card opera de forma INDEPENDIENTE.
    */
+
+ main
   function initCarteraCards() {
     document.querySelectorAll('.cartera-card-btn').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -720,7 +739,7 @@
 
     document.getElementById('busquedaVentas').addEventListener('input', e => {
       const q = e.target.value.toLowerCase();
-      renderVentasMes(ventasMes.filter(v =>
+      renderVentasMes(ventasMesData.filter(v =>
         String(v.Folio||'').toLowerCase().includes(q) ||
         String(v.cliente||'').toLowerCase().includes(q)
       ));
