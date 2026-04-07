@@ -224,7 +224,7 @@ router.get('/evolucion', async (req, res) => {
     compRows.forEach(r=>{ const m=Number(r.mes); if(!compPorMes[m])compPorMes[m]=[]; compPorMes[m].push({folio:Number(r.folio),porcentaje:Number(r.porcentaje)}); });
     const todosLosCompFolios=[...new Set(compRows.map(r=>Number(r.folio)))];
     const pool=await getSoftlandPool();
-    const excludeComp=todosLosCompFolios.length?`AND Folio NOT IN (${todosLosCompFolios.join(',')})`:\'\'';
+    const excludeComp=todosLosCompFolios.length?`AND Folio NOT IN (${todosLosCompFolios.join(',')})` : '';
 
     const resultPropias=await pool.request().query(`
       SELECT MONTH(Fecha) AS mes,
@@ -268,7 +268,7 @@ router.get('/vendedores', async (req, res) => {
   if(!codigos.length) return res.json({ok:true,vendedores:[]});
   try {
     const foliosComp=await getFoliosCompartidos(codigos,mes,anio);
-    const extraFolios=foliosComp.length?`OR h.Folio IN (${foliosComp.join(',')})`:\'\'';
+    const extraFolios=foliosComp.length?`OR h.Folio IN (${foliosComp.join(',')})` : '';
     const pool=await getSoftlandPool();
     const result=await pool.request().query(`
       SELECT h.CodVendedor AS codVendedor,v.VenDes AS nombreVendedor,COUNT(h.Folio) AS folios,
@@ -314,7 +314,7 @@ router.get('/ventas-mes', async (req,res) => {
   try {
     const foliosCompPct=await getFoliosCompartidosConPct(codigos,mes,anio);
     const foliosComp=foliosCompPct.map(r=>r.folio);
-    const extraFolios=foliosComp.length?`OR h.Folio IN (${foliosComp.join(',')})`:\'\'';
+    const extraFolios=foliosComp.length?`OR h.Folio IN (${foliosComp.join(',')})` : '';
     const foliosCompSet=foliosComp.length?`h.Folio IN (${foliosComp.join(',')})`:`1=0`;
     const pool=await getSoftlandPool();
     const result=await pool.request().query(`
@@ -401,7 +401,7 @@ router.get('/compartir/lista', async (req,res) => {
   if(!codigosCoord.length) return res.json({ok:false,error:'No autorizado para compartir'});
   try {
     const foliosYaAsignados=await getFoliosYaAsignados(codigosCoord,mes,anio);
-    const excludeClause=foliosYaAsignados.length?`AND h.Folio NOT IN (${foliosYaAsignados.join(',')})`:\'\'';
+    const excludeClause=foliosYaAsignados.length?`AND h.Folio NOT IN (${foliosYaAsignados.join(',')})` : '';
     const pool=await getSoftlandPool();
     const result=await pool.request().query(`
       SELECT TOP 200 h.Folio,CONVERT(varchar,h.Fecha,103) AS fecha_formato,c.NomAux AS cliente,
