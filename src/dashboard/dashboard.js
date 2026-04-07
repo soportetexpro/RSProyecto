@@ -19,23 +19,7 @@
  *   - /api/dashboard/*
  *   - /api/cartera
  *
- * Cambios:
- * - Cards cartera: toggle INDEPENDIENTE — cada card se despliega por separado
- * - Lazy render: la tabla se renderiza solo cuando el usuario abre la card
- * - Cartera filtrada por VenCod del usuario logueado (match usuario_vendedor)
- fix/cartera-columnas-contacto
-fix/cartera-columnas-contacto
- * - Columnas: CodAux, NomAux, EMail, FonAux1, FonAux2 (desde cwtauxi)
-
- * - Columnas: CodAux, NomAux, FONAUX1 (Tel 1), FonAux2 (Tel 2), EMail
-main
-
- fix/lint-errors-abril-2026
- * - Columnas: CodAux, NomAux, EMail, FonAux1, FonAux2 (desde cwtauxi)
-
- * - Columnas: CodAux, NomAux, FONAUX1 (Tel 1), FonAux2 (Tel 2), EMail
- main
- main
+ * Columnas cartera (desde cwtauxi): CodAux, NomAux, FONAUX1 (Tel 1), FonAux2 (Tel 2), EMail
  */
 
 (function () {
@@ -60,7 +44,7 @@ main
     return new Intl.NumberFormat('es-CL', { style:'currency', currency:'CLP', maximumFractionDigits:0 }).format(Number(v));
   }
 
-  // ── Spinner de carga ──────────────────────────────────────────────────
+  // ── Spinner de carga ──────────────────────────────────────────────────────
 
   let cargaOverlay = null;
 
@@ -114,7 +98,7 @@ main
     return (usuario.vendedores || []).some(v => v.tipo === 'C');
   }
 
-  // ── Sidebar ──────────────────────────────────────────────────────────────
+  // ── Sidebar ───────────────────────────────────────────────────────────────
   const MODULOS = [
     { nombre:'Ventas',        icon:'📊', url:'../ventas/index.html',       area:['ventas','gerencia'] },
     { nombre:'Facturación',   icon:'🧾', url:'../facturacion/index.html',  area:['facturacion','contabilidad','gerencia'] },
@@ -165,7 +149,7 @@ main
     });
   }
 
-  // ── Selectores mes/año ──────────────────────────────────────────────────────
+  // ── Selectores mes/año ────────────────────────────────────────────────────
   function initSelectores() {
     const hoy   = new Date();
     const selMes = document.getElementById('filtroMes');
@@ -188,7 +172,7 @@ main
     return { mes: document.getElementById('filtroMes').value, anio: document.getElementById('filtroAnio').value };
   }
 
-  // ── KPIs ─────────────────────────────────────────────────────────────────
+  // ── KPIs ──────────────────────────────────────────────────────────────────
   async function cargarResumen() {
     try {
       const res  = await fetch(`${API}/resumen?${new URLSearchParams(getParams())}`, { headers:{ Authorization:`Bearer ${token()}` } });
@@ -206,7 +190,7 @@ main
     } catch (err) { console.error('[cargarResumen]', err); }
   }
 
-  // ── Gráfico ──────────────────────────────────────────────────────────────
+  // ── Gráfico ───────────────────────────────────────────────────────────────
   const MESES_LABEL = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 
   async function cargarGrafico() {
@@ -235,7 +219,7 @@ main
           interaction:{ mode:'index', intersect:false },
           plugins:{
             legend:{ position:'top', labels:{ font:{ family:'Montserrat', size:12 }, usePointStyle:true } },
-            tooltip:{ callbacks:{ label:ctx => ` ${ctx.dataset.label}: ${new Intl.NumberFormat('es-CL',{style:'currency',currency:'CLP',maximumFractionDigits:0}).format(ctx.parsed.y)}` } }
+            tooltip:{ callbacks:{ label:ctx2 => ` ${ctx2.dataset.label}: ${new Intl.NumberFormat('es-CL',{style:'currency',currency:'CLP',maximumFractionDigits:0}).format(ctx2.parsed.y)}` } }
           },
           scales:{
             y:{ beginAtZero:true, ticks:{ font:{family:'Open Sans',size:11}, callback: v => new Intl.NumberFormat('es-CL',{notation:'compact',compactDisplay:'short'}).format(v) }, grid:{color:'rgba(0,0,0,0.05)'} },
@@ -246,7 +230,7 @@ main
     } catch (err) { console.error('[cargarGrafico]', err); }
   }
 
-  // ── Tabla vendedores ─────────────────────────────────────────────────────
+  // ── Tabla vendedores ──────────────────────────────────────────────────────
   async function cargarVendedores() {
     try {
       const res  = await fetch(`${API}/vendedores?${new URLSearchParams(getParams())}`, { headers:{ Authorization:`Bearer ${token()}` } });
@@ -272,7 +256,7 @@ main
     } catch (err) { console.error('[cargarVendedores]', err); }
   }
 
-  // ── Tabla ventas del mes ───────────────────────────────────────────────────
+  // ── Tabla ventas del mes ──────────────────────────────────────────────────
   let ventasMesData = [];
 
   async function cargarVentasMes() {
@@ -350,7 +334,7 @@ main
     document.body.style.overflow = '';
   }
 
-  // ══ CARTERA DE CLIENTES ══════════════════════════════════════════════════
+  // ── CARTERA DE CLIENTES ───────────────────────────────────────────────────
 
   async function cargarCartera() {
     try {
@@ -390,15 +374,7 @@ main
           (c.CodAux  || '').toLowerCase().includes(q) ||
           (c.NomAux  || '').toLowerCase().includes(q) ||
           (c.EMail   || '').toLowerCase().includes(q) ||
-fix/cartera-columnas-contacto
- fix/cartera-columnas-contacto
-
- fix/lint-errors-abril-2026
- main
-          (c.FonAux1 || '').toLowerCase().includes(q) ||
-
           (c.FONAUX1 || '').toLowerCase().includes(q) ||
-main
           (c.FonAux2 || '').toLowerCase().includes(q))
       : lista;
 
@@ -414,16 +390,7 @@ main
 
   /**
    * Renderiza filas de la tabla cartera.
-fix/cartera-columnas-contacto
-fix/cartera-columnas-contacto
-
- fix/lint-errors-abril-2026
- main
-   * Columnas: Cód. Cliente | Nombre | Email | Teléfono 1 | Teléfono 2
-   * Campos desde cwtauxi: CodAux, NomAux, EMail, FonAux1, FonAux2
-
    * Columnas: Cód. Cliente | Nombre | Tel. 1 (FONAUX1) | Tel. 2 (FonAux2) | Email (EMail)
- main
    */
   function renderTablaCartera(tbodyId, lista, mensajeVacio) {
     const tbody = document.getElementById(tbodyId);
@@ -432,31 +399,6 @@ fix/cartera-columnas-contacto
       return;
     }
     tbody.innerHTML = lista.map(c => {
- fix/cartera-columnas-contacto
- fix/cartera-columnas-contacto
-
- fix/lint-errors-abril-2026
- main
-      // Email con enlace mailto: si existe
-      const emailHtml = c.EMail && c.EMail.trim()
-        ? `<a href="mailto:${c.EMail.trim()}" style="color:var(--color-primary);text-decoration:none" title="${c.EMail.trim()}">${c.EMail.trim()}</a>`
-        : '—';
-      // Teléfono 1 con enlace tel: si existe
-      const tel1Html = c.FonAux1 && c.FonAux1.trim()
-        ? `<a href="tel:${c.FonAux1.trim()}" style="color:var(--color-primary);text-decoration:none">${c.FonAux1.trim()}</a>`
-        : '—';
-      // Teléfono 2 con enlace tel: si existe
-      const tel2Html = c.FonAux2 && c.FonAux2.trim()
-        ? `<a href="tel:${c.FonAux2.trim()}" style="color:var(--color-primary);text-decoration:none">${c.FonAux2.trim()}</a>`
-        : '—';
-      return `
-        <tr>
-          <td><code>${c.CodAux || '—'}</code></td>
-          <td>${c.NomAux || '—'}</td>
-          <td>${emailHtml}</td>
-          <td>${tel1Html}</td>
-          <td>${tel2Html}</td>
-
       const emailHtml = c.EMail
         ? `<a href="mailto:${c.EMail}" style="color:var(--color-primary);text-decoration:none" title="${c.EMail}">${c.EMail}</a>`
         : '—';
@@ -473,22 +415,14 @@ fix/cartera-columnas-contacto
           <td>${tel1Html}</td>
           <td>${tel2Html}</td>
           <td>${emailHtml}</td>
- main
         </tr>`;
     }).join('');
   }
 
-fix/cartera-columnas-contacto
- fix/cartera-columnas-contacto
-
- fix/lint-errors-abril-2026
- main
   /**
    * Inicializa los toggles y búsquedas de las cards de cartera.
    * Cada card opera de forma INDEPENDIENTE.
    */
-
- main
   function initCarteraCards() {
     document.querySelectorAll('.cartera-card-btn').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -529,7 +463,7 @@ fix/cartera-columnas-contacto
     return s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
   }
 
-  // ══ PANEL COORDINADOR ════════════════════════════════════════════════════
+  // ── PANEL COORDINADOR ─────────────────────────────────────────────────────
 
   async function cargarListaVendedores() {
     try {
@@ -702,7 +636,7 @@ fix/cartera-columnas-contacto
     });
   }
 
-  // ══ PANEL FOLIOS RECIBIDOS ═══════════════════════════════════════════════
+  // ── PANEL FOLIOS RECIBIDOS ────────────────────────────────────────────────
 
   async function iniciarPanelCompartidos() {
     document.getElementById('panelCompartidos').style.display = 'block';
@@ -731,7 +665,7 @@ fix/cartera-columnas-contacto
     } catch(err) { console.error('[cargarFoliosCompartidos]',err); }
   }
 
-  // ── Cargar todo ────────────────────────────────────────────────────────────
+  // ── Cargar todo ───────────────────────────────────────────────────────────
   async function cargarTodo(usuario) {
     mostrarCarga();
     try {

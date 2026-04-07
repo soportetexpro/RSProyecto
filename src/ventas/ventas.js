@@ -43,7 +43,6 @@
     usuario:         null,
   };
 
-  // ── Formato CLP ────────────────────────────────────────────────────────────────────────
   function formatCLP(v) {
     if (v == null || v === '') return '—';
     return new Intl.NumberFormat('es-CL', {
@@ -51,7 +50,6 @@
     }).format(Number(v));
   }
 
-  // ── Formato % ─────────────────────────────────────────────────────────────────────────
   function formatPct(v) {
     if (v == null || v === '') return '—';
     const n = Number(v);
@@ -59,7 +57,6 @@
     return n.toFixed(2) + '%';
   }
 
-  // ── Auth ─────────────────────────────────────────────────────────────────────────────────
   async function verificarSesion() {
     if (!token()) { window.location.href = '../login/index.html'; return null; }
     try {
@@ -70,7 +67,6 @@
     } catch { window.location.href = '../login/index.html'; return null; }
   }
 
-  // ── Sidebar ──────────────────────────────────────────────────────────────────────────────
   const MODULOS = [
     { nombre:'Ventas',        icon:'📊', url:'../ventas/index.html',       area:['ventas','gerencia'] },
     { nombre:'Facturación',   icon:'🧾', url:'../facturacion/index.html',  area:['facturacion','contabilidad','gerencia'] },
@@ -117,7 +113,6 @@
     });
   }
 
-  // ── Selectores mes/año ────────────────────────────────────────────────────────────────────────
   function initFiltros(usuario) {
     const hoy   = new Date();
     const meses = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
@@ -154,7 +149,6 @@
     };
   }
 
-  // ── KPIs ─────────────────────────────────────────────────────────────────────────────────
   function renderKpis(totalVentas, metaMes, totalDescuento) {
     const progreso = metaMes > 0 ? Math.min(Math.round((totalVentas / metaMes) * 100), 999) : 0;
     const pct      = Math.min(progreso, 100);
@@ -171,7 +165,6 @@
                           : 'var(--color-danger)';
   }
 
-  // ── Gráfico de líneas ──────────────────────────────────────────────────────────────────────
   const MESES_LABEL  = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
   const MESES_NOMBRE = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
                         'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
@@ -304,7 +297,6 @@
     }
   }
 
-  // ── Tabla 2: ventas del mes (paginada) ─────────────────────────────────────────────────────
   function sortVentas(arr) {
     return [...arr].sort((a, b) => {
       let va = a[estado.sortCol] ?? '';
@@ -397,7 +389,6 @@
     });
   }
 
-  // ── Tabla 1: Ventas por Vendedor ──────────────────────────────────────────────────────────
   function renderTablaVendedores(vendedores) {
     const tbody = document.getElementById('tbodyVendedores');
 
@@ -463,7 +454,6 @@
     }).join('');
   }
 
-  // ── Modal detalle folio ───────────────────────────────────────────────────────────────────
   async function abrirDetalle(folio) {
     try {
       const res  = await fetch(`${API}/detalle/${folio}`, { headers: { Authorization: `Bearer ${token()}` } });
@@ -525,7 +515,6 @@
     document.getElementById('modalDetalle').classList.remove('modal--open');
   }
 
-  // ── Exportar CSV ─────────────────────────────────────────────────────────────────────────
   function exportarCSV() {
     const datos = estado.ventasFiltradas;
     if (!datos.length) return;
@@ -544,13 +533,11 @@
     a.click(); URL.revokeObjectURL(url);
   }
 
-  // ── Búsqueda ─────────────────────────────────────────────────────────────────────────────
   function buscar() {
     estado.paginaActual = 1;
     renderTabla();
   }
 
-  // ── Init ─────────────────────────────────────────────────────────────────────────────────
   async function init() {
     const usuario = await verificarSesion();
     if (!usuario) return;
