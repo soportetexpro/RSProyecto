@@ -15,9 +15,9 @@
  *     datos basura o de vendedores ajenos.
  *
  * Columnas devueltas:
- *   activos:     CodAux, NomAux, TotalCompras, UltimaFactura
- *   inactivos:   CodAux, NomAux, TotalCompras, DiasInactivo
- *   recuperados: CodAux, NomAux, TotalCompras, UltimaFactura, DiasRecuperado
+ *   activos:     CodAux, NomAux, FONAUX1, FonAux2, EMail, TotalCompras, UltimaFactura
+ *   inactivos:   CodAux, NomAux, FONAUX1, FonAux2, EMail, TotalCompras, DiasInactivo
+ *   recuperados: CodAux, NomAux, FONAUX1, FonAux2, EMail, TotalCompras, UltimaFactura, DiasRecuperado
  */
 
 const express             = require('express');
@@ -63,11 +63,14 @@ router.get('/', async (req, res) => {
     const anioActual = hoy.getFullYear();
 
     // ── ACTIVOS: compraron en los últimos 90 días ─────────────────────────────
-    // Columnas: CodAux, NomAux, TotalCompras, UltimaFactura
+    // Columnas: CodAux, NomAux, FONAUX1, FonAux2, EMail, TotalCompras, UltimaFactura
     const resActivos = await pool.request().query(`
       SELECT
         h.CodAux                                  AS CodAux,
         MAX(RTRIM(c.NomAux))                      AS NomAux,
+        MAX(RTRIM(c.FONAUX1))                     AS FONAUX1,
+        MAX(RTRIM(c.FonAux2))                     AS FonAux2,
+        MAX(RTRIM(c.EMail))                       AS EMail,
         COUNT(DISTINCT h.Folio)                   AS TotalCompras,
         MAX(h.Fecha)                              AS UltimaFactura
       FROM [PRODIN].[softland].[iw_gsaen] h
@@ -81,11 +84,14 @@ router.get('/', async (req, res) => {
     `);
 
     // ── INACTIVOS: última compra entre 90 y 365 días ──────────────────────────
-    // Columnas: CodAux, NomAux, TotalCompras, DiasInactivo
+    // Columnas: CodAux, NomAux, FONAUX1, FonAux2, EMail, TotalCompras, DiasInactivo
     const resInactivos = await pool.request().query(`
       SELECT
         h.CodAux                                            AS CodAux,
         MAX(RTRIM(c.NomAux))                                AS NomAux,
+        MAX(RTRIM(c.FONAUX1))                               AS FONAUX1,
+        MAX(RTRIM(c.FonAux2))                               AS FonAux2,
+        MAX(RTRIM(c.EMail))                                 AS EMail,
         COUNT(DISTINCT h.Folio)                             AS TotalCompras,
         DATEDIFF(DAY, MAX(h.Fecha), GETDATE())              AS DiasInactivo
       FROM [PRODIN].[softland].[iw_gsaen] h
@@ -107,7 +113,7 @@ router.get('/', async (req, res) => {
     `);
 
     // ── RECUPERADOS: estuvieron +90 días sin comprar y volvieron este año ─────
-    // Columnas: CodAux, NomAux, TotalCompras, UltimaFactura, DiasRecuperado
+    // Columnas: CodAux, NomAux, FONAUX1, FonAux2, EMail, TotalCompras, UltimaFactura, DiasRecuperado
     const resRecuperados = await pool.request().query(`
       WITH ultima AS (
         SELECT
@@ -134,6 +140,9 @@ router.get('/', async (req, res) => {
       SELECT
         u.CodAux                                                  AS CodAux,
         MAX(RTRIM(c.NomAux))                                      AS NomAux,
+        MAX(RTRIM(c.FONAUX1))                                     AS FONAUX1,
+        MAX(RTRIM(c.FonAux2))                                     AS FonAux2,
+        MAX(RTRIM(c.EMail))                                       AS EMail,
         COUNT(DISTINCT h.Folio)                                   AS TotalCompras,
         u.UltimaFecha                                             AS UltimaFactura,
         DATEDIFF(DAY, p.PenultimaFecha, u.UltimaFecha)           AS DiasRecuperado
