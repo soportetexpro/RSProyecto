@@ -13,12 +13,19 @@
  *   SOFTLAND_DB_USER
  *   SOFTLAND_DB_PASSWORD
  *   SOFTLAND_DB_NAME
- *   SOFTLAND_DB_ENCRYPT      (default: false — true en Azure/producción)
- *   SOFTLAND_DB_TRUST_CERT   (default: false — true solo en dev con cert autofirmado)
+ *   SOFTLAND_DB_ENCRYPT      (default: true — cifrado obligatorio)
+ *   SOFTLAND_DB_TRUST_SERVER_CERT  (default: FALSE — solo true en dev con cert autofirmado)
+ *
+ * SEGURIDAD:
+ *   - En producción SOFTLAND_DB_TRUST_SERVER_CERT debe ser false (valor por defecto).
+ *     Dejarlo en true permite ataques MITM contra la réplica Softland.
+ *   - En desarrollo local con certificado autofirmado puede ponerse true.
  */
 
 const sql  = require('mssql');
 require('dotenv').config();
+
+const isProd = process.env.NODE_ENV === 'production';
 
 const config = {
   server:   process.env.SOFTLAND_DB_HOST,
@@ -27,32 +34,52 @@ const config = {
   password: process.env.SOFTLAND_DB_PASSWORD,
   database: process.env.SOFTLAND_DB_NAME,
   options: {
-    // TLS / encryption options. Allow either env var name for trust flag
-    // to be compatible with different deployments. Defaults to true.
+    // encrypt: siempre true salvo override explícito en .env
     encrypt: (typeof process.env.SOFTLAND_DB_ENCRYPT !== 'undefined')
       ? process.env.SOFTLAND_DB_ENCRYPT === 'true'
       : true,
-    trustServerCertificate: (function() {
-      if (typeof process.env.SOFTLAND_DB_TRUST_SERVER_CERT !== 'undefined') {
-        return process.env.SOFTLAND_DB_TRUST_SERVER_CERT === 'true';
+
+    // trustServerCertificate:
+    //   - Producción → FALSE por defecto (seguro, previene MITM)
+    //   - Desarrollo  → puede ser true si el servidor usa cert autofirmado
+    //   Override con SOFTLAND_DB_TRUST_SERVER_CERT=true solo en dev.
+    trustServerCertificate: (function () {
+      // Prioridad: SOFTLAND_DB_TRUST_SERVER_CERT > SOFTLAND_DB_TRUST_CERT > default
+      const envVal =
+        process.env.SOFTLAND_DB_TRUST_SERVER_CERT ??
+        process.env.SOFTLAND_DB_TRUST_CERT;
+
+      if (typeof envVal !== 'undefined') {
+        return envVal === 'true';
       }
-      if (typeof process.env.SOFTLAND_DB_TRUST_CERT !== 'undefined') {
-        return process.env.SOFTLAND_DB_TRUST_CERT === 'true';
-      }
-      return true;
+
+      // Default seguro: false en producción, true en desarrollo
+      return !isProd;
     })(),
-    connectTimeout:         15000,
-    requestTimeout:         30000
+
+    connectTimeout: 15000,
+    requestTimeout: 30000,
   },
   pool: {
-    idleTimeoutMillis: 30000
-  }
+    idleTimeoutMillis: 30000,
+  },
 };
 
 let _pool = null;
 
+/**
+ * Retorna el pool activo. Si no existe o la conexión cayó, crea uno nuevo.
+ * Implementa reconexión básica ante caídas de Softland.
+ */
 async function getSoftlandPool() {
   if (_pool && _pool.connected) return _pool;
+
+  // Si el pool existe pero no está conectado, cerrarlo limpiamente antes de reconectar
+  if (_pool) {
+    try { await _pool.close(); } catch { /* ignorar error al cerrar pool roto */ }
+    _pool = null;
+  }
+
   _pool = await sql.connect(config);
   return _pool;
 }

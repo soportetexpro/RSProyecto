@@ -23,6 +23,16 @@ const helmet    = require('helmet');
 const rateLimit = require('express-rate-limit');
 require('dotenv').config();
 
+// ── Validación de entorno obligatoria ────────────────────────────
+// En producción, FRONTEND_URL es obligatoria para configurar CORS correctamente.
+// Fallar rápido evita que el servidor arranque con CORS mal configurado.
+if (process.env.NODE_ENV === 'production' && !process.env.FRONTEND_URL) {
+  console.error('[ERROR CRÍTICO] Variable de entorno FRONTEND_URL no definida.');
+  console.error('  En producción esta variable es obligatoria para CORS.');
+  console.error('  Agrega FRONTEND_URL=https://tu-dominio.cl en el archivo .env');
+  process.exit(1);
+}
+
 const { testConnection }    = require('./config/db');
 const authRoutes            = require('./routes/auth');
 const recuperarRoutes       = require('./routes/recuperar');
@@ -97,6 +107,21 @@ const loginLimiter = rateLimit({
   }
 });
 
+// ── Rate limiting — API global ─────────────────────────────────
+// Protege todos los endpoints /api/* de abuso masivo.
+// Límite permisivo (300 req/min) para no afectar uso normal.
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => req.path === '/api/health', // healthcheck no necesita límite
+  message: {
+    ok: false,
+    error: 'Demasiadas solicitudes. Intenta nuevamente en un momento.'
+  },
+});
+
 // ── Archivos estáticos (frontend) ─────────────────────────────────
 app.use(express.static(path.join(__dirname, '..')));
 
@@ -120,6 +145,7 @@ app.get('/api/health', async (_req, res) => {
 });
 
 // ── Rutas API ────────────────────────────────────────────────────
+app.use('/api', apiLimiter);
 app.use('/api/auth/login',      loginLimiter);
 app.use('/api/auth',            authRoutes);
 app.use('/api/auth',            recuperarRoutes);

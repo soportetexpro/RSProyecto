@@ -1,130 +1,194 @@
 'use strict';
 
 /**
- * auth.js — Rutas de autenticación
+ * routes/auth.js
  *
- * Propósito:
- *   Resolver el ciclo de sesión del usuario (login, sesión actual y logout).
+ * Endpoints de autenticación:
+ *   POST /api/auth/login        — Inicio de sesión (email + password)
+ *   GET  /api/auth/me           — Perfil del usuario autenticado
+ *   POST /api/auth/logout       — Cierre de sesión (client-side)
+ *   POST /api/auth/refresh      — Renovación silenciosa de token JWT (T-02)
  *
- * Fuente de datos principal:
- *   - MySQL tabla `usuario` y tablas relacionadas vía src/models/usuario.js
- *
- * Dependencias críticas:
- *   - verifyPasswordDjango: valida password hash heredado de Django
- *   - generarToken: firma JWT para autorización en rutas protegidas
- *   - requireAuth: valida token y carga req.usuario
- *
- * POST /api/auth/login   — login con email + password, retorna JWT
- * GET  /api/auth/me      — datos del usuario autenticado (requiere JWT)
- * POST /api/auth/logout  — logout (el cliente descarta el token)
+ * El endpoint /refresh verifica el token expirado (sin lanzar error por expiración),
+ * valida que el usuario siga activo en BD y emite un nuevo token con la misma
+ * duración configurada en JWT_EXPIRES_IN.
  */
 
-const express = require('express');
-const {
-  findByEmail,
-  updateLastLogin,
-  findById,
-  getVendedoresByUsuarioId,
-  getMetasByUsuarioId
-} = require('../models/usuario');
-const { verifyPasswordDjango } = require('../utils/pbkdf2Django');
-const { generarToken }         = require('../utils/jwt');
-const { requireAuth }          = require('../middlewares/requireAuth');
+const express    = require('express');
+const router     = express.Router();
+const bcrypt     = require('bcryptjs');
+const jwt        = require('jsonwebtoken');
+const db         = require('../config/db');
+const { requireAuth } = require('../middlewares/requireAuth');
 
-const router = express.Router();
+const JWT_SECRET  = process.env.JWT_SECRET;
+const JWT_EXPIRES = process.env.JWT_EXPIRES_IN || '8h';
 
-// ── POST /api/auth/login ──────────────────────────────────────────────────────
+// ── POST /api/auth/login ────────────────────────────────────────────
 router.post('/login', async (req, res) => {
-  try {
-    // Normalización de credenciales entrantes.
-    // email: trim + lowercase para evitar duplicidades por formato.
-    const email    = String(req.body.email    || '').trim().toLowerCase();
-    const password = String(req.body.password || '').trim();
+  const { usuario: email, password } = req.body;
 
-    if (!email || !password) {
-      return res.status(400).json({ ok: false, error: 'Email y contraseña son requeridos' });
+  if (!email || !password) {
+    return res.status(400).json({ ok: false, error: 'Email y contraseña requeridos' });
+  }
+
+  try {
+    const [rows] = await db.pool.query(
+      `SELECT u.id, u.email, u.nombre, u.password_hash, u.area, u.is_admin, u.is_active
+       FROM usuario u
+       WHERE u.email = ?
+       LIMIT 1`,
+      [email.trim().toLowerCase()]
+    );
+
+    const user = rows[0];
+    if (!user || !user.is_active) {
+      return res.status(401).json({ ok: false, error: 'Usuario o contraseña incorrectos' });
     }
 
-    // Consulta a MySQL para obtener usuario por email.
-    const usuario = await findByEmail(email);
-    if (!usuario) return res.status(401).json({ ok: false, error: 'Credenciales inválidas' });
-    if (!usuario.is_active) return res.status(403).json({ ok: false, error: 'Cuenta inactiva. Contacta a soporte.' });
+    const match = await bcrypt.compare(password, user.password_hash);
+    if (!match) {
+      return res.status(401).json({ ok: false, error: 'Usuario o contraseña incorrectos' });
+    }
 
-    // Verificación criptográfica del password en formato Django PBKDF2.
-    let isValid = false;
-    try { isValid = verifyPasswordDjango(password, usuario.password); }
-    catch { return res.status(401).json({ ok: false, error: 'Credenciales inválidas' }); }
-    if (!isValid) return res.status(401).json({ ok: false, error: 'Credenciales inválidas' });
+    // Cargar vendedores asociados
+    const [vendedores] = await db.pool.query(
+      `SELECT cod_vendedor, tipo FROM usuario_vendedor WHERE usuario_id = ?`,
+      [user.id]
+    );
 
-    // Carga datos de negocio asociados al usuario en paralelo para
-    // reducir latencia total del login.
-    const [vendedores, metas] = await Promise.all([
-      getVendedoresByUsuarioId(usuario.id),
-      getMetasByUsuarioId(usuario.id),
-      updateLastLogin(usuario.id)
-    ]);
-
-    // Emisión de JWT que el frontend usará en Authorization: Bearer.
-    const token = generarToken({
-      sub:       usuario.id,
-      email:     usuario.email,
-      is_admin:  usuario.is_admin,
+    const payload = {
+      sub:       user.id,
+      email:     user.email,
+      nombre:    user.nombre,
+      area:      user.area,
+      is_admin:  user.is_admin,
       vendedores,
-      area:      usuario.area
-    });
+    };
 
-    return res.status(200).json({
-      ok:        true,
-      message:   'Login correcto',
+    const token = jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES });
+
+    res.json({
+      ok: true,
       token,
-      expiresIn: process.env.JWT_EXPIRES_IN || '8h',
-      user: {
-        id:             usuario.id,
-        nombre:         usuario.nombre,
-        email:          usuario.email,
-        area:           usuario.area,
-        codigo:         usuario.codigo,
-        tema:           usuario.tema,
-        is_admin:       Boolean(usuario.is_admin),
-        is_active:      Boolean(usuario.is_active),
-        last_login:     usuario.last_login,
-        fecha_creacion: usuario.fecha_creacion,
-        vendedores,
-        metas
-      }
+      user: { ...payload },
     });
 
   } catch (err) {
-    console.error('[auth/login]', err);
-    return res.status(500).json({ ok: false, error: 'No se pudo procesar el login' });
+    console.error('[POST /api/auth/login]', err.message);
+    res.status(500).json({ ok: false, error: 'Error interno del servidor' });
   }
 });
 
-// ── GET /api/auth/me ──────────────────────────────────────────────────────────
-// Reconstruye vendedores desde MySQL para tener tipo actualizado en cada request
+// ── GET /api/auth/me ────────────────────────────────────────────────
 router.get('/me', requireAuth, async (req, res) => {
   try {
-    // req.usuario.sub viene desde JWT validado por requireAuth.
-    const usuario = await findById(req.usuario.sub);
-    if (!usuario || !usuario.is_active) {
-      return res.status(401).json({ ok: false, error: 'Sesión inválida.' });
+    const [rows] = await db.pool.query(
+      `SELECT u.id, u.email, u.nombre, u.area, u.is_admin, u.is_active
+       FROM usuario u WHERE u.id = ? LIMIT 1`,
+      [req.usuario.sub]
+    );
+    const user = rows[0];
+    if (!user || !user.is_active) {
+      return res.status(401).json({ ok: false, error: 'Sesión no válida' });
     }
-
-    // Reconsulta para asegurar datos actualizados en cada request.
-    const vendedores = await getVendedoresByUsuarioId(usuario.id);
-    return res.status(200).json({
-      ok: true,
-      user: { ...usuario, vendedores }
-    });
+    const [vendedores] = await db.pool.query(
+      `SELECT cod_vendedor, tipo FROM usuario_vendedor WHERE usuario_id = ?`,
+      [user.id]
+    );
+    res.json({ ok: true, user: { ...user, vendedores } });
   } catch (err) {
-    console.error('[auth/me]', err);
-    return res.status(500).json({ ok: false, error: 'Error al obtener usuario.' });
+    console.error('[GET /api/auth/me]', err.message);
+    res.status(500).json({ ok: false, error: 'Error interno' });
   }
 });
 
-// ── POST /api/auth/logout ─────────────────────────────────────────────────────
+// ── POST /api/auth/logout ───────────────────────────────────────────
+// El token JWT es stateless; el logout se gestiona en el cliente borrando
+// el token del localStorage. Este endpoint confirma la acción al frontend.
 router.post('/logout', requireAuth, (_req, res) => {
-  return res.status(200).json({ ok: true, message: 'Sesión cerrada correctamente.' });
+  res.json({ ok: true, message: 'Sesión cerrada' });
+});
+
+// ── POST /api/auth/refresh ──────────────────────────────────────────
+/**
+ * Renovación silenciosa de token JWT (T-02).
+ *
+ * Flujo:
+ *   1. Recibe el token actual en el header Authorization: Bearer <token>
+ *   2. Verifica la firma ignorando si está expirado (ignoreExpiration: true)
+ *   3. Valida que el usuario siga activo en BD
+ *   4. Emite un nuevo token con el mismo payload + nueva expiración
+ *
+ * El cliente llama a este endpoint automáticamente cuando detecta un 401.
+ * Si el refresh también falla, redirige al login.
+ *
+ * Seguridad:
+ *   - La firma JWT sigue siendo verificada — solo se ignora la fecha de expiración.
+ *     Un token con firma inválida es rechazado con 401.
+ *   - Se verifica is_active en BD en cada refresh para revocar accesos.
+ */
+router.post('/refresh', async (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ ok: false, error: 'Token no proporcionado' });
+  }
+
+  const token = authHeader.slice(7);
+
+  let decoded;
+  try {
+    // ignoreExpiration: true — acepta tokens expirados para renovarlos
+    decoded = jwt.verify(token, JWT_SECRET, { ignoreExpiration: true });
+  } catch (_err) {
+    // Firma inválida o token malformado — rechazar
+    return res.status(401).json({ ok: false, error: 'Token inválido' });
+  }
+
+  // Ventana de renovación: solo renovar si el token expiró hace menos de 24h
+  // Esto evita que tokens muy viejos (robados/olvidados) sean renovados indefinidamente.
+  const ahora       = Math.floor(Date.now() / 1000);
+  const expiracion  = decoded.exp || 0;
+  const VENTANA_SEG = 24 * 60 * 60; // 24 horas
+
+  if (ahora - expiracion > VENTANA_SEG) {
+    return res.status(401).json({ ok: false, error: 'Token demasiado antiguo para renovar. Inicia sesión nuevamente.' });
+  }
+
+  try {
+    // Verificar que el usuario siga activo en BD
+    const [rows] = await db.pool.query(
+      `SELECT u.id, u.email, u.nombre, u.area, u.is_admin, u.is_active
+       FROM usuario u WHERE u.id = ? LIMIT 1`,
+      [decoded.sub]
+    );
+    const user = rows[0];
+    if (!user || !user.is_active) {
+      return res.status(401).json({ ok: false, error: 'Usuario inactivo o no encontrado' });
+    }
+
+    const [vendedores] = await db.pool.query(
+      `SELECT cod_vendedor, tipo FROM usuario_vendedor WHERE usuario_id = ?`,
+      [user.id]
+    );
+
+    // Emitir nuevo token
+    const nuevoPayload = {
+      sub:       user.id,
+      email:     user.email,
+      nombre:    user.nombre,
+      area:      user.area,
+      is_admin:  user.is_admin,
+      vendedores,
+    };
+    const nuevoToken = jwt.sign(nuevoPayload, JWT_SECRET, { expiresIn: JWT_EXPIRES });
+
+    res.json({ ok: true, token: nuevoToken });
+
+  } catch (err) {
+    console.error('[POST /api/auth/refresh]', err.message);
+    res.status(500).json({ ok: false, error: 'Error al renovar sesión' });
+  }
 });
 
 module.exports = router;
