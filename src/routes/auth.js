@@ -140,7 +140,7 @@ router.post('/refresh', async (req, res) => {
   try {
     // ignoreExpiration: true — acepta tokens expirados para renovarlos
     decoded = jwt.verify(token, JWT_SECRET, { ignoreExpiration: true });
-  } catch (err) {
+  } catch (_err) {
     // Firma inválida o token malformado — rechazar
     return res.status(401).json({ ok: false, error: 'Token inválido' });
   }

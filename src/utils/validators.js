@@ -17,7 +17,7 @@
  */
 
 // Regex para códigos de vendedor Softland: letras, números, guión, máx 20 chars
-const COD_VENDEDOR_RE = /^[A-Za-z0-9\-]{1,20}$/;
+const COD_VENDEDOR_RE = /^[A-Za-z0-9-]{1,20}$/;
 
 /**
  * Valida y retorna un número de folio entero positivo.
