@@ -14,8 +14,15 @@
  *     match con los cod_vendedor del usuario logueado, evitando
  *     datos basura o de vendedores ajenos.
  *
+ fix/cartera-columnas-contacto
  * Columnas devueltas (desde cwtauxi):
  *   CodAux, NomAux, FonAux1, FonAux2, EMail
+
+ * Columnas devueltas:
+ *   activos:     CodAux, NomAux, FONAUX1, FonAux2, EMail, TotalCompras, UltimaFactura
+ *   inactivos:   CodAux, NomAux, FONAUX1, FonAux2, EMail, TotalCompras, DiasInactivo
+ *   recuperados: CodAux, NomAux, FONAUX1, FonAux2, EMail, TotalCompras, UltimaFactura, DiasRecuperado
+ main
  */
 
 const express             = require('express');
@@ -61,14 +68,26 @@ router.get('/', async (req, res) => {
     const anioActual = hoy.getFullYear();
 
     // ── ACTIVOS: compraron en los últimos 90 días ─────────────────────────────
+ fix/cartera-columnas-contacto
     // Columnas: CodAux, NomAux, FonAux1, FonAux2, EMail
+
+    // Columnas: CodAux, NomAux, FONAUX1, FonAux2, EMail, TotalCompras, UltimaFactura
+ main
     const resActivos = await pool.request().query(`
       SELECT
         h.CodAux                                  AS CodAux,
         MAX(RTRIM(c.NomAux))                      AS NomAux,
+ fix/cartera-columnas-contacto
         MAX(RTRIM(ISNULL(c.FonAux1, '')))         AS FonAux1,
         MAX(RTRIM(ISNULL(c.FonAux2, '')))         AS FonAux2,
         MAX(RTRIM(ISNULL(c.EMail,   '')))         AS EMail
+
+        MAX(RTRIM(c.FONAUX1))                     AS FONAUX1,
+        MAX(RTRIM(c.FonAux2))                     AS FonAux2,
+        MAX(RTRIM(c.EMail))                       AS EMail,
+        COUNT(DISTINCT h.Folio)                   AS TotalCompras,
+        MAX(h.Fecha)                              AS UltimaFactura
+ main
       FROM [PRODIN].[softland].[iw_gsaen] h
       INNER JOIN [PRODIN].[softland].[cwtauxi] c ON c.CodAux = h.CodAux
       WHERE h.CodVendedor IN (${inClause})
@@ -80,14 +99,26 @@ router.get('/', async (req, res) => {
     `);
 
     // ── INACTIVOS: última compra entre 90 y 365 días ──────────────────────────
+ fix/cartera-columnas-contacto
     // Columnas: CodAux, NomAux, FonAux1, FonAux2, EMail
+
+    // Columnas: CodAux, NomAux, FONAUX1, FonAux2, EMail, TotalCompras, DiasInactivo
+ main
     const resInactivos = await pool.request().query(`
       SELECT
         h.CodAux                                            AS CodAux,
         MAX(RTRIM(c.NomAux))                                AS NomAux,
+ fix/cartera-columnas-contacto
         MAX(RTRIM(ISNULL(c.FonAux1, '')))                   AS FonAux1,
         MAX(RTRIM(ISNULL(c.FonAux2, '')))                   AS FonAux2,
         MAX(RTRIM(ISNULL(c.EMail,   '')))                   AS EMail
+
+        MAX(RTRIM(c.FONAUX1))                               AS FONAUX1,
+        MAX(RTRIM(c.FonAux2))                               AS FonAux2,
+        MAX(RTRIM(c.EMail))                                 AS EMail,
+        COUNT(DISTINCT h.Folio)                             AS TotalCompras,
+        DATEDIFF(DAY, MAX(h.Fecha), GETDATE())              AS DiasInactivo
+ main
       FROM [PRODIN].[softland].[iw_gsaen] h
       INNER JOIN [PRODIN].[softland].[cwtauxi] c ON c.CodAux = h.CodAux
       WHERE h.CodVendedor IN (${inClause})
@@ -107,7 +138,11 @@ router.get('/', async (req, res) => {
     `);
 
     // ── RECUPERADOS: estuvieron +90 días sin comprar y volvieron este año ─────
+ fix/cartera-columnas-contacto
     // Columnas: CodAux, NomAux, FonAux1, FonAux2, EMail
+
+    // Columnas: CodAux, NomAux, FONAUX1, FonAux2, EMail, TotalCompras, UltimaFactura, DiasRecuperado
+ main
     const resRecuperados = await pool.request().query(`
       WITH ultima AS (
         SELECT
@@ -134,9 +169,18 @@ router.get('/', async (req, res) => {
       SELECT
         u.CodAux                                                  AS CodAux,
         MAX(RTRIM(c.NomAux))                                      AS NomAux,
+ fix/cartera-columnas-contacto
         MAX(RTRIM(ISNULL(c.FonAux1, '')))                         AS FonAux1,
         MAX(RTRIM(ISNULL(c.FonAux2, '')))                         AS FonAux2,
         MAX(RTRIM(ISNULL(c.EMail,   '')))                         AS EMail
+
+        MAX(RTRIM(c.FONAUX1))                                     AS FONAUX1,
+        MAX(RTRIM(c.FonAux2))                                     AS FonAux2,
+        MAX(RTRIM(c.EMail))                                       AS EMail,
+        COUNT(DISTINCT h.Folio)                                   AS TotalCompras,
+        u.UltimaFecha                                             AS UltimaFactura,
+        DATEDIFF(DAY, p.PenultimaFecha, u.UltimaFecha)           AS DiasRecuperado
+ main
       FROM ultima u
       INNER JOIN penultima p ON p.CodAux = u.CodAux
       INNER JOIN [PRODIN].[softland].[iw_gsaen] h ON h.CodAux = u.CodAux
