@@ -8,8 +8,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Open+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="../assets/styles/tokens.css?v=2.2.0" />
-  <link rel="stylesheet" href="dashboard.css?v=2.2.0" />
+  <link rel="stylesheet" href="../assets/styles/tokens.css?v=2.3.0" />
+  <link rel="stylesheet" href="dashboard.css?v=2.3.0" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
@@ -42,7 +42,7 @@
     <header class="main-header">
       <div class="header-left">
         <button class="header-menu-btn" id="headerMenuBtn" aria-label="Menú móvil">
-          <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
+          <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="20" y1="6" y6"/><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
         </button>
         <h1 class="header-title">Dashboard</h1>
       </div>
@@ -60,7 +60,7 @@
             <div class="notif-panel-header">
               <span class="notif-panel-title">Notificaciones</span>
               <button class="notif-leer-todo" id="notifLeerTodo" title="Marcar todas como leídas">
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/><path d="m27 6-11 11"/></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
                 Marcar todo leído
               </button>
             </div>
@@ -286,7 +286,6 @@
             <p class="coord-mensaje" id="coordMensaje" style="margin-top:.75rem;font-size:.85rem"></p>
           </div>
         </div>
-        <!-- Tabla folios asignados por coordinador -->
         <div class="tabla-card">
           <div class="tabla-header"><h3 class="tabla-titulo">Folios asignados este mes</h3></div>
           <div class="tabla-wrapper">
@@ -306,7 +305,7 @@
         </div>
       </section>
 
-      <!-- Panel Folios Recibidos (vendedor normal) -->
+      <!-- Panel Folios Recibidos -->
       <section class="panel-compartidos" id="panelCompartidos" style="display:none">
         <div class="panel-coord-header">
           <h2 class="panel-coord-titulo">📥 Folios recibidos</h2>
@@ -334,9 +333,9 @@
 
   <!-- ══ MODAL DETALLE FOLIO ════════════════════════════════════════════════ -->
   <div class="modal-overlay" id="modalOverlay" role="dialog" aria-modal="true" aria-labelledby="modalTitulo" aria-hidden="true">
-    <div class="modal-card">
+    <div class="modal">
       <div class="modal-header">
-        <div>
+        <div class="modal-titulo-grupo">
           <h2 class="modal-titulo" id="modalTitulo">Detalle del Folio</h2>
           <p class="modal-subtitulo" id="modalSubtitulo"></p>
         </div>
@@ -370,7 +369,7 @@
   </div>
   <!-- ══ FIN MODAL ══════════════════════════════════════════════════════════ -->
 
-  <script src="dashboard.js?v=2.2.0"></script>
-  <script src="../assets/js/inactividad.js?v=2.2.0"></script>
+  <script src="dashboard.js?v=2.3.0"></script>
+  <script src="../assets/js/inactividad.js?v=2.3.0"></script>
 </body>
 </html>
