@@ -2,17 +2,6 @@
 /**
  * routes/alertas.js
  * CRUD completo para el módulo de Alertas y Recordatorios.
- * Endpoints:
- *   GET    /api/alertas            → listar alertas del usuario (propias + grupales donde es destinatario)
- *   GET    /api/alertas/pendientes → alertas que deben mostrarse al login (< 7 días, activas, no silenciadas)
- *   GET    /api/alertas/usuarios   → lista de usuarios para selector de destinatarios
- *   POST   /api/alertas            → crear alerta (personal o grupal)
- *   PUT    /api/alertas/:id        → editar alerta
- *   PATCH  /api/alertas/:id/completar  → marcar como completada
- *   PATCH  /api/alertas/:id/desactivar → desactivar (ocultar sin borrar)
- *   PATCH  /api/alertas/:id/descartar  → "No mostrar más hoy" (por destinatario)
- *   PATCH  /api/alertas/:id/silenciar  → silencio permanente para el usuario
- *   DELETE /api/alertas/:id        → eliminar (solo creador o admin)
  */
 
 const express  = require('express');
@@ -22,18 +11,13 @@ const { verificarToken } = require('../middlewares/auth');
 
 router.use(verificarToken);
 
-// ──────────────────────────────────────────────────────────────────
-// HELPER: días restantes hasta vencimiento
-// ──────────────────────────────────────────────────────────────────
 function diasRestantes(fechaVence) {
-  const hoy   = new Date(); hoy.setHours(0,0,0,0);
-  const vence = new Date(fechaVence); vence.setHours(0,0,0,0);
+  const hoy   = new Date(); hoy.setHours(0, 0, 0, 0);
+  const vence = new Date(fechaVence); vence.setHours(0, 0, 0, 0);
   return Math.ceil((vence - hoy) / 86400000);
 }
 
-// ──────────────────────────────────────────────────────────────────
-// GET /api/alertas — listar todas las alertas del usuario
-// ──────────────────────────────────────────────────────────────────
+// ── GET /api/alertas ──────────────────────────────────────────────
 router.get('/', async (req, res) => {
   const uid = req.usuario.id;
   try {
@@ -69,27 +53,23 @@ router.get('/', async (req, res) => {
 
     const data = rows.map(r => ({
       ...r,
-      dias_restantes: diasRestantes(r.fecha_vence),
+      dias_restantes:   diasRestantes(r.fecha_vence),
       destinatarios_ids: r.destinatarios_ids
         ? r.destinatarios_ids.split(',').map(Number)
         : [],
     }));
 
     res.json({ ok: true, data });
-  } catch (e) {
-    console.error('[alertas GET]', e);
+  } catch (_e) {
+    console.error('[alertas GET]', _e);
     res.status(500).json({ ok: false, error: 'Error al obtener alertas' });
   }
 });
 
-// ──────────────────────────────────────────────────────────────────
-// GET /api/alertas/pendientes — alertas que deben mostrarse en login
-// Criterio: activa=1, completada=0, dias_restantes <= 7,
-//           no silenciada, descartada_hoy != hoy
-// ──────────────────────────────────────────────────────────────────
+// ── GET /api/alertas/pendientes ───────────────────────────────────
 router.get('/pendientes', async (req, res) => {
   const uid = req.usuario.id;
-  const hoy = new Date().toISOString().slice(0,10);
+  const hoy = new Date().toISOString().slice(0, 10);
   try {
     const [rows] = await db.query(`
       SELECT
@@ -122,30 +102,25 @@ router.get('/pendientes', async (req, res) => {
     }));
 
     res.json({ ok: true, data });
-  } catch (e) {
-    console.error('[alertas pendientes]', e);
+  } catch (_e) {
+    console.error('[alertas pendientes]', _e);
     res.status(500).json({ ok: false, error: 'Error al obtener alertas pendientes' });
   }
 });
 
-// ──────────────────────────────────────────────────────────────────
-// GET /api/alertas/usuarios — lista de usuarios para el selector
-// ──────────────────────────────────────────────────────────────────
+// ── GET /api/alertas/usuarios ─────────────────────────────────────
 router.get('/usuarios', async (req, res) => {
   try {
     const [rows] = await db.query(
       `SELECT id, nombre, area FROM usuarios WHERE activo = 1 ORDER BY nombre ASC`
     );
     res.json({ ok: true, data: rows });
-  } catch (e) {
+  } catch (_e) {
     res.status(500).json({ ok: false, error: 'Error al obtener usuarios' });
   }
 });
 
-// ──────────────────────────────────────────────────────────────────
-// POST /api/alertas — crear alerta
-// Body: { titulo, descripcion, tipo, fecha_vence, destinatarios: [id,...] }
-// ──────────────────────────────────────────────────────────────────
+// ── POST /api/alertas ─────────────────────────────────────────────
 router.post('/', async (req, res) => {
   const uid = req.usuario.id;
   const { titulo, descripcion, tipo, fecha_vence, destinatarios = [] } = req.body;
@@ -153,7 +128,7 @@ router.post('/', async (req, res) => {
   if (!titulo || !fecha_vence) {
     return res.status(400).json({ ok: false, error: 'Título y fecha de vencimiento son obligatorios' });
   }
-  if (!['personal','grupal'].includes(tipo)) {
+  if (!['personal', 'grupal'].includes(tipo)) {
     return res.status(400).json({ ok: false, error: 'Tipo inválido' });
   }
 
@@ -168,7 +143,6 @@ router.post('/', async (req, res) => {
     );
     const idAlerta = ins.insertId;
 
-    // Siempre insertar el creador como destinatario
     const destSet = new Set([uid, ...destinatarios.map(Number)]);
     for (const did of destSet) {
       await conn.query(
@@ -179,18 +153,16 @@ router.post('/', async (req, res) => {
 
     await conn.commit();
     res.json({ ok: true, id: idAlerta });
-  } catch (e) {
+  } catch (_e) {
     await conn.rollback();
-    console.error('[alertas POST]', e);
+    console.error('[alertas POST]', _e);
     res.status(500).json({ ok: false, error: 'Error al crear alerta' });
   } finally {
     conn.release();
   }
 });
 
-// ──────────────────────────────────────────────────────────────────
-// PUT /api/alertas/:id — editar alerta (solo creador)
-// ──────────────────────────────────────────────────────────────────
+// ── PUT /api/alertas/:id ──────────────────────────────────────────
 router.put('/:id', async (req, res) => {
   const uid = req.usuario.id;
   const id  = Number(req.params.id);
@@ -212,7 +184,6 @@ router.put('/:id', async (req, res) => {
       [titulo, descripcion || null, tipo, fecha_vence, id]
     );
 
-    // Resetear destinatarios
     await conn.query(`DELETE FROM alerta_destinatarios WHERE id_alerta = ?`, [id]);
     const destSet = new Set([uid, ...destinatarios.map(Number)]);
     for (const did of destSet) {
@@ -224,18 +195,16 @@ router.put('/:id', async (req, res) => {
 
     await conn.commit();
     res.json({ ok: true });
-  } catch (e) {
+  } catch (_e) {
     await conn.rollback();
-    console.error('[alertas PUT]', e);
+    console.error('[alertas PUT]', _e);
     res.status(500).json({ ok: false, error: 'Error al editar alerta' });
   } finally {
     conn.release();
   }
 });
 
-// ──────────────────────────────────────────────────────────────────
-// PATCH /api/alertas/:id/completar
-// ──────────────────────────────────────────────────────────────────
+// ── PATCH /api/alertas/:id/completar ─────────────────────────────
 router.patch('/:id/completar', async (req, res) => {
   const uid = req.usuario.id;
   const id  = Number(req.params.id);
@@ -247,14 +216,12 @@ router.patch('/:id/completar', async (req, res) => {
     }
     await db.query(`UPDATE alertas SET completada=1, activa=0 WHERE id=?`, [id]);
     res.json({ ok: true });
-  } catch (e) {
-    res.status(500).json({ ok: false, error: 'Error' });
+  } catch (_e) {
+    res.status(500).json({ ok: false, error: 'Error al completar alerta' });
   }
 });
 
-// ──────────────────────────────────────────────────────────────────
-// PATCH /api/alertas/:id/desactivar
-// ──────────────────────────────────────────────────────────────────
+// ── PATCH /api/alertas/:id/desactivar ────────────────────────────
 router.patch('/:id/desactivar', async (req, res) => {
   const uid = req.usuario.id;
   const id  = Number(req.params.id);
@@ -266,18 +233,16 @@ router.patch('/:id/desactivar', async (req, res) => {
     }
     await db.query(`UPDATE alertas SET activa=0 WHERE id=?`, [id]);
     res.json({ ok: true });
-  } catch (e) {
-    res.status(500).json({ ok: false, error: 'Error' });
+  } catch (_e) {
+    res.status(500).json({ ok: false, error: 'Error al desactivar alerta' });
   }
 });
 
-// ──────────────────────────────────────────────────────────────────
-// PATCH /api/alertas/:id/descartar — No mostrar más HOY
-// ──────────────────────────────────────────────────────────────────
+// ── PATCH /api/alertas/:id/descartar ─────────────────────────────
 router.patch('/:id/descartar', async (req, res) => {
   const uid = req.usuario.id;
   const id  = Number(req.params.id);
-  const hoy = new Date().toISOString().slice(0,10);
+  const hoy = new Date().toISOString().slice(0, 10);
   try {
     await db.query(`
       INSERT INTO alerta_destinatarios (id_alerta, id_usuario, descartada_hoy)
@@ -285,14 +250,12 @@ router.patch('/:id/descartar', async (req, res) => {
       ON DUPLICATE KEY UPDATE descartada_hoy = ?
     `, [id, uid, hoy, hoy]);
     res.json({ ok: true });
-  } catch (e) {
-    res.status(500).json({ ok: false, error: 'Error' });
+  } catch (_e) {
+    res.status(500).json({ ok: false, error: 'Error al descartar alerta' });
   }
 });
 
-// ──────────────────────────────────────────────────────────────────
-// PATCH /api/alertas/:id/silenciar — silencio permanente
-// ──────────────────────────────────────────────────────────────────
+// ── PATCH /api/alertas/:id/silenciar ─────────────────────────────
 router.patch('/:id/silenciar', async (req, res) => {
   const uid = req.usuario.id;
   const id  = Number(req.params.id);
@@ -303,14 +266,12 @@ router.patch('/:id/silenciar', async (req, res) => {
       ON DUPLICATE KEY UPDATE silenciada = 1
     `, [id, uid]);
     res.json({ ok: true });
-  } catch (e) {
-    res.status(500).json({ ok: false, error: 'Error' });
+  } catch (_e) {
+    res.status(500).json({ ok: false, error: 'Error al silenciar alerta' });
   }
 });
 
-// ──────────────────────────────────────────────────────────────────
-// DELETE /api/alertas/:id
-// ──────────────────────────────────────────────────────────────────
+// ── DELETE /api/alertas/:id ───────────────────────────────────────
 router.delete('/:id', async (req, res) => {
   const uid = req.usuario.id;
   const id  = Number(req.params.id);
@@ -322,8 +283,8 @@ router.delete('/:id', async (req, res) => {
     }
     await db.query(`DELETE FROM alertas WHERE id=?`, [id]);
     res.json({ ok: true });
-  } catch (e) {
-    res.status(500).json({ ok: false, error: 'Error al eliminar' });
+  } catch (_e) {
+    res.status(500).json({ ok: false, error: 'Error al eliminar alerta' });
   }
 });
 
