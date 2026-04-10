@@ -4,22 +4,6 @@
  * dashboard.js — RSProyecto Texpro
  *
  * Controlador frontend del módulo Dashboard.
- *
- * Responsabilidades:
- *   - Validar sesión y cargar contexto del usuario
- *   - Consultar KPIs/evolución/ventas al backend (/api/dashboard)
- *   - Renderizar tablas y gráfico Chart.js
- *   - Gestionar modal de detalle por folio
- *   - Habilitar panel de coordinación para facturas compartidas
- *   - Mostrar cards de cartera (Activos / Inactivos / Recuperados)
- *     con tabla colapsable INDIVIDUAL y búsqueda por cliente
- *
- * Fuentes de datos consumidas:
- *   - /api/auth/me
- *   - /api/dashboard/*
- *   - /api/cartera
- *
- * Columnas cartera (desde cwtauxi): CodAux, NomAux, FONAUX1 (Tel 1), FonAux2 (Tel 2), EMail
  */
 
 (function () {
@@ -29,12 +13,9 @@
   const token      = () => localStorage.getItem('token');
 
   let graficoEvolucion  = null;
-  let todosVendedores   = [];  // [{ cod, nombre }]
+  let todosVendedores   = [];
 
-  // Datos cartera en memoria para búsqueda local
   let carteraData = { activos: [], inactivos: [], recuperados: [] };
-
-  // Control de lazy render: indica si la tabla de cada card ya fue renderizada
   let carteraRendered = { activo: false, inactivo: false, recuperado: false };
 
   const MESES_NOMBRE = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
@@ -44,8 +25,23 @@
     return new Intl.NumberFormat('es-CL', { style:'currency', currency:'CLP', maximumFractionDigits:0 }).format(Number(v));
   }
 
-  // ── Spinner de carga ──────────────────────────────────────────────────────
+  // ── helpers seguros contra null ──────────────────────────────────────────
+  function setText(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value;
+  }
 
+  function setHTML(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = value;
+  }
+
+  function setStyle(id, prop, value) {
+    const el = document.getElementById(id);
+    if (el) el.style[prop] = value;
+  }
+
+  // ── Spinner ───────────────────────────────────────────────────────────────
   let cargaOverlay = null;
 
   function crearSpinner() {
@@ -113,15 +109,15 @@
 
   function cargarSidebar(usuario) {
     const ini = (usuario.nombre||'U').split(' ').slice(0,2).map(p=>p[0]).join('').toUpperCase();
-    document.getElementById('userName').textContent  = usuario.nombre  || usuario.email;
-    document.getElementById('userArea').textContent   = usuario.area    || '';
-    document.getElementById('userAvatar').textContent = ini;
-    document.getElementById('chipAvatar').textContent = ini;
-    document.getElementById('chipName').textContent   = (usuario.nombre||usuario.email).split(' ')[0];
-    document.getElementById('headerDate').textContent = new Date().toLocaleDateString('es-CL',
-      { weekday:'long', year:'numeric', month:'long', day:'numeric' });
-    document.getElementById('welcomeTitle').textContent    = `Hola, ${(usuario.nombre||usuario.email).split(' ')[0]} 👋`;
-    document.getElementById('welcomeSubtitle').textContent = `Área: ${usuario.area||'Sistema'} — Texpro`;
+    setText('userName',  usuario.nombre  || usuario.email);
+    setText('userArea',  usuario.area    || '');
+    setText('userAvatar', ini);
+    setText('chipAvatar', ini);
+    setText('chipName',   (usuario.nombre||usuario.email).split(' ')[0]);
+    setText('headerDate', new Date().toLocaleDateString('es-CL',
+      { weekday:'long', year:'numeric', month:'long', day:'numeric' }));
+    setText('welcomeTitle',    `Hola, ${(usuario.nombre||usuario.email).split(' ')[0]} 👋`);
+    setText('welcomeSubtitle', `Área: ${usuario.area||'Sistema'} — Texpro`);
 
     const nav      = document.getElementById('sidebarNav');
     const visibles = MODULOS.filter(m =>
@@ -129,47 +125,57 @@
         ? m.area.includes('admin') || true
         : m.area.includes(usuario.area)
     );
-    nav.innerHTML = `<span class="nav-section-title">NAVEGACIÓN</span>
+    if (nav) nav.innerHTML = `<span class="nav-section-title">NAVEGACIÓN</span>
       <a class="nav-item active" href="#">
         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
         <span class="nav-label">Dashboard</span>
       </a>
       ${visibles.map(m=>`<a class="nav-item" href="${m.url}"><span style="font-size:1rem">${m.icon}</span><span class="nav-label">${m.nombre}</span></a>`).join('')}`;
 
-    document.getElementById('btnLogout').addEventListener('click', () => {
+    const btnLogout = document.getElementById('btnLogout');
+    if (btnLogout) btnLogout.addEventListener('click', () => {
       localStorage.removeItem('token'); localStorage.removeItem('user');
       window.location.href = '../login/index.html';
     });
-    document.getElementById('sidebarToggle').addEventListener('click', () => {
+    const sidebarToggle = document.getElementById('sidebarToggle');
+    if (sidebarToggle) sidebarToggle.addEventListener('click', () => {
       document.getElementById('sidebar').classList.toggle('sidebar--collapsed');
       document.getElementById('mainWrapper').classList.toggle('main-wrapper--expanded');
     });
-    document.getElementById('headerMenuBtn').addEventListener('click', () => {
+    const headerMenuBtn = document.getElementById('headerMenuBtn');
+    if (headerMenuBtn) headerMenuBtn.addEventListener('click', () => {
       document.getElementById('sidebar').classList.toggle('mobile-open');
     });
   }
 
   // ── Selectores mes/año ────────────────────────────────────────────────────
   function initSelectores() {
-    const hoy   = new Date();
+    const hoy    = new Date();
     const selMes = document.getElementById('filtroMes');
-    MESES_NOMBRE.forEach((m, i) => {
-      const o = document.createElement('option');
-      o.value = i + 1; o.textContent = m;
-      if (i + 1 === hoy.getMonth() + 1) o.selected = true;
-      selMes.appendChild(o);
-    });
+    if (selMes) {
+      MESES_NOMBRE.forEach((m, i) => {
+        const o = document.createElement('option');
+        o.value = i + 1; o.textContent = m;
+        if (i + 1 === hoy.getMonth() + 1) o.selected = true;
+        selMes.appendChild(o);
+      });
+    }
     const selAnio = document.getElementById('filtroAnio');
-    for (let y = hoy.getFullYear(); y >= 2022; y--) {
-      const o = document.createElement('option');
-      o.value = y; o.textContent = y;
-      if (y === hoy.getFullYear()) o.selected = true;
-      selAnio.appendChild(o);
+    if (selAnio) {
+      for (let y = hoy.getFullYear(); y >= 2022; y--) {
+        const o = document.createElement('option');
+        o.value = y; o.textContent = y;
+        if (y === hoy.getFullYear()) o.selected = true;
+        selAnio.appendChild(o);
+      }
     }
   }
 
   function getParams() {
-    return { mes: document.getElementById('filtroMes').value, anio: document.getElementById('filtroAnio').value };
+    return {
+      mes:  document.getElementById('filtroMes')?.value  || (new Date().getMonth() + 1),
+      anio: document.getElementById('filtroAnio')?.value || new Date().getFullYear()
+    };
   }
 
   // ── KPIs ──────────────────────────────────────────────────────────────────
@@ -179,14 +185,16 @@
       const data = await res.json();
       if (!data.ok) throw new Error(data.error);
       const { totalVentas, meta, progreso, pctDescuentoGlobal } = data;
-      document.getElementById('kpiTotalVentas').textContent = formatCLP(totalVentas);
-      document.getElementById('kpiMeta').textContent        = formatCLP(meta);
-      document.getElementById('kpiDescuento').textContent   = pctDescuentoGlobal > 0 ? `${pctDescuentoGlobal}%` : '0%';
+      setText('kpiTotalVentas', formatCLP(totalVentas));
+      setText('kpiMeta',        formatCLP(meta));
+      setText('kpiDescuento',   pctDescuentoGlobal > 0 ? `${pctDescuentoGlobal}%` : '0%');
       const pct  = Math.min(progreso, 100);
-      document.getElementById('kpiProgresoPct').textContent = `${progreso}%`;
+      setText('kpiProgresoPct', `${progreso}%`);
       const fill = document.getElementById('progresoFill');
-      fill.style.width      = `${pct}%`;
-      fill.style.background = progreso >= 100 ? 'var(--color-primary)' : progreso >= 70 ? 'var(--color-accent)' : 'var(--color-danger)';
+      if (fill) {
+        fill.style.width      = `${pct}%`;
+        fill.style.background = progreso >= 100 ? 'var(--color-primary)' : progreso >= 70 ? 'var(--color-accent)' : 'var(--color-danger)';
+      }
     } catch (err) { console.error('[cargarResumen]', err); }
   }
 
@@ -196,17 +204,16 @@
   async function cargarGrafico() {
     try {
       const { mes, anio } = getParams();
-      const tituloEl = document.getElementById('graficoTitulo');
-      if (tituloEl) {
-        tituloEl.textContent = `Evolución Mensual — ${MESES_NOMBRE[Number(mes) - 1]} ${anio}`;
-      }
+      setText('graficoTitulo', `Evolución Mensual — ${MESES_NOMBRE[Number(mes) - 1]} ${anio}`);
       const res  = await fetch(`${API}/evolucion?${new URLSearchParams({ mes, anio })}`, { headers:{ Authorization:`Bearer ${token()}` } });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error);
       const labels = data.evolucion.map(e => MESES_LABEL[e.mes - 1]);
       const ventas = data.evolucion.map(e => e.ventas);
       const meta   = data.evolucion.map(e => e.meta);
-      const ctx = document.getElementById('graficoEvolucion').getContext('2d');
+      const canvas = document.getElementById('graficoEvolucion');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
       if (graficoEvolucion) graficoEvolucion.destroy();
       graficoEvolucion = new Chart(ctx, {
         type:'line',
@@ -236,6 +243,7 @@
       const res  = await fetch(`${API}/vendedores?${new URLSearchParams(getParams())}`, { headers:{ Authorization:`Bearer ${token()}` } });
       const data = await res.json();
       const tbody = document.getElementById('tbodyVendedores');
+      if (!tbody) return;
       if (!data.ok || !data.vendedores.length) {
         tbody.innerHTML = '<tr class="tabla-empty"><td colspan="6">Sin datos</td></tr>'; return;
       }
@@ -271,7 +279,8 @@
 
   function renderVentasMes(lista) {
     const tbody = document.getElementById('tbodyVentasMes');
-    document.getElementById('totalVentasMes').textContent = `${lista.length.toLocaleString('es-CL')} registros`;
+    if (!tbody) return;
+    setText('totalVentasMes', `${lista.length.toLocaleString('es-CL')} registros`);
     if (!lista.length) { tbody.innerHTML = '<tr class="tabla-empty"><td colspan="7">Sin registros</td></tr>'; return; }
     tbody.innerHTML = lista.map(v => {
       const pctDesc      = v.pct_descuento > 0 ? `${v.pct_descuento}%` : '—';
@@ -302,10 +311,11 @@
   async function abrirDetalle(folio) {
     const overlay = document.getElementById('modalOverlay');
     const tbody   = document.getElementById('modalTbody');
-    document.getElementById('modalTitulo').textContent    = `Folio N° ${folio}`;
+    if (!overlay || !tbody) return;
+    setText('modalTitulo', `Folio N° ${folio}`);
     const venta = ventasMesData.find(v => String(v.Folio) === String(folio));
-    document.getElementById('modalSubtitulo').textContent = venta ? `${venta.cliente||''} • ${venta.fecha_formato||''}` : '';
-    document.getElementById('modalTotalValor').textContent = '—';
+    setText('modalSubtitulo', venta ? `${venta.cliente||''} • ${venta.fecha_formato||''}` : '');
+    setText('modalTotalValor', '—');
     tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:2rem">Cargando...</td></tr>';
     overlay.classList.add('modal-overlay--visible');
     overlay.setAttribute('aria-hidden','false');
@@ -324,18 +334,19 @@
           <td style="text-align:right">${formatCLP(l.precio_unitario_cobrado)}</td>
           <td style="text-align:right"><strong>${formatCLP(l.TotLinea)}</strong></td>
         </tr>`).join('');
-      document.getElementById('modalTotalValor').textContent = formatCLP(total);
+      setText('modalTotalValor', formatCLP(total));
     } catch(err) { console.error('[abrirDetalle]',err); tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--color-danger)">⚠️ Error</td></tr>'; }
   }
 
   function cerrarModal() {
-    document.getElementById('modalOverlay').classList.remove('modal-overlay--visible');
-    document.getElementById('modalOverlay').setAttribute('aria-hidden','true');
+    const overlay = document.getElementById('modalOverlay');
+    if (!overlay) return;
+    overlay.classList.remove('modal-overlay--visible');
+    overlay.setAttribute('aria-hidden','true');
     document.body.style.overflow = '';
   }
 
   // ── CARTERA DE CLIENTES ───────────────────────────────────────────────────
-
   async function cargarCartera() {
     try {
       const res  = await fetch(API_CART, { headers:{ Authorization:`Bearer ${token()}` } });
@@ -348,22 +359,19 @@
 
       carteraRendered = { activo: false, inactivo: false, recuperado: false };
 
-      document.getElementById('countActivo').textContent     = carteraData.activos.length;
-      document.getElementById('countInactivo').textContent   = carteraData.inactivos.length;
-      document.getElementById('countRecuperado').textContent = carteraData.recuperados.length;
+      setText('countActivo',     String(carteraData.activos.length));
+      setText('countInactivo',   String(carteraData.inactivos.length));
+      setText('countRecuperado', String(carteraData.recuperados.length));
 
       ['activo', 'inactivo', 'recuperado'].forEach(tipo => {
         const lista = document.getElementById(`lista${capitalize(tipo)}`);
-        if (lista && !lista.hidden) {
-          renderCartaTipo(tipo);
-        }
+        if (lista && !lista.hidden) renderCartaTipo(tipo);
       });
-
     } catch (err) {
       console.error('[cargarCartera]', err);
-      document.getElementById('countActivo').textContent     = '—';
-      document.getElementById('countInactivo').textContent   = '—';
-      document.getElementById('countRecuperado').textContent = '—';
+      setText('countActivo',     '—');
+      setText('countInactivo',   '—');
+      setText('countRecuperado', '—');
     }
   }
 
@@ -378,26 +386,16 @@
           (c.FonAux2 || '').toLowerCase().includes(q))
       : lista;
 
-    if (tipo === 'activo') {
-      renderTablaCartera('tbodyActivo', filtrarLista(carteraData.activos), 'Sin clientes activos');
-    } else if (tipo === 'inactivo') {
-      renderTablaCartera('tbodyInactivo', filtrarLista(carteraData.inactivos), 'Sin clientes inactivos');
-    } else if (tipo === 'recuperado') {
-      renderTablaCartera('tbodyRecuperado', filtrarLista(carteraData.recuperados), 'Sin clientes recuperados');
-    }
+    if (tipo === 'activo')      renderTablaCartera('tbodyActivo',     filtrarLista(carteraData.activos),     'Sin clientes activos');
+    else if (tipo === 'inactivo')   renderTablaCartera('tbodyInactivo',   filtrarLista(carteraData.inactivos),   'Sin clientes inactivos');
+    else if (tipo === 'recuperado') renderTablaCartera('tbodyRecuperado', filtrarLista(carteraData.recuperados), 'Sin clientes recuperados');
     carteraRendered[tipo] = true;
   }
 
-  /**
-   * Renderiza filas de la tabla cartera.
-   * Columnas: Cód. Cliente | Nombre | Tel. 1 (FONAUX1) | Tel. 2 (FonAux2) | Email (EMail)
-   */
   function renderTablaCartera(tbodyId, lista, mensajeVacio) {
     const tbody = document.getElementById(tbodyId);
-    if (!lista.length) {
-      tbody.innerHTML = `<tr class="tabla-empty"><td colspan="5">${mensajeVacio}</td></tr>`;
-      return;
-    }
+    if (!tbody) return;
+    if (!lista.length) { tbody.innerHTML = `<tr class="tabla-empty"><td colspan="5">${mensajeVacio}</td></tr>`; return; }
     tbody.innerHTML = lista.map(c => {
       const emailHtml = c.EMail
         ? `<a href="mailto:${c.EMail}" style="color:var(--color-primary);text-decoration:none" title="${c.EMail}">${c.EMail}</a>`
@@ -408,8 +406,7 @@
       const tel2Html = c.FonAux2
         ? `<a href="tel:${c.FonAux2}" style="color:var(--color-primary);text-decoration:none">${c.FonAux2}</a>`
         : '—';
-      return `
-        <tr>
+      return `<tr>
           <td><code>${c.CodAux||'—'}</code></td>
           <td>${c.NomAux||'—'}</td>
           <td>${tel1Html}</td>
@@ -419,19 +416,13 @@
     }).join('');
   }
 
-  /**
-   * Inicializa los toggles y búsquedas de las cards de cartera.
-   * Cada card opera de forma INDEPENDIENTE.
-   */
   function initCarteraCards() {
     document.querySelectorAll('.cartera-card-btn').forEach(btn => {
       btn.addEventListener('click', () => {
-        const tipo   = btn.dataset.tipo;
-        const lista  = document.getElementById(`lista${capitalize(tipo)}`);
+        const tipo  = btn.dataset.tipo;
+        const lista = document.getElementById(`lista${capitalize(tipo)}`);
         if (!lista) return;
-
         const abierto = !lista.hidden;
-
         if (abierto) {
           lista.hidden = true;
           btn.setAttribute('aria-expanded', 'false');
@@ -440,31 +431,22 @@
           lista.hidden = false;
           btn.setAttribute('aria-expanded', 'true');
           btn.closest('.cartera-card').classList.add('cartera-card--abierta');
-
-          if (!carteraRendered[tipo]) {
-            renderCartaTipo(tipo);
-          }
+          if (!carteraRendered[tipo]) renderCartaTipo(tipo);
         }
       });
     });
 
-    document.getElementById('busquedaActivo').addEventListener('input', e => {
-      renderCartaTipo('activo', e.target.value);
-    });
-    document.getElementById('busquedaInactivo').addEventListener('input', e => {
-      renderCartaTipo('inactivo', e.target.value);
-    });
-    document.getElementById('busquedaRecuperado').addEventListener('input', e => {
-      renderCartaTipo('recuperado', e.target.value);
-    });
+    const bActivo = document.getElementById('busquedaActivo');
+    if (bActivo) bActivo.addEventListener('input', e => renderCartaTipo('activo', e.target.value));
+    const bInactivo = document.getElementById('busquedaInactivo');
+    if (bInactivo) bInactivo.addEventListener('input', e => renderCartaTipo('inactivo', e.target.value));
+    const bRecup = document.getElementById('busquedaRecuperado');
+    if (bRecup) bRecup.addEventListener('input', e => renderCartaTipo('recuperado', e.target.value));
   }
 
-  function capitalize(s) {
-    return s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
-  }
+  function capitalize(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; }
 
   // ── PANEL COORDINADOR ─────────────────────────────────────────────────────
-
   async function cargarListaVendedores() {
     try {
       const res  = await fetch(`${API}/vendedores-todos`, { headers:{ Authorization:`Bearer ${token()}` } });
@@ -472,6 +454,7 @@
       if (!data.ok || !data.vendedores?.length) return;
       todosVendedores = data.vendedores;
       const sel = document.getElementById('coordVendedor');
+      if (!sel) return;
       sel.innerHTML = '<option value="">— Selecciona vendedor —</option>' +
         data.vendedores.map(v =>
           `<option value="${v.cod}">${v.cod} — ${v.nombre||'Sin nombre'}</option>`
@@ -480,20 +463,22 @@
   }
 
   async function iniciarPanelCoordinador() {
-    document.getElementById('panelCoordinador').style.display = 'block';
-    document.getElementById('panelCompartidos').style.display = 'none';
+    setStyle('panelCoordinador', 'display', 'block');
+    setStyle('panelCompartidos', 'display', 'none'); // seguro: setStyle no crashea si el elem no existe
     await Promise.all([ cargarListaVendedores(), cargarFoliosParaCompartir(), cargarFoliosAsignados() ]);
 
-    document.getElementById('btnCompartir').addEventListener('click', async () => {
-      const folio      = document.getElementById('coordFolio').value;
-      const vendedor   = document.getElementById('coordVendedor').value;
-      const porcentaje = document.getElementById('coordPorcentaje').value;
+    const btnCompartir = document.getElementById('btnCompartir');
+    if (btnCompartir) btnCompartir.addEventListener('click', async () => {
+      const folio      = document.getElementById('coordFolio')?.value;
+      const vendedor   = document.getElementById('coordVendedor')?.value;
+      const porcentaje = document.getElementById('coordPorcentaje')?.value;
       const msgEl      = document.getElementById('coordMensaje');
       if (!folio || !vendedor || !porcentaje) {
-        msgEl.textContent = '⚠️ Completa todos los campos'; msgEl.style.color = 'var(--color-danger)'; return;
+        if (msgEl) { msgEl.textContent = '⚠️ Completa todos los campos'; msgEl.style.color = 'var(--color-danger)'; }
+        return;
       }
       try {
-        msgEl.textContent = 'Enviando...'; msgEl.style.color = 'var(--color-gray-mid)';
+        if (msgEl) { msgEl.textContent = 'Enviando...'; msgEl.style.color = 'var(--color-gray-mid)'; }
         const res  = await fetch(`${API}/compartir`, {
           method:'POST',
           headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${token()}` },
@@ -501,11 +486,16 @@
         });
         const data = await res.json();
         if (!data.ok) throw new Error(data.error);
-        msgEl.textContent = '✅ Folio asignado correctamente'; msgEl.style.color = 'var(--color-primary)';
-        document.getElementById('coordVendedor').value   = '';
-        document.getElementById('coordPorcentaje').value = '100';
+        if (msgEl) { msgEl.textContent = '✅ Folio asignado correctamente'; msgEl.style.color = 'var(--color-primary)'; }
+        const coordVend = document.getElementById('coordVendedor');
+        const coordPct  = document.getElementById('coordPorcentaje');
+        if (coordVend) coordVend.value   = '';
+        if (coordPct)  coordPct.value    = '100';
         await Promise.all([ cargarFoliosParaCompartir(), cargarFoliosAsignados(), cargarResumen(), cargarVentasMes() ]);
-      } catch(err) { msgEl.textContent = `❌ ${err.message}`; msgEl.style.color = 'var(--color-danger)'; }
+      } catch(err) {
+        const msgEl2 = document.getElementById('coordMensaje');
+        if (msgEl2) { msgEl2.textContent = `❌ ${err.message}`; msgEl2.style.color = 'var(--color-danger)'; }
+      }
     });
   }
 
@@ -514,6 +504,7 @@
       const res  = await fetch(`${API}/compartir/lista?${new URLSearchParams(getParams())}`, { headers:{ Authorization:`Bearer ${token()}` } });
       const data = await res.json();
       const sel  = document.getElementById('coordFolio');
+      if (!sel) return;
       if (!data.ok || !data.folios?.length) {
         sel.innerHTML = '<option value="">— Sin folios disponibles —</option>'; return;
       }
@@ -571,10 +562,11 @@
 
   async function cargarFoliosAsignados() {
     try {
-      const res  = await fetch(`${API}/asignados?${new URLSearchParams(getParams())}`, { headers:{ Authorization:`Bearer ${token()}` } });
-      const data = await res.json();
+      const res   = await fetch(`${API}/asignados?${new URLSearchParams(getParams())}`, { headers:{ Authorization:`Bearer ${token()}` } });
+      const data  = await res.json();
       const tbody = document.getElementById('tbodyAsignados');
-      document.getElementById('totalAsignados').textContent = `${(data.asignados||[]).length} registros`;
+      if (!tbody) return; // no aplica para este rol
+      setText('totalAsignados', `${(data.asignados||[]).length} registros`);
       if (!data.ok || !data.asignados?.length) {
         tbody.innerHTML = '<tr class="tabla-empty"><td colspan="7">Sin folios asignados este mes</td></tr>'; return;
       }
@@ -594,7 +586,6 @@
         bindCrudEvents(tbody, asignados);
       });
     });
-
     tbody.querySelectorAll('.btn-crud--save').forEach(btn => {
       btn.addEventListener('click', async () => {
         const id      = btn.dataset.id;
@@ -613,21 +604,16 @@
         } catch(err) { alert(`Error al guardar: ${err.message}`); }
       });
     });
-
     tbody.querySelectorAll('.btn-crud--cancel').forEach(btn => {
       btn.addEventListener('click', async () => { await cargarFoliosAsignados(); });
     });
-
     tbody.querySelectorAll('.btn-crud--del').forEach(btn => {
       btn.addEventListener('click', async () => {
         const id    = btn.dataset.id;
         const folio = btn.dataset.folio;
         if (!confirm(`¿Eliminar asignación del folio ${folio}? El folio volverá a estar disponible.`)) return;
         try {
-          const res  = await fetch(`${API}/compartir/${id}`, {
-            method:'DELETE',
-            headers:{ Authorization:`Bearer ${token()}` }
-          });
+          const res  = await fetch(`${API}/compartir/${id}`, { method:'DELETE', headers:{ Authorization:`Bearer ${token()}` } });
           const data = await res.json();
           if (!data.ok) throw new Error(data.error);
           await Promise.all([ cargarFoliosParaCompartir(), cargarFoliosAsignados(), cargarResumen(), cargarVentasMes() ]);
@@ -637,19 +623,19 @@
   }
 
   // ── PANEL FOLIOS RECIBIDOS ────────────────────────────────────────────────
-
   async function iniciarPanelCompartidos() {
-    document.getElementById('panelCompartidos').style.display = 'block';
-    document.getElementById('panelCoordinador').style.display = 'none';
+    setStyle('panelCompartidos', 'display', 'block');
+    setStyle('panelCoordinador', 'display', 'none');
     await cargarFoliosCompartidos();
   }
 
   async function cargarFoliosCompartidos() {
     try {
-      const res  = await fetch(`${API}/compartidos?${new URLSearchParams(getParams())}`, { headers:{ Authorization:`Bearer ${token()}` } });
-      const data = await res.json();
+      const res   = await fetch(`${API}/compartidos?${new URLSearchParams(getParams())}`, { headers:{ Authorization:`Bearer ${token()}` } });
+      const data  = await res.json();
       const tbody = document.getElementById('tbodyCompartidos');
-      document.getElementById('totalCompartidos').textContent = `${(data.compartidos||[]).length} registros`;
+      if (!tbody) return; // panel no existe para este rol, no es error
+      setText('totalCompartidos', `${(data.compartidos||[]).length} registros`);
       if (!data.ok || !data.compartidos?.length) {
         tbody.innerHTML = '<tr class="tabla-empty"><td colspan="6">Sin folios asignados este mes</td></tr>'; return;
       }
@@ -669,16 +655,18 @@
   async function cargarTodo(usuario) {
     mostrarCarga();
     try {
-      const tareas = [
+      await Promise.all([
         cargarResumen(),
         cargarGrafico(),
         cargarCartera(),
         cargarVendedores(),
-        cargarVentasMes()
-      ];
-      if (esCoordinador(usuario)) tareas.push(cargarFoliosParaCompartir(), cargarFoliosAsignados());
-      else tareas.push(cargarFoliosCompartidos());
-      await Promise.all(tareas);
+        cargarVentasMes(),
+        esCoordinador(usuario)
+          ? Promise.all([ cargarFoliosParaCompartir(), cargarFoliosAsignados() ])
+          : cargarFoliosCompartidos()
+      ]);
+    } catch(err) {
+      console.error('[cargarTodo]', err);
     } finally {
       ocultarCarga();
     }
@@ -695,7 +683,8 @@
     if (esCoordinador(usuario)) await iniciarPanelCoordinador();
     else                        await iniciarPanelCompartidos();
 
-    document.getElementById('busquedaVentas').addEventListener('input', e => {
+    const bVentas = document.getElementById('busquedaVentas');
+    if (bVentas) bVentas.addEventListener('input', e => {
       const q = e.target.value.toLowerCase();
       renderVentasMes(ventasMesData.filter(v =>
         String(v.Folio||'').toLowerCase().includes(q) ||
@@ -703,10 +692,13 @@
       ));
     });
 
-    document.getElementById('modalCerrar').addEventListener('click', cerrarModal);
-    document.getElementById('modalOverlay').addEventListener('click', e => { if (e.target===e.currentTarget) cerrarModal(); });
+    const modalCerrar = document.getElementById('modalCerrar');
+    if (modalCerrar) modalCerrar.addEventListener('click', cerrarModal);
+    const modalOverlay = document.getElementById('modalOverlay');
+    if (modalOverlay) modalOverlay.addEventListener('click', e => { if (e.target===e.currentTarget) cerrarModal(); });
     document.addEventListener('keydown', e => { if (e.key==='Escape') cerrarModal(); });
-    document.getElementById('btnActualizar').addEventListener('click', () => cargarTodo(usuario));
+    const btnAct = document.getElementById('btnActualizar');
+    if (btnAct) btnAct.addEventListener('click', () => cargarTodo(usuario));
 
     cargarTodo(usuario);
   }
