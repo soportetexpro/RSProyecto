@@ -8,8 +8,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Open+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="../assets/styles/tokens.css?v=2.1.0" />
-  <link rel="stylesheet" href="dashboard.css?v=2.1.0" />
+  <link rel="stylesheet" href="../assets/styles/tokens.css?v=2.2.0" />
+  <link rel="stylesheet" href="dashboard.css?v=2.2.0" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
@@ -150,15 +150,7 @@
               </div>
               <div class="cartera-tabla-wrapper">
                 <table class="dash-tabla cartera-tabla">
-                  <thead>
-                    <tr>
-                      <th>Cód. Cliente</th>
-                      <th>Nombre</th>
-                      <th>Teléfono 1</th>
-                      <th>Teléfono 2</th>
-                      <th>Email</th>
-                    </tr>
-                  </thead>
+                  <thead><tr><th>Cód. Cliente</th><th>Nombre</th><th>Teléfono 1</th><th>Teléfono 2</th><th>Email</th></tr></thead>
                   <tbody id="tbodyActivo"><tr class="tabla-empty"><td colspan="5">Cargando...</td></tr></tbody>
                 </table>
               </div>
@@ -184,15 +176,7 @@
               </div>
               <div class="cartera-tabla-wrapper">
                 <table class="dash-tabla cartera-tabla">
-                  <thead>
-                    <tr>
-                      <th>Cód. Cliente</th>
-                      <th>Nombre</th>
-                      <th>Teléfono 1</th>
-                      <th>Teléfono 2</th>
-                      <th>Email</th>
-                    </tr>
-                  </thead>
+                  <thead><tr><th>Cód. Cliente</th><th>Nombre</th><th>Teléfono 1</th><th>Teléfono 2</th><th>Email</th></tr></thead>
                   <tbody id="tbodyInactivo"><tr class="tabla-empty"><td colspan="5">Cargando...</td></tr></tbody>
                 </table>
               </div>
@@ -218,15 +202,7 @@
               </div>
               <div class="cartera-tabla-wrapper">
                 <table class="dash-tabla cartera-tabla">
-                  <thead>
-                    <tr>
-                      <th>Cód. Cliente</th>
-                      <th>Nombre</th>
-                      <th>Teléfono 1</th>
-                      <th>Teléfono 2</th>
-                      <th>Email</th>
-                    </tr>
-                  </thead>
+                  <thead><tr><th>Cód. Cliente</th><th>Nombre</th><th>Teléfono 1</th><th>Teléfono 2</th><th>Email</th></tr></thead>
                   <tbody id="tbodyRecuperado"><tr class="tabla-empty"><td colspan="5">Cargando...</td></tr></tbody>
                 </table>
               </div>
@@ -237,7 +213,7 @@
       </section>
       <!-- ══ FIN CARTERA ══════════════════════════════════════════════════ -->
 
-      <!-- Tabla Vendedores: 6 columnas -->
+      <!-- Tabla Vendedores -->
       <section class="tabla-seccion">
         <div class="tabla-card">
           <div class="tabla-header"><h3 class="tabla-titulo">Ventas por Vendedor</h3></div>
@@ -245,9 +221,7 @@
             <table class="dash-tabla">
               <thead>
                 <tr>
-                  <th>Cód. Vendedor</th>
-                  <th>Nombre</th>
-                  <th>Folios</th>
+                  <th>Cód. Vendedor</th><th>Nombre</th><th>Folios</th>
                   <th style="text-align:right">Total Ventas</th>
                   <th style="text-align:right">Venta Real</th>
                   <th style="text-align:right">Descuento</th>
@@ -259,6 +233,7 @@
         </div>
       </section>
 
+      <!-- Tabla Ventas del Mes -->
       <section class="tabla-seccion">
         <div class="tabla-card">
           <div class="tabla-header">
@@ -267,7 +242,14 @@
           </div>
           <div class="tabla-wrapper tabla-wrapper--ventas-mes">
             <table class="dash-tabla">
-              <thead><tr><th>Folio</th><th>Fecha</th><th>Cliente</th><th>Vendedor</th><th style="text-align:right">Monto</th><th style="text-align:right">Descuento</th><th>Detalle</th></tr></thead>
+              <thead>
+                <tr>
+                  <th>Folio</th><th>Fecha</th><th>Cliente</th><th>Vendedor</th>
+                  <th style="text-align:right">Monto</th>
+                  <th style="text-align:right">Descuento</th>
+                  <th>Detalle</th>
+                </tr>
+              </thead>
               <tbody id="tbodyVentasMes"><tr class="tabla-empty"><td colspan="7">Cargando...</td></tr></tbody>
             </table>
           </div>
@@ -275,6 +257,7 @@
         </div>
       </section>
 
+      <!-- Panel Coordinador -->
       <section class="panel-coordinador" id="panelCoordinador" style="display:none">
         <div class="panel-coord-header">
           <h2 class="panel-coord-titulo">🔗 Panel Coordinador</h2>
@@ -284,19 +267,110 @@
           <div class="tabla-header"><h3 class="tabla-titulo">Asignar folio a vendedor</h3></div>
           <div style="padding:1rem 1.25rem">
             <div class="coord-form">
-              <div class="coord-form-group"><label class="coord-label" for="coordFolio">Folio del mes</label><select class="filtro-select" id="coordFolio" style="width:100%"><option value="">— Cargando folios... —</option></select></div>
-              <div class="coord-form-group"><label class="coord-label" for="coordVendedor">Vendedor destino</label><select class="filtro-select" id="coordVendedor" style="width:100%"><option value="">— Selecciona vendedor —</option></select></div>
-              <div class="coord-form-group"><label class="coord-label" for="coordPorcentaje">% a asignar</label><input class="tabla-busqueda" type="number" id="coordPorcentaje" min="1" max="100" value="100" style="width:100%" /></div>
-              <div class="coord-form-group coord-form-group--btn"><button class="btn-buscar" id="btnCompartir" style="height:38px;padding:0 1.5rem">Asignar folio</button></div>
+              <div class="coord-form-group">
+                <label class="coord-label" for="coordFolio">Folio del mes</label>
+                <select class="filtro-select" id="coordFolio" style="width:100%"><option value="">— Cargando folios... —</option></select>
+              </div>
+              <div class="coord-form-group">
+                <label class="coord-label" for="coordVendedor">Vendedor destino</label>
+                <select class="filtro-select" id="coordVendedor" style="width:100%"><option value="">— Selecciona vendedor —</option></select>
+              </div>
+              <div class="coord-form-group">
+                <label class="coord-label" for="coordPorcentaje">% a asignar</label>
+                <input class="tabla-busqueda" type="number" id="coordPorcentaje" min="1" max="100" value="100" style="width:100%" />
+              </div>
+              <div class="coord-form-group coord-form-group--btn">
+                <button class="btn-buscar" id="btnCompartir" style="height:38px;padding:0 1.5rem">Asignar folio</button>
+              </div>
             </div>
+            <p class="coord-mensaje" id="coordMensaje" style="margin-top:.75rem;font-size:.85rem"></p>
           </div>
+        </div>
+        <!-- Tabla folios asignados por coordinador -->
+        <div class="tabla-card">
+          <div class="tabla-header"><h3 class="tabla-titulo">Folios asignados este mes</h3></div>
+          <div class="tabla-wrapper">
+            <table class="dash-tabla">
+              <thead>
+                <tr>
+                  <th>Folio</th><th>Fecha</th><th>Cliente</th><th>Vendedor asignado</th>
+                  <th style="text-align:right">%</th>
+                  <th style="text-align:right">Monto asignado</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="tbodyAsignados"><tr class="tabla-empty"><td colspan="7">Cargando...</td></tr></tbody>
+            </table>
+          </div>
+          <div class="tabla-footer"><span class="tabla-total" id="totalAsignados">0 registros</span></div>
+        </div>
+      </section>
+
+      <!-- Panel Folios Recibidos (vendedor normal) -->
+      <section class="panel-compartidos" id="panelCompartidos" style="display:none">
+        <div class="panel-coord-header">
+          <h2 class="panel-coord-titulo">📥 Folios recibidos</h2>
+          <p class="panel-coord-sub">Folios que un coordinador te ha asignado este mes</p>
+        </div>
+        <div class="tabla-card">
+          <div class="tabla-wrapper">
+            <table class="dash-tabla">
+              <thead>
+                <tr>
+                  <th>Folio</th><th>Fecha</th><th>Cliente</th><th>Coordinador</th>
+                  <th style="text-align:right">%</th>
+                  <th style="text-align:right">Monto asignado</th>
+                </tr>
+              </thead>
+              <tbody id="tbodyCompartidos"><tr class="tabla-empty"><td colspan="6">Cargando...</td></tr></tbody>
+            </table>
+          </div>
+          <div class="tabla-footer"><span class="tabla-total" id="totalCompartidos">0 registros</span></div>
         </div>
       </section>
 
     </main>
   </div>
 
-  <script src="dashboard.js?v=2.1.0"></script>
-  <script src="../assets/js/inactividad.js?v=2.1.0"></script>
+  <!-- ══ MODAL DETALLE FOLIO ════════════════════════════════════════════════ -->
+  <div class="modal-overlay" id="modalOverlay" role="dialog" aria-modal="true" aria-labelledby="modalTitulo" aria-hidden="true">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div>
+          <h2 class="modal-titulo" id="modalTitulo">Detalle del Folio</h2>
+          <p class="modal-subtitulo" id="modalSubtitulo"></p>
+        </div>
+        <button class="modal-cerrar" id="modalCerrar" aria-label="Cerrar detalle">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-tabla-wrapper">
+          <table class="dash-tabla modal-tabla">
+            <thead>
+              <tr>
+                <th>Código</th>
+                <th>Descripción</th>
+                <th style="text-align:center">Cantidad</th>
+                <th style="text-align:right">Precio Unit.</th>
+                <th style="text-align:right">Total Línea</th>
+              </tr>
+            </thead>
+            <tbody id="modalTbody">
+              <tr><td colspan="5" style="text-align:center;padding:2rem">Cargando...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <span class="modal-total-label">Total Folio:</span>
+        <span class="modal-total-valor" id="modalTotalValor">—</span>
+      </div>
+    </div>
+  </div>
+  <!-- ══ FIN MODAL ══════════════════════════════════════════════════════════ -->
+
+  <script src="dashboard.js?v=2.2.0"></script>
+  <script src="../assets/js/inactividad.js?v=2.2.0"></script>
 </body>
 </html>
