@@ -7,9 +7,9 @@
 const express  = require('express');
 const router   = express.Router();
 const db       = require('../config/db');
-const { verificarToken } = require('../middlewares/auth');
+const { requireAuth } = require('../middlewares/requireAuth');
 
-router.use(verificarToken);
+router.use(requireAuth);
 
 function diasRestantes(fechaVence) {
   const hoy   = new Date(); hoy.setHours(0, 0, 0, 0);
@@ -53,7 +53,7 @@ router.get('/', async (req, res) => {
 
     const data = rows.map(r => ({
       ...r,
-      dias_restantes:   diasRestantes(r.fecha_vence),
+      dias_restantes:    diasRestantes(r.fecha_vence),
       destinatarios_ids: r.destinatarios_ids
         ? r.destinatarios_ids.split(',').map(Number)
         : [],
@@ -174,7 +174,7 @@ router.put('/:id', async (req, res) => {
       `SELECT id_creador FROM alertas WHERE id = ?`, [id]
     );
     if (!alerta) return res.status(404).json({ ok: false, error: 'Alerta no encontrada' });
-    if (alerta.id_creador !== uid && req.usuario.rol !== 'admin') {
+    if (alerta.id_creador !== uid && !req.usuario.is_admin) {
       return res.status(403).json({ ok: false, error: 'Sin permisos para editar esta alerta' });
     }
 
@@ -211,7 +211,7 @@ router.patch('/:id/completar', async (req, res) => {
   try {
     const [[a]] = await db.query(`SELECT id_creador FROM alertas WHERE id=?`, [id]);
     if (!a) return res.status(404).json({ ok: false, error: 'No encontrada' });
-    if (a.id_creador !== uid && req.usuario.rol !== 'admin') {
+    if (a.id_creador !== uid && !req.usuario.is_admin) {
       return res.status(403).json({ ok: false, error: 'Sin permisos' });
     }
     await db.query(`UPDATE alertas SET completada=1, activa=0 WHERE id=?`, [id]);
@@ -228,7 +228,7 @@ router.patch('/:id/desactivar', async (req, res) => {
   try {
     const [[a]] = await db.query(`SELECT id_creador FROM alertas WHERE id=?`, [id]);
     if (!a) return res.status(404).json({ ok: false, error: 'No encontrada' });
-    if (a.id_creador !== uid && req.usuario.rol !== 'admin') {
+    if (a.id_creador !== uid && !req.usuario.is_admin) {
       return res.status(403).json({ ok: false, error: 'Sin permisos' });
     }
     await db.query(`UPDATE alertas SET activa=0 WHERE id=?`, [id]);
@@ -278,7 +278,7 @@ router.delete('/:id', async (req, res) => {
   try {
     const [[a]] = await db.query(`SELECT id_creador FROM alertas WHERE id=?`, [id]);
     if (!a) return res.status(404).json({ ok: false, error: 'No encontrada' });
-    if (a.id_creador !== uid && req.usuario.rol !== 'admin') {
+    if (a.id_creador !== uid && !req.usuario.is_admin) {
       return res.status(403).json({ ok: false, error: 'Sin permisos para eliminar' });
     }
     await db.query(`DELETE FROM alertas WHERE id=?`, [id]);
