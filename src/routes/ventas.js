@@ -118,16 +118,17 @@ router.get('/meta', requireAuth, async (req, res) => {
 //     ?mes=<1-12>&anio=<YYYY>    (validados por validarMesAnio)
 //
 //   Campos retornados:
-//     codVendedor          = h.CodVendedor
-//     nombreVendedor       = MIN(h.NomAux)
-//     totalFolios          = COUNT(DISTINCT h.Folio)
-//     totalVentasCobrado   = ROUND(SUM(m.TotLinea), 0)                      → monto cobrado al cliente
-//     ventaRealLista       = ROUND(SUM(t.PrecioVta * m.CantFacturada), 0)   → precio lista sin descuento
-//     pctDescuento         = (1 - totalVentasCobrado / ventaRealLista) * 100 → % descuento otorgado
+//     codVendedor          = enc.CodVendedor
+//     nombreVendedor       = MIN(enc.NomAux)
+//     totalFolios          = COUNT(DISTINCT enc.Folio)
+//     totalVentasCobrado   = SUM(enc.SubTotal) desde subquery independiente
+//                            ✅ Evita duplicación causada por JOIN con iw_gmovi/iw_tprod
+//     ventaRealLista       = ROUND(SUM(t.PrecioVta * m.CantFacturada), 0)
+//     pctDescuento         = (1 - totalVentasCobrado / ventaRealLista) * 100
 //
-//   Tablas: iw_gsaen (h) + iw_gmovi (m) + iw_tprod (t)
-//   Filtro de seguridad: h.CodVendedor IN (codigos del usuario autenticado)
-//   Filtro de período:   MONTH(h.Fecha) = @mes  AND  YEAR(h.Fecha) = @anio
+//   Tablas: iw_gsaen (enc) + iw_gmovi (m) + iw_tprod (t)
+//   Filtro de seguridad: enc.CodVendedor IN (codigos del usuario autenticado)
+//   Filtro de período:   MONTH(enc.Fecha) = @mes  AND  YEAR(enc.Fecha) = @anio
 //
 router.get('/resumen-vendedores', requireAuth, async (req, res) => {
   try {
@@ -147,31 +148,45 @@ router.get('/resumen-vendedores', requireAuth, async (req, res) => {
       .input('anio', sql.Int, anio)
       .query(`
         SELECT
-          h.CodVendedor                                                      AS codVendedor,
-          MIN(h.NomAux)                                                      AS nombreVendedor,
-          COUNT(DISTINCT h.Folio)                                            AS totalFolios,
-          ROUND(SUM(m.TotLinea), 0)                                          AS totalVentasCobrado,
+          enc.CodVendedor                                                    AS codVendedor,
+          MIN(enc.NomAux)                                                    AS nombreVendedor,
+          COUNT(DISTINCT enc.Folio)                                          AS totalFolios,
+          -- ✅ totalVentasCobrado: calculado desde subquery independiente sobre el encabezado
+          --    para evitar duplicación de filas causada por el JOIN con iw_gmovi e iw_tprod
+          ROUND(tot.totalVentasCobrado, 0)                                   AS totalVentasCobrado,
           ROUND(SUM(t.PrecioVta * m.CantFacturada), 0)                       AS ventaRealLista,
           CASE
             WHEN SUM(t.PrecioVta * m.CantFacturada) > 0
             THEN ROUND(
-              (1 - (SUM(m.TotLinea) / SUM(t.PrecioVta * m.CantFacturada))) * 100
+              (1 - (tot.totalVentasCobrado / SUM(t.PrecioVta * m.CantFacturada))) * 100
             , 2)
             ELSE 0
           END                                                                AS pctDescuento
-        FROM [PRODIN].[softland].[iw_gsaen] h
+        FROM [PRODIN].[softland].[iw_gsaen] enc
+        -- Subquery: suma SubTotal directamente desde encabezado sin JOIN a líneas/productos
+        INNER JOIN (
+          SELECT
+            CodVendedor,
+            SUM(SubTotal) AS totalVentasCobrado
+          FROM [PRODIN].[softland].[iw_gsaen]
+          WHERE Tipo    IN ('F','N','D')
+            AND Estado <>  'A'
+            AND MONTH(Fecha) = @mes
+            AND YEAR(Fecha)  = @anio
+          GROUP BY CodVendedor
+        ) tot ON tot.CodVendedor = enc.CodVendedor
         INNER JOIN [PRODIN].[softland].[iw_gmovi] m
-          ON m.NroInt = h.NroInt
-         AND m.Tipo   = h.Tipo
+          ON m.NroInt = enc.NroInt
+         AND m.Tipo   = enc.Tipo
         INNER JOIN [PRODIN].[softland].[iw_tprod] t
           ON t.CodProd = m.CodProd
-        WHERE h.CodVendedor IN (${codigos.map(c => `'${c}'`).join(',')})
-          AND h.Tipo    IN ('F','N','D')
-          AND h.Estado <>  'A'
-          AND MONTH(h.Fecha) = @mes
-          AND YEAR(h.Fecha)  = @anio
-        GROUP BY h.CodVendedor
-        ORDER BY totalVentasCobrado DESC
+        WHERE enc.CodVendedor IN (${codigos.map(c => `'${c}'`).join(',')})
+          AND enc.Tipo    IN ('F','N','D')
+          AND enc.Estado <>  'A'
+          AND MONTH(enc.Fecha) = @mes
+          AND YEAR(enc.Fecha)  = @anio
+        GROUP BY enc.CodVendedor, tot.totalVentasCobrado
+        ORDER BY tot.totalVentasCobrado DESC
       `);
 
     res.json({ ok: true, vendedores: result.recordset });
