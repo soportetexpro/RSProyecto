@@ -122,6 +122,7 @@ router.get('/meta', requireAuth, async (req, res) => {
 //     nombreVendedor       = MIN(enc.NomAux)
 //     totalFolios          = COUNT(DISTINCT enc.Folio)
 //     totalVentasCobrado   = SUM(enc.SubTotal) desde subquery independiente
+//                            ✅ Filtrada por los mismos CodVendedor del usuario autenticado
 //                            ✅ Evita duplicación causada por JOIN con iw_gmovi/iw_tprod
 //     ventaRealLista       = ROUND(SUM(t.PrecioVta * m.CantFacturada), 0)
 //     pctDescuento         = (1 - totalVentasCobrado / ventaRealLista) * 100
@@ -142,6 +143,9 @@ router.get('/resumen-vendedores', requireAuth, async (req, res) => {
       return res.status(400).json({ ok: false, error: err.message });
     }
 
+    // Lista de códigos parametrizada de forma segura para SQL Server
+    const codigosIn = codigos.map(c => `'${c}'`).join(',');
+
     const pool   = await getSoftlandPool();
     const result = await pool.request()
       .input('mes',  sql.Int, mes)
@@ -151,8 +155,9 @@ router.get('/resumen-vendedores', requireAuth, async (req, res) => {
           enc.CodVendedor                                                    AS codVendedor,
           MIN(enc.NomAux)                                                    AS nombreVendedor,
           COUNT(DISTINCT enc.Folio)                                          AS totalFolios,
-          -- ✅ totalVentasCobrado: calculado desde subquery independiente sobre el encabezado
-          --    para evitar duplicación de filas causada por el JOIN con iw_gmovi e iw_tprod
+          -- ✅ totalVentasCobrado: subquery filtrada por los mismos codigos del usuario
+          --    autenticado + mismo mes/año + Estado <> 'A'
+          --    Garantiza que no se sumen SubTotales de otros vendedores del sistema
           ROUND(tot.totalVentasCobrado, 0)                                   AS totalVentasCobrado,
           ROUND(SUM(t.PrecioVta * m.CantFacturada), 0)                       AS ventaRealLista,
           CASE
@@ -163,13 +168,15 @@ router.get('/resumen-vendedores', requireAuth, async (req, res) => {
             ELSE 0
           END                                                                AS pctDescuento
         FROM [PRODIN].[softland].[iw_gsaen] enc
-        -- Subquery: suma SubTotal directamente desde encabezado sin JOIN a líneas/productos
+        -- ✅ FIX: subquery tot ahora incluye CodVendedor IN (codigos del usuario autenticado)
+        --    para que totalVentasCobrado corresponda SOLO a los vendedores del usuario en sesión
         INNER JOIN (
           SELECT
             CodVendedor,
             SUM(SubTotal) AS totalVentasCobrado
           FROM [PRODIN].[softland].[iw_gsaen]
-          WHERE Tipo    IN ('F','N','D')
+          WHERE CodVendedor IN (${codigosIn})
+            AND Tipo    IN ('F','N','D')
             AND Estado <>  'A'
             AND MONTH(Fecha) = @mes
             AND YEAR(Fecha)  = @anio
@@ -180,7 +187,7 @@ router.get('/resumen-vendedores', requireAuth, async (req, res) => {
          AND m.Tipo   = enc.Tipo
         INNER JOIN [PRODIN].[softland].[iw_tprod] t
           ON t.CodProd = m.CodProd
-        WHERE enc.CodVendedor IN (${codigos.map(c => `'${c}'`).join(',')})
+        WHERE enc.CodVendedor IN (${codigosIn})
           AND enc.Tipo    IN ('F','N','D')
           AND enc.Estado <>  'A'
           AND MONTH(enc.Fecha) = @mes
@@ -231,6 +238,7 @@ router.get('/evolucion', requireAuth, async (req, res) => {
         WHERE h.CodVendedor IN (${codigos.map(c => `'${c}'`).join(',')})
           AND YEAR(h.Fecha) = @anio
           AND h.Tipo IN ('F','N','D')
+          AND h.Estado <> 'A'
         GROUP BY MONTH(h.Fecha)
         ORDER BY mes
       `);
