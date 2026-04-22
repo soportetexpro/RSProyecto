@@ -248,17 +248,17 @@
         tbody.innerHTML = '<tr class="tabla-empty"><td colspan="6">Sin datos</td></tr>'; return;
       }
       tbody.innerHTML = data.vendedores.map(v => {
-        const totalVentas    = Number(v.totalVentas  || 0);
-        const totalDescuento = Number(v.totalDescuento || 0);
-        const ventaReal      = totalVentas - totalDescuento;
+        const totalVentasCobrado = Number(v.totalVentasCobrado || 0);
+        const ventaRealLista     = Number(v.ventaRealLista     || 0);
+        const pctDescuento       = Number(v.pctDescuento       || 0);
         return `
         <tr>
           <td><strong>${v.codVendedor}</strong></td>
           <td>${v.nombreVendedor || '—'}</td>
-          <td>${v.folios}</td>
-          <td style="text-align:right">${formatCLP(totalVentas)}</td>
-          <td style="text-align:right">${formatCLP(ventaReal)}</td>
-          <td style="text-align:right">${formatCLP(totalDescuento)}</td>
+          <td>${v.totalFolios}</td>
+          <td style="text-align:right">${formatCLP(totalVentasCobrado)}</td>
+          <td style="text-align:right">${formatCLP(ventaRealLista)}</td>
+          <td style="text-align:right">${pctDescuento > 0 ? pctDescuento + '%' : '—'}</td>
         </tr>`;
       }).join('');
     } catch (err) { console.error('[cargarVendedores]', err); }

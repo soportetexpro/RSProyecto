@@ -271,17 +271,28 @@ router.get('/vendedores', async (req, res) => {
     const extraFolios=foliosComp.length?`OR h.Folio IN (${foliosComp.join(',')})` : '';
     const pool=await getSoftlandPool();
     const result=await pool.request().query(`
-      SELECT h.CodVendedor AS codVendedor,v.VenDes AS nombreVendedor,COUNT(h.Folio) AS folios,
-        SUM(CASE WHEN RTRIM(h.CanCod)='300' THEN h.SubTotal ELSE ROUND(h.SubTotal*1.10,0) END) AS totalVentas
+      SELECT
+        h.CodVendedor                                                   AS codVendedor,
+        MIN(v.VenDes)                                                   AS nombreVendedor,
+        COUNT(DISTINCT h.Folio)                                         AS totalFolios,
+        ROUND(SUM(m.TotLinea), 0)                                       AS totalVentasCobrado,
+        ROUND(SUM(t.PrecioVta * m.CantFacturada), 0)                    AS ventaRealLista,
+        CASE
+          WHEN SUM(t.PrecioVta * m.CantFacturada) > 0
+          THEN ROUND((1 - (SUM(m.TotLinea) / SUM(t.PrecioVta * m.CantFacturada))) * 100, 2)
+          ELSE 0
+        END                                                             AS pctDescuento
       FROM [PRODIN].[softland].[iw_gsaen] h
-      LEFT JOIN [PRODIN].[softland].[cwtvend] v ON v.VenCod=h.CodVendedor
+      INNER JOIN [PRODIN].[softland].[iw_gmovi] m ON m.NroInt = h.NroInt AND m.Tipo = h.Tipo
+      INNER JOIN [PRODIN].[softland].[iw_tprod] t ON t.CodProd = m.CodProd
+      LEFT JOIN [PRODIN].[softland].[cwtvend] v ON v.VenCod = h.CodVendedor
       WHERE (h.CodVendedor IN (${mssqlIn(codigos)}) ${extraFolios})
         AND MONTH(h.Fecha)=${mes} AND YEAR(h.Fecha)=${anio}
         AND h.Tipo IN ('F','N','D') AND h.Estado<>'A'
-      GROUP BY h.CodVendedor,v.VenDes ORDER BY totalVentas DESC
+      GROUP BY h.CodVendedor
+      ORDER BY totalVentasCobrado DESC
     `);
-    const prom=result.recordset.map(async v=>({...v,totalDescuento:0}));
-    res.json({ok:true,vendedores:await Promise.all(prom)});
+    res.json({ok:true,vendedores:result.recordset});
   } catch(err){
     console.error('[GET /api/dashboard/vendedores]',err.message);
     res.status(500).json({ok:false,error:'Error al obtener vendedores'});
