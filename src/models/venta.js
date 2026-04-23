@@ -22,6 +22,8 @@ function buildInParams(request, codigos, prefijo = 'cod') {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. Total Ventas del mes para uno o varios vendedores
+//    FIX: usa SUM(TotLinea) desde iw_gmovi (JOIN iw_gsaen)
+//         agrega filtro Estado <> 'A' para excluir documentos anulados
 // ─────────────────────────────────────────────────────────────────────────────
 async function getTotalVentas({ codigos, mes, anio }) {
   const pool    = await getSoftlandPool();
@@ -32,12 +34,16 @@ async function getTotalVentas({ codigos, mes, anio }) {
   const inCods = buildInParams(request, codigos);
 
   const result = await request.query(`
-    SELECT SUM(iw_gsaen.SubTotal) AS total_ventas
-    FROM [PRODIN].[softland].[iw_gsaen]
-    WHERE iw_gsaen.Tipo IN ('F','N','D')
-      AND MONTH(iw_gsaen.fecha) = @mes
-      AND YEAR(iw_gsaen.fecha)  = @anio
-      AND iw_gsaen.CodVendedor  IN (${inCods})
+    SELECT SUM(m.TotLinea) AS total_ventas
+    FROM [PRODIN].[softland].[iw_gmovi] m
+    INNER JOIN [PRODIN].[softland].[iw_gsaen] enc
+      ON enc.NroInt = m.NroInt
+     AND enc.Tipo   = m.Tipo
+    WHERE enc.Tipo         IN ('F','N','D')
+      AND enc.Estado       <>  'A'
+      AND enc.CodVendedor  IN (${inCods})
+      AND MONTH(enc.Fecha) =   @mes
+      AND YEAR(enc.Fecha)  =   @anio
   `);
 
   return result.recordset[0]?.total_ventas ?? 0;
