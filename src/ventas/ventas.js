@@ -41,6 +41,7 @@
     sortCol:         'fecha_formato',
     sortDir:         'desc',
     usuario:         null,
+    tipo:            '',   // valor activo del filtro TIPO
   };
 
   function formatCLP(v) {
@@ -140,6 +141,88 @@
       o.value = v.cod_vendedor; o.textContent = v.cod_vendedor;
       selVend.appendChild(o);
     });
+  }
+
+  /**
+   * Construye dinámicamente el select #filtroTipo con los tipos únicos
+   * presentes en estado.ventas. Si el select ya existe, sólo actualiza sus opciones.
+   */
+  function buildFiltroTipo() {
+    const tiposUnicos = [...new Set(
+      estado.ventas
+        .map(v => String(v.Tipo || v.TipoDocumento || '').trim())
+        .filter(Boolean)
+    )].sort();
+
+    let sel = document.getElementById('filtroTipo');
+
+    if (!sel) {
+      // Crear el select y colocarlo junto a #filtroVendedor
+      sel = document.createElement('select');
+      sel.id        = 'filtroTipo';
+      sel.className = 'filtro-select';
+      sel.setAttribute('aria-label', 'Filtrar por tipo de documento');
+
+      const refVend = document.getElementById('filtroVendedor');
+      if (refVend && refVend.parentNode) {
+        refVend.parentNode.insertBefore(sel, refVend);
+      } else {
+        // fallback: adjuntar al contenedor de filtros o al body
+        const contenedor = document.querySelector('.filtros-bar, .tabla-filtros, .tabla-controles');
+        if (contenedor) contenedor.insertBefore(sel, contenedor.firstChild);
+      }
+
+      // Listener: filtra al cambiar tipo
+      sel.addEventListener('change', () => {
+        estado.tipo = sel.value;
+        // Limpiar búsqueda de texto libre al cambiar tipo
+        const inputBusq = document.getElementById('tablaBusqueda');
+        if (inputBusq) inputBusq.value = '';
+        aplicarFiltros();
+      });
+    }
+
+    // Repoblar opciones (por si cambian los datos al cambiar mes/año)
+    sel.innerHTML = '<option value="">— Todos los tipos —</option>' +
+      tiposUnicos.map(t => `<option value="${t}"${t === estado.tipo ? ' selected' : ''}>${t}</option>`).join('');
+  }
+
+  /**
+   * aplicarFiltros() — fuente única de verdad para filtrar estado.ventas.
+   * Aplica en cascada: Tipo → Vendedor → Búsqueda de texto.
+   * Actualiza estado.ventasFiltradas y re-renderiza la tabla.
+   */
+  function aplicarFiltros() {
+    const tipo      = estado.tipo;
+    const codVend   = (document.getElementById('filtroVendedor')?.value || '').trim();
+    const busqueda  = (document.getElementById('tablaBusqueda')?.value  || '').toLowerCase().trim();
+
+    let datos = estado.ventas;
+
+    // 1. Filtro TIPO
+    if (tipo) {
+      datos = datos.filter(v =>
+        String(v.Tipo || v.TipoDocumento || '').trim() === tipo
+      );
+    }
+
+    // 2. Filtro VENDEDOR
+    if (codVend) {
+      datos = datos.filter(v => String(v.CodVendedor || '').trim() === codVend);
+    }
+
+    // 3. Búsqueda de texto libre (Folio, cliente, CodVendedor)
+    if (busqueda) {
+      datos = datos.filter(v =>
+        String(v.Folio       || '').toLowerCase().includes(busqueda) ||
+        String(v.cliente     || '').toLowerCase().includes(busqueda) ||
+        String(v.CodVendedor || '').toLowerCase().includes(busqueda)
+      );
+    }
+
+    estado.ventasFiltradas = datos;
+    estado.paginaActual    = 1;
+    renderTabla();
   }
 
   function getParams() {
@@ -309,15 +392,8 @@
   }
 
   function renderTabla() {
-    const tbody    = document.getElementById('ventasTbody');
-    const busqueda = document.getElementById('tablaBusqueda').value.toLowerCase();
-
-    let datos = estado.ventasFiltradas.filter(v =>
-      !busqueda ||
-      String(v.Folio   || '').toLowerCase().includes(busqueda) ||
-      String(v.cliente || '').toLowerCase().includes(busqueda)
-    );
-    datos = sortVentas(datos);
+    const tbody  = document.getElementById('ventasTbody');
+    const datos  = sortVentas(estado.ventasFiltradas);
 
     const total  = datos.length;
     const inicio = (estado.paginaActual - 1) * POR_PAGINA;
@@ -535,7 +611,7 @@
 
   function buscar() {
     estado.paginaActual = 1;
-    renderTabla();
+    aplicarFiltros();
   }
 
   async function init() {
@@ -558,6 +634,10 @@
     async function cargarTodo() {
       const { mes, anio } = getParams();
 
+      // Preservar filtros activos antes de recargar datos
+      const tipoActivo  = estado.tipo;
+      const vendActivo  = document.getElementById('filtroVendedor')?.value || '';
+
       const [resKpi, resVend, resVentas] = await Promise.all([
         fetch(`${API}/kpis?${new URLSearchParams({ mes, anio })}`,
           { headers: { Authorization: `Bearer ${token()}` } }),
@@ -574,10 +654,25 @@
       if (dataKpi.ok)    renderKpis(dataKpi.totalVentas, dataKpi.metaMes, dataKpi.totalDescuento);
       if (dataVend.ok)   renderTablaVendedores(dataVend.vendedores);
       if (dataVentas.ok) {
-        estado.ventas          = dataVentas.ventas || [];
-        estado.ventasFiltradas = estado.ventas;
-        estado.paginaActual    = 1;
-        renderTabla();
+        estado.ventas       = dataVentas.ventas || [];
+        estado.paginaActual = 1;
+
+        // Reconstruir select TIPO con los datos del nuevo período
+        buildFiltroTipo();
+
+        // Restaurar filtro de tipo activo (si sigue siendo válido)
+        const tipoSel = document.getElementById('filtroTipo');
+        if (tipoSel && tipoActivo) {
+          const opcionExiste = [...tipoSel.options].some(o => o.value === tipoActivo);
+          tipoSel.value = opcionExiste ? tipoActivo : '';
+          estado.tipo   = tipoSel.value;
+        }
+
+        // Restaurar filtro de vendedor activo
+        const vendSel = document.getElementById('filtroVendedor');
+        if (vendSel && vendActivo) vendSel.value = vendActivo;
+
+        aplicarFiltros();
       }
 
       await cargarGrafico(mes, anio);
@@ -588,12 +683,10 @@
     document.getElementById('filtroMes')?.addEventListener('change', cargarTodo);
     document.getElementById('filtroAnio')?.addEventListener('change', cargarTodo);
     document.getElementById('filtroVendedor')?.addEventListener('change', () => {
-      const cod = document.getElementById('filtroVendedor').value;
-      estado.ventasFiltradas = cod
-        ? estado.ventas.filter(v => String(v.CodVendedor) === String(cod))
-        : estado.ventas;
-      estado.paginaActual = 1;
-      renderTabla();
+      // Limpiar búsqueda de texto al cambiar vendedor
+      const inputBusq = document.getElementById('tablaBusqueda');
+      if (inputBusq) inputBusq.value = '';
+      aplicarFiltros();
     });
   }
 
