@@ -2,6 +2,7 @@
 /**
  * routes/alertas.js
  * CRUD completo para el módulo de Alertas y Recordatorios.
+ * v2 — Agrega: frecuencia_recordatorio, lógica de cooldown, endpoint badge global
  */
 
 const express  = require('express');
@@ -17,6 +18,26 @@ function diasRestantes(fechaVence) {
   return Math.ceil((vence - hoy) / 86400000);
 }
 
+/**
+ * Determina si el recordatorio debe mostrarse según la frecuencia configurada.
+ * Retorna true si corresponde mostrar.
+ */
+function debeMotrarRecordatorio(frecuencia, ultimoRecordatorio) {
+  if (!ultimoRecordatorio) return true;  // nunca se mostró
+  const ahora    = new Date();
+  const ultimo   = new Date(ultimoRecordatorio);
+  const diffMs   = ahora - ultimo;
+  const diffDias = diffMs / 86400000;
+
+  switch (frecuencia) {
+    case 'diaria':    return diffDias >= 1;
+    case 'semanal':   return diffDias >= 7;
+    case 'quincenal': return diffDias >= 15;
+    case 'manual':    return false;  // solo se muestra si el usuario lo pide
+    default:          return diffDias >= 7;
+  }
+}
+
 // ── GET /api/alertas ──────────────────────────────────────────────
 router.get('/', async (req, res) => {
   const uid = req.usuario.id;
@@ -24,10 +45,12 @@ router.get('/', async (req, res) => {
     const [rows] = await db.query(`
       SELECT
         a.id, a.titulo, a.descripcion, a.tipo, a.fecha_vence,
+        a.frecuencia_recordatorio,
         a.id_creador, a.activa, a.completada, a.created_at,
         COALESCE(u.nombre, '') AS nombre_creador,
         COALESCE(ad.silenciada, 0) AS silenciada,
         COALESCE(ad.descartada_hoy, NULL) AS descartada_hoy,
+        COALESCE(ad.ultimo_recordatorio, NULL) AS ultimo_recordatorio,
         (
           SELECT GROUP_CONCAT(du.nombre ORDER BY du.nombre SEPARATOR ', ')
           FROM alerta_destinatarios adc
@@ -54,6 +77,7 @@ router.get('/', async (req, res) => {
     const data = rows.map(r => ({
       ...r,
       dias_restantes:    diasRestantes(r.fecha_vence),
+      es_propia:         r.id_creador === uid,
       destinatarios_ids: r.destinatarios_ids
         ? r.destinatarios_ids.split(',').map(Number)
         : [],
@@ -67,17 +91,21 @@ router.get('/', async (req, res) => {
 });
 
 // ── GET /api/alertas/pendientes ───────────────────────────────────
+// Respeta frecuencia_recordatorio para no molestar al usuario más de lo configurado
 router.get('/pendientes', async (req, res) => {
   const uid = req.usuario.id;
-  const hoy = new Date().toISOString().slice(0, 10);
   try {
     const [rows] = await db.query(`
       SELECT
         a.id, a.titulo, a.descripcion, a.tipo, a.fecha_vence,
+        a.frecuencia_recordatorio,
         a.id_creador,
+        COALESCE(u.nombre, '') AS nombre_creador,
         COALESCE(ad.silenciada, 0) AS silenciada,
-        COALESCE(ad.descartada_hoy, NULL) AS descartada_hoy
+        COALESCE(ad.descartada_hoy, NULL) AS descartada_hoy,
+        COALESCE(ad.ultimo_recordatorio, NULL) AS ultimo_recordatorio
       FROM alertas a
+      LEFT JOIN usuarios u ON u.id = a.id_creador
       LEFT JOIN alerta_destinatarios ad ON ad.id_alerta = a.id AND ad.id_usuario = ?
       WHERE
         a.activa = 1
@@ -85,7 +113,6 @@ router.get('/pendientes', async (req, res) => {
         AND a.fecha_vence >= CURDATE()
         AND DATEDIFF(a.fecha_vence, CURDATE()) <= 7
         AND COALESCE(ad.silenciada, 0) = 0
-        AND (ad.descartada_hoy IS NULL OR ad.descartada_hoy != ?)
         AND (
           a.id_creador = ?
           OR EXISTS (
@@ -94,17 +121,51 @@ router.get('/pendientes', async (req, res) => {
           )
         )
       ORDER BY a.fecha_vence ASC
-    `, [uid, hoy, uid, uid]);
+    `, [uid, uid, uid]);
 
-    const data = rows.map(r => ({
-      ...r,
-      dias_restantes: diasRestantes(r.fecha_vence),
-    }));
+    // Filtrar según frecuencia_recordatorio y ultimo_recordatorio
+    const data = rows
+      .filter(r => r.frecuencia_recordatorio !== 'manual')
+      .filter(r => debeMotrarRecordatorio(r.frecuencia_recordatorio, r.ultimo_recordatorio))
+      .map(r => ({
+        ...r,
+        dias_restantes: diasRestantes(r.fecha_vence),
+        es_propia: r.id_creador === uid,
+      }));
 
     res.json({ ok: true, data });
   } catch (_e) {
     console.error('[alertas pendientes]', _e);
     res.status(500).json({ ok: false, error: 'Error al obtener alertas pendientes' });
+  }
+});
+
+// ── GET /api/alertas/badge ────────────────────────────────────────
+// Contador global para el badge del sidebar (se llama desde cualquier página)
+router.get('/badge', async (req, res) => {
+  const uid = req.usuario.id;
+  try {
+    const [[{ total }]] = await db.query(`
+      SELECT COUNT(*) AS total
+      FROM alertas a
+      LEFT JOIN alerta_destinatarios ad ON ad.id_alerta = a.id AND ad.id_usuario = ?
+      WHERE
+        a.activa = 1
+        AND a.completada = 0
+        AND a.fecha_vence >= CURDATE()
+        AND DATEDIFF(a.fecha_vence, CURDATE()) <= 7
+        AND COALESCE(ad.silenciada, 0) = 0
+        AND (
+          a.id_creador = ?
+          OR EXISTS (
+            SELECT 1 FROM alerta_destinatarios adx
+            WHERE adx.id_alerta = a.id AND adx.id_usuario = ?
+          )
+        )
+    `, [uid, uid, uid]);
+    res.json({ ok: true, total: Number(total) });
+  } catch (_e) {
+    res.status(500).json({ ok: false, total: 0 });
   }
 });
 
@@ -123,7 +184,7 @@ router.get('/usuarios', async (req, res) => {
 // ── POST /api/alertas ─────────────────────────────────────────────
 router.post('/', async (req, res) => {
   const uid = req.usuario.id;
-  const { titulo, descripcion, tipo, fecha_vence, destinatarios = [] } = req.body;
+  const { titulo, descripcion, tipo, fecha_vence, frecuencia_recordatorio = 'semanal', destinatarios = [] } = req.body;
 
   if (!titulo || !fecha_vence) {
     return res.status(400).json({ ok: false, error: 'Título y fecha de vencimiento son obligatorios' });
@@ -131,15 +192,18 @@ router.post('/', async (req, res) => {
   if (!['personal', 'grupal'].includes(tipo)) {
     return res.status(400).json({ ok: false, error: 'Tipo inválido' });
   }
+  if (!['diaria', 'semanal', 'quincenal', 'manual'].includes(frecuencia_recordatorio)) {
+    return res.status(400).json({ ok: false, error: 'Frecuencia inválida' });
+  }
 
   const conn = await db.getConnection();
   try {
     await conn.beginTransaction();
 
     const [ins] = await conn.query(
-      `INSERT INTO alertas (titulo, descripcion, tipo, fecha_vence, id_creador)
-       VALUES (?, ?, ?, ?, ?)`,
-      [titulo, descripcion || null, tipo, fecha_vence, uid]
+      `INSERT INTO alertas (titulo, descripcion, tipo, fecha_vence, frecuencia_recordatorio, id_creador)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [titulo, descripcion || null, tipo, fecha_vence, frecuencia_recordatorio, uid]
     );
     const idAlerta = ins.insertId;
 
@@ -166,7 +230,7 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   const uid = req.usuario.id;
   const id  = Number(req.params.id);
-  const { titulo, descripcion, tipo, fecha_vence, destinatarios = [] } = req.body;
+  const { titulo, descripcion, tipo, fecha_vence, frecuencia_recordatorio = 'semanal', destinatarios = [] } = req.body;
 
   const conn = await db.getConnection();
   try {
@@ -180,8 +244,8 @@ router.put('/:id', async (req, res) => {
 
     await conn.beginTransaction();
     await conn.query(
-      `UPDATE alertas SET titulo=?, descripcion=?, tipo=?, fecha_vence=? WHERE id=?`,
-      [titulo, descripcion || null, tipo, fecha_vence, id]
+      `UPDATE alertas SET titulo=?, descripcion=?, tipo=?, fecha_vence=?, frecuencia_recordatorio=? WHERE id=?`,
+      [titulo, descripcion || null, tipo, fecha_vence, frecuencia_recordatorio, id]
     );
 
     await conn.query(`DELETE FROM alerta_destinatarios WHERE id_alerta = ?`, [id]);
@@ -239,16 +303,18 @@ router.patch('/:id/desactivar', async (req, res) => {
 });
 
 // ── PATCH /api/alertas/:id/descartar ─────────────────────────────
+// Descarta el popup HOY y registra el ultimo_recordatorio para respetar la frecuencia
 router.patch('/:id/descartar', async (req, res) => {
-  const uid = req.usuario.id;
-  const id  = Number(req.params.id);
-  const hoy = new Date().toISOString().slice(0, 10);
+  const uid  = req.usuario.id;
+  const id   = Number(req.params.id);
+  const hoy  = new Date().toISOString().slice(0, 10);
+  const ahora = new Date().toISOString().slice(0, 19).replace('T', ' ');
   try {
     await db.query(`
-      INSERT INTO alerta_destinatarios (id_alerta, id_usuario, descartada_hoy)
-      VALUES (?, ?, ?)
-      ON DUPLICATE KEY UPDATE descartada_hoy = ?
-    `, [id, uid, hoy, hoy]);
+      INSERT INTO alerta_destinatarios (id_alerta, id_usuario, descartada_hoy, ultimo_recordatorio)
+      VALUES (?, ?, ?, ?)
+      ON DUPLICATE KEY UPDATE descartada_hoy = ?, ultimo_recordatorio = ?
+    `, [id, uid, hoy, ahora, hoy, ahora]);
     res.json({ ok: true });
   } catch (_e) {
     res.status(500).json({ ok: false, error: 'Error al descartar alerta' });
