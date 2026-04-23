@@ -357,7 +357,7 @@ router.get('/ventas-mes', async (req, res) => {
     const foliosCompSet  = foliosComp.length ? `h.Folio IN (${foliosComp.join(',')})` : `1=0`;
     const pool = await getSoftlandPool();
     const result = await pool.request().query(`
-      SELECT TOP 100
+      SELECT 
         h.Folio,
         CONVERT(varchar, h.Fecha, 103) AS fecha_formato,
         c.NomAux                       AS cliente,
