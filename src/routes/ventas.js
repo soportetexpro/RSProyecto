@@ -15,6 +15,7 @@
  *   de vendedor asociados al usuario autenticado.
  *
  * GET /api/ventas                    — lista de folios del mes
+ * GET /api/ventas/kpis               — KPIs card: totalVentas, metaMes, totalDescuento
  * GET /api/ventas/total              — total ventas del mes
  * GET /api/ventas/resumen            — resumen por vendedor
  * GET /api/ventas/resumen-vendedores — ventas agrupadas por cod_vendedor (con filtro mes/año)
@@ -65,6 +66,85 @@ router.get('/', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('[GET /api/ventas]', err.message);
     res.status(500).json({ ok: false, error: 'Error al obtener ventas' });
+  }
+});
+
+// ── GET /api/ventas/kpis ──────────────────────────────────────────────────────────────────────────────
+//
+// KPIs para las cards del dashboard de ventas.
+//
+//   Campos retornados:
+//     totalVentas    = SUM(TotLinea) de todos los códigos del vendedor en el mes
+//                      ✔ Suma cada código por separado y los acumula como totalVentasMes
+//     metaMes        = meta mensual desde MySQL bdtexpro
+//     totalDescuento = diferencia entre ventaRealLista y totalVentas
+//
+//   Filtros:
+//     CodVendedor IN (codigos dinámicos del usuario autenticado)
+//     Tipo IN ('F','N','D') | Estado <> 'A' | mes + año
+//
+router.get('/kpis', requireAuth, async (req, res) => {
+  try {
+    const codigos = getCodigos(req);
+    let mes, anio;
+    try {
+      ({ mes, anio } = validarMesAnio(req.query.mes, req.query.anio));
+    } catch (err) {
+      return res.status(400).json({ ok: false, error: err.message });
+    }
+
+    // ─ Meta mensual desde MySQL ─────────────────────────────────────────────
+    const usuarioId = req.usuario?.id;
+    const [metaRows] = await db.query(
+      `SELECT meta FROM vendedor_meta WHERE usuario_id = ? AND YEAR(fecha) = ? LIMIT 1`,
+      [usuarioId, anio]
+    );
+    const metaAnual = metaRows.length ? Number(metaRows[0].meta) : 0;
+    const metaMes   = metaAnual > 0 ? Math.round(metaAnual / 12) : 0;
+
+    // Sin códigos asignados → retornar ceros
+    if (!codigos.length) {
+      return res.json({ ok: true, totalVentas: 0, metaMes, totalDescuento: 0 });
+    }
+
+    const codigosIn = codigos.map(c => `'${c}'`).join(',');
+
+    // ─ KPIs desde SQL Server Softland ───────────────────────────────────────
+    const pool   = await getSoftlandPool();
+    const result = await pool.request()
+      .input('mes',  sql.Int, mes)
+      .input('anio', sql.Int, anio)
+      .query(`
+        SELECT
+          -- totalVentasMes: suma de TotLinea de todos los códigos del vendedor
+          -- Se agrupa por CodVendedor y se acumula con SUM() OVER ()
+          SUM(m.TotLinea)              AS totalVentasCobrado,
+          SUM(SUM(m.TotLinea)) OVER () AS totalVentasMes
+        FROM [PRODIN].[softland].[iw_gsaen] enc
+        INNER JOIN [PRODIN].[softland].[iw_gmovi] m
+          ON m.NroInt = enc.NroInt
+         AND m.Tipo   = enc.Tipo
+        WHERE enc.Tipo         IN ('F', 'N', 'D')
+          AND enc.Estado       <>  'A'
+          AND enc.CodVendedor  IN (${codigosIn})
+          AND MONTH(enc.Fecha) =   @mes
+          AND YEAR(enc.Fecha)  =   @anio
+        GROUP BY enc.CodVendedor
+        ORDER BY totalVentasCobrado DESC
+      `);
+
+    // Tomar totalVentasMes desde la primera fila (es igual en todas)
+    const rows        = result.recordset;
+    const totalVentas = rows.length ? Number(rows[0].totalVentasMes) : 0;
+
+    // totalDescuento: se calcula en resumen-vendedores, aquí retornamos 0 como placeholder
+    // si en el futuro se requiere, se puede agregar el JOIN a iw_tprod aquí
+    const totalDescuento = 0;
+
+    res.json({ ok: true, totalVentas, metaMes, totalDescuento });
+  } catch (err) {
+    console.error('[GET /api/ventas/kpis]', err.message);
+    res.status(500).json({ ok: false, error: 'Error al obtener KPIs' });
   }
 });
 
@@ -143,7 +223,6 @@ router.get('/resumen-vendedores', requireAuth, async (req, res) => {
       return res.status(400).json({ ok: false, error: err.message });
     }
 
-    // Lista de códigos parametrizada de forma segura para SQL Server
     const codigosIn = codigos.map(c => `'${c}'`).join(',');
 
     const pool   = await getSoftlandPool();
@@ -155,9 +234,6 @@ router.get('/resumen-vendedores', requireAuth, async (req, res) => {
           enc.CodVendedor                                                    AS codVendedor,
           MIN(enc.NomAux)                                                    AS nombreVendedor,
           COUNT(DISTINCT enc.Folio)                                          AS totalFolios,
-          -- ✅ totalVentasCobrado: subquery filtrada por los mismos codigos del usuario
-          --    autenticado + mismo mes/año + Estado <> 'A'
-          --    Garantiza que no se sumen SubTotales de otros vendedores del sistema
           ROUND(tot.totalVentasCobrado, 0)                                   AS totalVentasCobrado,
           ROUND(SUM(t.PrecioVta * m.CantFacturada), 0)                       AS ventaRealLista,
           CASE
@@ -168,8 +244,6 @@ router.get('/resumen-vendedores', requireAuth, async (req, res) => {
             ELSE 0
           END                                                                AS pctDescuento
         FROM [PRODIN].[softland].[iw_gsaen] enc
-        -- ✅ FIX: subquery tot ahora incluye CodVendedor IN (codigos del usuario autenticado)
-        --    para que totalVentasCobrado corresponda SOLO a los vendedores del usuario en sesión
         INNER JOIN (
           SELECT
             CodVendedor,
@@ -232,14 +306,17 @@ router.get('/evolucion', requireAuth, async (req, res) => {
       .input('anio', sql.Int, anio)
       .query(`
         SELECT
-          MONTH(h.Fecha) AS mes,
-          SUM(h.SubTotal) AS ventas
-        FROM [PRODIN].[softland].[iw_gsaen] h
-        WHERE h.CodVendedor IN (${codigos.map(c => `'${c}'`).join(',')})
-          AND YEAR(h.Fecha) = @anio
-          AND h.Tipo IN ('F','N','D')
-          AND h.Estado <> 'A'
-        GROUP BY MONTH(h.Fecha)
+          MONTH(enc.Fecha)   AS mes,
+          SUM(m.TotLinea)    AS ventas
+        FROM [PRODIN].[softland].[iw_gsaen] enc
+        INNER JOIN [PRODIN].[softland].[iw_gmovi] m
+          ON m.NroInt = enc.NroInt
+         AND m.Tipo   = enc.Tipo
+        WHERE enc.CodVendedor IN (${codigos.map(c => `'${c}'`).join(',')})
+          AND YEAR(enc.Fecha)  = @anio
+          AND enc.Tipo   IN ('F','N','D')
+          AND enc.Estado <>  'A'
+        GROUP BY MONTH(enc.Fecha)
         ORDER BY mes
       `);
 
