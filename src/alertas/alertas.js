@@ -1,7 +1,12 @@
 'use strict';
 /**
- * alertas.js — Frontend del módulo de Alertas y Recordatorios
+ * alertas.js v2 — Frontend del módulo de Alertas y Recordatorios
  * Texpro RSProyecto
+ * Cambios v2:
+ *  - Campo frecuencia_recordatorio en formulario
+ *  - Filtro "Propias" y "Asignadas a mí"
+ *  - Badge "Asignada por [nombre]" en cards de terceros
+ *  - Badge en sidebar con contador de alertas próximas
  */
 
 const TOKEN   = sessionStorage.getItem('token');
@@ -26,6 +31,7 @@ const fTitulo           = document.getElementById('fTitulo');
 const fDescripcion      = document.getElementById('fDescripcion');
 const fTipo             = document.getElementById('fTipo');
 const fFechaVence       = document.getElementById('fFechaVence');
+const fFrecuencia       = document.getElementById('fFrecuencia');
 const seccionDest       = document.getElementById('seccionDestinatarios');
 const listaDest         = document.getElementById('listaDestinatarios');
 const btnNueva          = document.getElementById('btnNuevaAlerta');
@@ -49,7 +55,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   initModal();
 });
 
-// ── SIDEBAR / HEADER ──────────────────────────────────────────────
+// ── SIDEBAR / HEADER ─────────────────────────────────────────────────
 function initSidebar() {
   const nav = document.getElementById('sidebarNav');
   if (!nav || !USUARIO) return;
@@ -57,11 +63,16 @@ function initSidebar() {
   const links = [
     { label: 'Dashboard', href: '/src/dashboard/index.html', icon: '📊' },
     { label: 'Ventas',    href: '/src/ventas/index.html',    icon: '💼' },
-    { label: 'Alertas',   href: '/src/alertas/index.html',   icon: '🔔', active: true },
+    { label: 'Alertas',   href: '/src/alertas/index.html',   icon: '🔔', active: true, badge: true },
   ];
+
   nav.innerHTML = links.map(l =>
     `<a class="nav-item${l.active ? ' active' : ''}" href="${l.href}">
-       <span>${l.icon}</span><span class="nav-label">${l.label}</span>
+       <span class="nav-icon-wrap">
+         <span>${l.icon}</span>
+         ${l.badge ? '<span class="nav-badge" id="navBadgeAlertas" style="display:none">0</span>' : ''}
+       </span>
+       <span class="nav-label">${l.label}</span>
      </a>`
   ).join('');
 
@@ -85,6 +96,27 @@ function initSidebar() {
     document.getElementById('sidebar').classList.toggle('sidebar--collapsed');
     document.getElementById('mainWrapper').classList.toggle('main-wrapper--expanded');
   });
+
+  // Cargar badge de alertas próximas
+  cargarBadgeAlertas();
+}
+
+async function cargarBadgeAlertas() {
+  try {
+    const r = await fetch(`${API}/badge`, { headers: headers() });
+    const j = await r.json();
+    if (!j.ok) return;
+    const badge = document.getElementById('navBadgeAlertas');
+    if (!badge) return;
+    if (j.total > 0) {
+      badge.textContent = j.total > 99 ? '99+' : j.total;
+      badge.style.display = 'flex';
+    } else {
+      badge.style.display = 'none';
+    }
+  } catch (_e) {
+    // fallo silencioso
+  }
 }
 
 function initHeader() {
@@ -95,7 +127,7 @@ function initHeader() {
   });
 }
 
-// ── CARGAR DATOS ──────────────────────────────────────────────────
+// ── CARGAR DATOS ─────────────────────────────────────────────────
 async function cargarAlertas() {
   try {
     const r = await fetch(API, { headers: headers() });
@@ -114,7 +146,7 @@ async function cargarUsuarios() {
     const j = await r.json();
     if (j.ok) _usuarios = j.data.filter(u => u.id !== USUARIO.id);
   } catch (_e) {
-    // sin usuarios disponibles — el selector mostrará mensaje
+    // sin usuarios disponibles
   }
 }
 
@@ -151,6 +183,8 @@ function filtrarAlertas(lista, filtro) {
     case 'proximas':    return lista.filter(a => a.activa && !a.completada && a.dias_restantes <= 7);
     case 'completadas': return lista.filter(a => a.completada);
     case 'grupales':    return lista.filter(a => a.tipo === 'grupal');
+    case 'propias':     return lista.filter(a => a.id_creador === USUARIO.id);
+    case 'asignadas':   return lista.filter(a => a.id_creador !== USUARIO.id);
     default:            return lista;
   }
 }
@@ -171,10 +205,23 @@ function labelDias(dias, completada) {
   return `${dias} días restantes`;
 }
 
+const FREC_LABEL = {
+  diaria:    '🔄 Diaria',
+  semanal:   '🔄 Semanal',
+  quincenal: '🔄 Quincenal',
+  manual:    '🔕 Manual',
+};
+
 function cardHTML(a) {
   const u      = urgencia(a.dias_restantes, !!a.completada);
   const esMio  = a.id_creador === USUARIO.id;
   const fecha  = new Date(a.fecha_vence).toLocaleDateString('es-CL', { day: '2-digit', month: 'short', year: 'numeric' });
+  const frecLabel = FREC_LABEL[a.frecuencia_recordatorio] || '';
+
+  // Badge de origen: "Propia" vs "Asignada por X"
+  const badgeOrigen = esMio
+    ? `<span class="alerta-origen-badge alerta-origen-badge--propia">🔒 Propia</span>`
+    : `<span class="alerta-origen-badge alerta-origen-badge--asignada">📌 Asignada por ${escHtml(a.nombre_creador)}</span>`;
 
   const botonesAccion = a.completada
     ? `<button class="btn-accion btn-accion--eliminar" data-accion="eliminar" data-id="${a.id}">🗑 Eliminar</button>`
@@ -193,9 +240,12 @@ function cardHTML(a) {
         <div class="alerta-card-top">
           <div class="alerta-titulo-wrap">
             <div class="alerta-titulo-card" title="${escHtml(a.titulo)}">${escHtml(a.titulo)}</div>
-            <span class="alerta-tipo-badge alerta-tipo-badge--${a.tipo}">
-              ${a.tipo === 'grupal' ? '👥 Grupal' : '🔒 Personal'}
-            </span>
+            <div class="alerta-badges-row">
+              <span class="alerta-tipo-badge alerta-tipo-badge--${a.tipo}">
+                ${a.tipo === 'grupal' ? '👥 Grupal' : '🔒 Personal'}
+              </span>
+              ${badgeOrigen}
+            </div>
           </div>
           <span class="alerta-dias-badge dias--${u}">${labelDias(a.dias_restantes, !!a.completada)}</span>
         </div>
@@ -203,6 +253,7 @@ function cardHTML(a) {
         <div class="alerta-meta">
           <span>📅 Vence: <strong>${fecha}</strong></span>
           <span>👤 ${escHtml(a.nombre_creador)}</span>
+          ${frecLabel ? `<span class="alerta-frec-badge">${frecLabel}</span>` : ''}
         </div>
         ${a.tipo === 'grupal' && a.destinatarios_nombres
           ? `<div class="alerta-destinatarios">👥 ${escHtml(a.destinatarios_nombres)}</div>`
@@ -221,7 +272,7 @@ function escHtml(s) {
     .replace(/"/g, '&quot;');
 }
 
-// ── FILTROS ───────────────────────────────────────────────────────
+// ── FILTROS ─────────────────────────────────────────────────────────
 function initFiltros() {
   document.querySelectorAll('.filtro-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -233,7 +284,7 @@ function initFiltros() {
   });
 }
 
-// ── MODAL CREAR / EDITAR ──────────────────────────────────────────
+// ── MODAL CREAR / EDITAR ───────────────────────────────────────────
 function initModal() {
   btnNueva.addEventListener('click', abrirCrear);
   btnCerrar.addEventListener('click', cerrarModal);
@@ -249,6 +300,7 @@ function abrirCrear() {
   document.getElementById('editandoId').value = '';
   modalTitulo.textContent = 'Nueva Alerta';
   fFechaVence.min = new Date().toISOString().slice(0, 10);
+  fFrecuencia.value = 'semanal';
   toggleDestinatarios();
   abrirModal();
 }
@@ -256,14 +308,17 @@ function abrirCrear() {
 function abrirEditar(id) {
   const a = _alertas.find(x => x.id === id);
   if (!a) return;
+  // Solo el creador puede editar
+  if (a.id_creador !== USUARIO.id) return;
   _editandoId = id;
   modalTitulo.textContent = 'Editar Alerta';
   document.getElementById('editandoId').value = id;
-  fTitulo.value      = a.titulo;
-  fDescripcion.value = a.descripcion || '';
-  fTipo.value        = a.tipo;
-  fFechaVence.value  = a.fecha_vence?.slice(0, 10) || '';
-  fFechaVence.min    = '';
+  fTitulo.value        = a.titulo;
+  fDescripcion.value   = a.descripcion || '';
+  fTipo.value          = a.tipo;
+  fFechaVence.value    = a.fecha_vence?.slice(0, 10) || '';
+  fFechaVence.min      = '';
+  fFrecuencia.value    = a.frecuencia_recordatorio || 'semanal';
   toggleDestinatarios(a.destinatarios_ids || []);
   abrirModal();
 }
@@ -307,10 +362,11 @@ async function guardarAlerta(e) {
     .map(i => Number(i.value));
 
   const body = {
-    titulo:       fTitulo.value.trim(),
-    descripcion:  fDescripcion.value.trim(),
-    tipo:         fTipo.value,
-    fecha_vence:  fFechaVence.value,
+    titulo:                  fTitulo.value.trim(),
+    descripcion:             fDescripcion.value.trim(),
+    tipo:                    fTipo.value,
+    fecha_vence:             fFechaVence.value,
+    frecuencia_recordatorio: fFrecuencia.value,
     destinatarios,
   };
 
@@ -322,6 +378,7 @@ async function guardarAlerta(e) {
     if (!j.ok) throw new Error(j.error);
     cerrarModal();
     await cargarAlertas();
+    cargarBadgeAlertas();
   } catch (err) {
     alert('Error: ' + err.message);
   } finally {
@@ -330,7 +387,7 @@ async function guardarAlerta(e) {
   }
 }
 
-// ── ACCIONES ──────────────────────────────────────────────────────
+// ── ACCIONES ─────────────────────────────────────────────────────
 async function accionAlerta(id, accion) {
   const msgs = {
     completar:  '¿Marcar esta alerta como completada?',
@@ -342,6 +399,7 @@ async function accionAlerta(id, accion) {
     const j = await r.json();
     if (!j.ok) throw new Error(j.error);
     await cargarAlertas();
+    cargarBadgeAlertas();
   } catch (e) {
     alert('Error: ' + e.message);
   }
@@ -354,12 +412,13 @@ async function eliminarAlerta(id) {
     const j = await r.json();
     if (!j.ok) throw new Error(j.error);
     await cargarAlertas();
+    cargarBadgeAlertas();
   } catch (e) {
     alert('Error: ' + e.message);
   }
 }
 
-// ── POPUP RECORDATORIO AL LOGIN ───────────────────────────────────
+// ── POPUP RECORDATORIO AL LOGIN ─────────────────────────────────
 async function mostrarRecordatorioLogin() {
   if (sessionStorage.getItem('rec_mostrado')) return;
 
@@ -375,12 +434,16 @@ async function mostrarRecordatorioLogin() {
       const fecha = new Date(a.fecha_vence).toLocaleDateString('es-CL', {
         day: '2-digit', month: 'short', year: 'numeric',
       });
+      const badgeOrigen = a.id_creador !== USUARIO.id
+        ? `<span class="rec-asignada-badge">📌 Asignada por ${escHtml(a.nombre_creador)}</span>`
+        : '';
       return `
         <li class="rec-item rec-item--${u}" id="rec-${a.id}">
           <div class="rec-item-top">
             <span class="rec-titulo">${escHtml(a.titulo)}</span>
             <span class="rec-dias rec-dias--${u}">${labelDias(a.dias_restantes, false)}</span>
           </div>
+          ${badgeOrigen}
           ${a.descripcion ? `<p class="rec-desc">${escHtml(a.descripcion)}</p>` : ''}
           <span class="rec-fecha">📅 Vence: ${fecha}</span>
           <button class="btn-no-mostrar" data-id="${a.id}">No mostrar más hoy</button>
@@ -404,7 +467,7 @@ async function mostrarRecordatorioLogin() {
     recordatorioOv.classList.add('recordatorio-overlay--visible');
     recordatorioOv.setAttribute('aria-hidden', 'false');
   } catch (_e) {
-    // fallo silencioso — el popup no es crítico
+    // fallo silencioso
   }
 }
 
