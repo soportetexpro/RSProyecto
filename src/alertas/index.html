@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Open+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="../assets/styles/tokens.css?v=1.0.0" />
-  <link rel="stylesheet" href="alertas.css?v=1.0.0" />
+  <link rel="stylesheet" href="alertas.css?v=2.0.0" />
 </head>
 <body>
 
@@ -75,6 +75,8 @@
         <button class="filtro-btn" data-filtro="proximas">⚠️ Próximas a vencer</button>
         <button class="filtro-btn" data-filtro="completadas">✅ Completadas</button>
         <button class="filtro-btn" data-filtro="grupales">👥 Grupales</button>
+        <button class="filtro-btn" data-filtro="propias">🔒 Propias</button>
+        <button class="filtro-btn" data-filtro="asignadas">📌 Asignadas a mí</button>
       </div>
 
       <!-- GRID DE ALERTAS -->
@@ -124,6 +126,20 @@
           </div>
         </div>
 
+        <!-- Frecuencia de recordatorio -->
+        <div class="form-group">
+          <label class="form-label" for="fFrecuencia">🔔 Frecuencia de recordatorio
+            <span class="form-hint">(¿Cada cuánto mostrar el aviso?)</span>
+          </label>
+          <select class="form-input" id="fFrecuencia">
+            <option value="diaria">Diaria — recordar cada día</option>
+            <option value="semanal" selected>Semanal — recordar cada 7 días</option>
+            <option value="quincenal">Quincenal — recordar cada 15 días</option>
+            <option value="manual">Manual — no mostrar automáticamente</option>
+          </select>
+          <span class="form-hint-inline">⚠️ El sistema siempre avisará automáticamente 7 días antes del vencimiento</span>
+        </div>
+
         <!-- Sección destinatarios — solo visible si tipo=grupal -->
         <div class="form-group" id="seccionDestinatarios" style="display:none">
           <label class="form-label">Compartir con <span class="form-hint">(selecciona uno o más usuarios)</span></label>
@@ -140,7 +156,7 @@
     </div>
   </div>
 
-  <!-- ══ POPUP DE RECORDATORIO EN LOGIN ════════════════════════════ -->
+  <!-- ══ POPUP DE RECORDATORIO EN LOGIN ═══════════════════════════════ -->
   <div class="recordatorio-overlay" id="recordatorioOverlay" aria-hidden="true">
     <div class="recordatorio-panel">
       <div class="recordatorio-header">
@@ -160,7 +176,7 @@
     </div>
   </div>
 
-  <script src="alertas.js?v=1.0.0"></script>
+  <script src="alertas.js?v=2.0.0"></script>
   <script src="../assets/js/inactividad.js?v=1.0.0"></script>
 </body>
 </html>
