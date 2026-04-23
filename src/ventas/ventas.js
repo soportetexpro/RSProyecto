@@ -24,6 +24,11 @@
  *     Venta Real (Lista) = ROUND(SUM(t.PrecioVta * m.CantFacturada), 0)     → precio lista sin descuento
  *     % Descuento        = (1 - Total Cobrado / Venta Real Lista) * 100      → descuento real otorgado
  *     Descuento $        = Venta Real Lista - Total Cobrado                  → diferencia absoluta
+ *
+ * FIXES [2026-04-23]:
+ *   - renderTabla(): búsqueda incluye CodVendedor además de Folio y cliente
+ *   - filtroVendedor: resetea input de búsqueda al cambiar selección
+ *   - cargarTodo(): al recargar por mes/año respeta el vendedor actualmente seleccionado
  */
 
 (function () {
@@ -308,14 +313,16 @@
     });
   }
 
+  // FIX 1: renderTabla incluye CodVendedor en la búsqueda de texto
   function renderTabla() {
     const tbody    = document.getElementById('ventasTbody');
-    const busqueda = document.getElementById('tablaBusqueda').value.toLowerCase();
+    const busqueda = document.getElementById('tablaBusqueda').value.toLowerCase().trim();
 
     let datos = estado.ventasFiltradas.filter(v =>
       !busqueda ||
-      String(v.Folio   || '').toLowerCase().includes(busqueda) ||
-      String(v.cliente || '').toLowerCase().includes(busqueda)
+      String(v.Folio       || '').toLowerCase().includes(busqueda) ||
+      String(v.cliente     || '').toLowerCase().includes(busqueda) ||
+      String(v.CodVendedor || '').toLowerCase().includes(busqueda)
     );
     datos = sortVentas(datos);
 
@@ -555,8 +562,10 @@
     document.getElementById('modalCerrar')?.addEventListener('click', cerrarModal);
     document.getElementById('modalOverlay')?.addEventListener('click', cerrarModal);
 
+    // FIX 3: cargarTodo respeta el vendedor actualmente seleccionado al recargar por mes/año
     async function cargarTodo() {
       const { mes, anio } = getParams();
+      const codVendedorActivo = document.getElementById('filtroVendedor')?.value || '';
 
       const [resKpi, resVend, resVentas] = await Promise.all([
         fetch(`${API}/kpis?${new URLSearchParams({ mes, anio })}`,
@@ -574,9 +583,12 @@
       if (dataKpi.ok)    renderKpis(dataKpi.totalVentas, dataKpi.metaMes, dataKpi.totalDescuento);
       if (dataVend.ok)   renderTablaVendedores(dataVend.vendedores);
       if (dataVentas.ok) {
-        estado.ventas          = dataVentas.ventas || [];
-        estado.ventasFiltradas = estado.ventas;
-        estado.paginaActual    = 1;
+        estado.ventas = dataVentas.ventas || [];
+        // Aplicar filtro de vendedor si hay uno activo
+        estado.ventasFiltradas = codVendedorActivo
+          ? estado.ventas.filter(v => String(v.CodVendedor) === String(codVendedorActivo))
+          : estado.ventas;
+        estado.paginaActual = 1;
         renderTabla();
       }
 
@@ -587,8 +599,12 @@
 
     document.getElementById('filtroMes')?.addEventListener('change', cargarTodo);
     document.getElementById('filtroAnio')?.addEventListener('change', cargarTodo);
+
+    // FIX 2: filtroVendedor resetea búsqueda de texto al cambiar selección
     document.getElementById('filtroVendedor')?.addEventListener('change', () => {
       const cod = document.getElementById('filtroVendedor').value;
+      const inputBusqueda = document.getElementById('tablaBusqueda');
+      if (inputBusqueda) inputBusqueda.value = '';
       estado.ventasFiltradas = cod
         ? estado.ventas.filter(v => String(v.CodVendedor) === String(cod))
         : estado.ventas;
