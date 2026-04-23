@@ -19,6 +19,11 @@
  *   router.use(requireAuth) para requerir JWT en todos los endpoints.
  *   T-01: validateFolio, validateCodVendedor, validatePorcentaje aplicados
  *         en endpoints que reciben parámetros de req.params / req.body.
+ *
+ * FIX 2026-04-23:
+ *   /vendedores — INNER JOIN iw_tprod reemplazado por LEFT JOIN para evitar
+ *   que productos sin registro en el catálogo descarten filas completas.
+ *   ISNULL() protege los cálculos de PrecioVta cuando el JOIN no matchea.
  */
 
 const express             = require('express');
@@ -279,6 +284,9 @@ router.get('/evolucion', async (req, res) => {
 });
 
 // ── GET /api/dashboard/vendedores ──────────────────────────────────────
+// FIX: LEFT JOIN iw_tprod en lugar de INNER JOIN para que productos sin
+//      registro en el catálogo no descarten filas completas del resultado.
+//      ISNULL(t.PrecioVta, 0) protege los cálculos cuando el JOIN no matchea.
 router.get('/vendedores', async (req, res) => {
   const usuario = req.usuario, codigos = getCodigos(usuario), hoy = new Date();
   const { validarMesAnio } = require('../utils/stringHelpers');
@@ -292,20 +300,20 @@ router.get('/vendedores', async (req, res) => {
     const pool = await getSoftlandPool();
     const result = await pool.request().query(`
       SELECT
-        h.CodVendedor                                                   AS codVendedor,
-        MIN(v.VenDes)                                                   AS nombreVendedor,
-        COUNT(DISTINCT h.Folio)                                         AS totalFolios,
-        ROUND(SUM(m.TotLinea), 0)                                       AS totalVentasCobrado,
-        ROUND(SUM(t.PrecioVta * m.CantFacturada), 0)                    AS ventaRealLista,
+        h.CodVendedor                                                             AS codVendedor,
+        MIN(v.VenDes)                                                             AS nombreVendedor,
+        COUNT(DISTINCT h.Folio)                                                   AS totalFolios,
+        ROUND(SUM(m.TotLinea), 0)                                                 AS totalVentasCobrado,
+        ROUND(SUM(ISNULL(t.PrecioVta, 0) * m.CantFacturada), 0)                  AS ventaRealLista,
         CASE
-          WHEN SUM(t.PrecioVta * m.CantFacturada) > 0
-          THEN ROUND((1 - (SUM(m.TotLinea) / SUM(t.PrecioVta * m.CantFacturada))) * 100, 2)
+          WHEN SUM(ISNULL(t.PrecioVta, 0) * m.CantFacturada) > 0
+          THEN ROUND((1 - (SUM(m.TotLinea) / SUM(ISNULL(t.PrecioVta, 0) * m.CantFacturada))) * 100, 2)
           ELSE 0
-        END                                                             AS pctDescuento
+        END                                                                       AS pctDescuento
       FROM [PRODIN].[softland].[iw_gsaen] h
       INNER JOIN [PRODIN].[softland].[iw_gmovi] m ON m.NroInt = h.NroInt AND m.Tipo = h.Tipo
-      INNER JOIN [PRODIN].[softland].[iw_tprod] t ON t.CodProd = m.CodProd
-      LEFT JOIN [PRODIN].[softland].[cwtvend] v ON v.VenCod = h.CodVendedor
+      LEFT  JOIN [PRODIN].[softland].[iw_tprod] t ON t.CodProd = m.CodProd
+      LEFT  JOIN [PRODIN].[softland].[cwtvend]  v ON v.VenCod  = h.CodVendedor
       WHERE (h.CodVendedor IN (${mssqlIn(codigos)}) ${extraFolios})
         AND MONTH(h.Fecha) = ${mes} AND YEAR(h.Fecha) = ${anio}
         AND h.Tipo IN ('F','N','D') AND h.Estado <> 'A'
