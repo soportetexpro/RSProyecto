@@ -42,7 +42,7 @@
     <header class="main-header">
       <div class="header-left">
         <button class="header-menu-btn" id="headerMenuBtn" aria-label="Menú móvil">
-          <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="20" y1="6" y6"/><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
+          <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
         </button>
         <h1 class="header-title">Dashboard</h1>
       </div>
@@ -238,7 +238,20 @@
         <div class="tabla-card">
           <div class="tabla-header">
             <h3 class="tabla-titulo">Ventas del Mes</h3>
-            <input class="tabla-busqueda" type="text" id="busquedaVentas" placeholder="Buscar folio o cliente..." />
+            <div class="tabla-filtros-ventas" style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
+              <!-- Filtro texto -->
+              <input class="tabla-busqueda" type="text" id="busquedaVentas" placeholder="Buscar folio o cliente..." />
+              <!-- Filtro vendedor -->
+              <select class="filtro-select filtro-select--sm" id="filtroVendedorVentas" title="Filtrar por vendedor">
+                <option value="">Todos los vendedores</option>
+              </select>
+              <!-- Filtro tipo: toggles F / N / D -->
+              <div class="tipo-toggles" id="tipoToggles" style="display:flex;gap:.25rem">
+                <button class="tipo-toggle tipo-toggle--activo" data-tipo="F" title="Facturas">F</button>
+                <button class="tipo-toggle tipo-toggle--activo" data-tipo="N" title="Notas de crédito">N</button>
+                <button class="tipo-toggle tipo-toggle--activo" data-tipo="D" title="Documentos">D</button>
+              </div>
+            </div>
           </div>
           <div class="tabla-wrapper tabla-wrapper--ventas-mes">
             <table class="dash-tabla">
@@ -369,7 +382,29 @@
   </div>
   <!-- ══ FIN MODAL ══════════════════════════════════════════════════════════ -->
 
-  <script src="dashboard.js?v=2.3.0"></script>
+  <style>
+    /* ── Toggles tipo F / N / D ─────────────────────────────────────────── */
+    .tipo-toggle {
+      padding: .25rem .55rem;
+      font-size: .75rem;
+      font-weight: 700;
+      border: 1.5px solid var(--color-border, #d4d1ca);
+      border-radius: 4px;
+      background: transparent;
+      color: var(--color-text-muted, #7a7974);
+      cursor: pointer;
+      transition: background 140ms, color 140ms, border-color 140ms;
+      letter-spacing: .03em;
+    }
+    .tipo-toggle--activo {
+      background: var(--color-primary, #01696f);
+      color: #fff;
+      border-color: var(--color-primary, #01696f);
+    }
+    .filtro-select--sm { font-size: .82rem; padding: .3rem .5rem; height: 34px; }
+  </style>
+
+  <script src="dashboard.js?v=2.3.1"></script>
   <script src="../assets/js/inactividad.js?v=2.3.0"></script>
 </body>
 </html>

@@ -4,6 +4,11 @@
  * dashboard.js — RSProyecto Texpro
  *
  * Controlador frontend del módulo Dashboard.
+ *
+ * 2026-04-23: filtros client-side en tabla Ventas del Mes
+ *   - filtroVendedorVentas: select que filtra por CodVendedor
+ *   - tipoToggles: botones F / N / D (multi-selección) que filtran por Tipo
+ *   - Ambos operan sobre ventasMesData junto con busquedaVentas
  */
 
 (function () {
@@ -17,6 +22,10 @@
 
   let carteraData = { activos: [], inactivos: [], recuperados: [] };
   let carteraRendered = { activo: false, inactivo: false, recuperado: false };
+
+  // Estado de filtros de la tabla Ventas del Mes
+  let filtroVendedorActivo = '';
+  let tiposActivos = new Set(['F', 'N', 'D']);
 
   const MESES_NOMBRE = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
@@ -273,8 +282,44 @@
       const data = await res.json();
       if (!data.ok) throw new Error(data.error);
       ventasMesData = data.ventas || [];
-      renderVentasMes(ventasMesData);
+
+      // Reconstruir opciones del select de vendedor
+      poblarFiltroVendedor(ventasMesData);
+
+      aplicarFiltrosVentasMes();
     } catch (err) { console.error('[cargarVentasMes]', err); }
+  }
+
+  /** Puebla el <select id="filtroVendedorVentas"> con los vendedores únicos del dataset */
+  function poblarFiltroVendedor(lista) {
+    const sel = document.getElementById('filtroVendedorVentas');
+    if (!sel) return;
+    const codigos = [...new Set(lista.map(v => v.CodVendedor).filter(Boolean))].sort();
+    // conservar selección actual si sigue siendo válida
+    const actual = filtroVendedorActivo;
+    sel.innerHTML = '<option value="">Todos los vendedores</option>' +
+      codigos.map(c => `<option value="${c}"${c === actual ? ' selected' : ''}>${c}</option>`).join('');
+    // si la selección anterior ya no existe en el nuevo dataset, resetear
+    if (actual && !codigos.includes(actual)) filtroVendedorActivo = '';
+  }
+
+  /** Aplica los tres filtros (texto, vendedor, tipo) sobre ventasMesData y renderiza */
+  function aplicarFiltrosVentasMes() {
+    const q          = (document.getElementById('busquedaVentas')?.value || '').toLowerCase();
+    const vendedor   = filtroVendedorActivo;
+    const tipos      = tiposActivos;
+
+    const lista = ventasMesData.filter(v => {
+      // filtro texto
+      if (q && !String(v.Folio||'').toLowerCase().includes(q) && !String(v.cliente||'').toLowerCase().includes(q)) return false;
+      // filtro vendedor
+      if (vendedor && v.CodVendedor !== vendedor) return false;
+      // filtro tipo — el campo Tipo viene del API; si no viene, se deja pasar
+      if (v.Tipo && !tipos.has(v.Tipo)) return false;
+      return true;
+    });
+
+    renderVentasMes(lista);
   }
 
   function renderVentasMes(lista) {
@@ -386,7 +431,7 @@
           (c.FonAux2 || '').toLowerCase().includes(q))
       : lista;
 
-    if (tipo === 'activo')      renderTablaCartera('tbodyActivo',     filtrarLista(carteraData.activos),     'Sin clientes activos');
+    if (tipo === 'activo')          renderTablaCartera('tbodyActivo',     filtrarLista(carteraData.activos),     'Sin clientes activos');
     else if (tipo === 'inactivo')   renderTablaCartera('tbodyInactivo',   filtrarLista(carteraData.inactivos),   'Sin clientes inactivos');
     else if (tipo === 'recuperado') renderTablaCartera('tbodyRecuperado', filtrarLista(carteraData.recuperados), 'Sin clientes recuperados');
     carteraRendered[tipo] = true;
@@ -464,7 +509,7 @@
 
   async function iniciarPanelCoordinador() {
     setStyle('panelCoordinador', 'display', 'block');
-    setStyle('panelCompartidos', 'display', 'none'); // seguro: setStyle no crashea si el elem no existe
+    setStyle('panelCompartidos', 'display', 'none');
     await Promise.all([ cargarListaVendedores(), cargarFoliosParaCompartir(), cargarFoliosAsignados() ]);
 
     const btnCompartir = document.getElementById('btnCompartir');
@@ -489,8 +534,8 @@
         if (msgEl) { msgEl.textContent = '✅ Folio asignado correctamente'; msgEl.style.color = 'var(--color-primary)'; }
         const coordVend = document.getElementById('coordVendedor');
         const coordPct  = document.getElementById('coordPorcentaje');
-        if (coordVend) coordVend.value   = '';
-        if (coordPct)  coordPct.value    = '100';
+        if (coordVend) coordVend.value = '';
+        if (coordPct)  coordPct.value  = '100';
         await Promise.all([ cargarFoliosParaCompartir(), cargarFoliosAsignados(), cargarResumen(), cargarVentasMes() ]);
       } catch(err) {
         const msgEl2 = document.getElementById('coordMensaje');
@@ -565,7 +610,7 @@
       const res   = await fetch(`${API}/asignados?${new URLSearchParams(getParams())}`, { headers:{ Authorization:`Bearer ${token()}` } });
       const data  = await res.json();
       const tbody = document.getElementById('tbodyAsignados');
-      if (!tbody) return; // no aplica para este rol
+      if (!tbody) return;
       setText('totalAsignados', `${(data.asignados||[]).length} registros`);
       if (!data.ok || !data.asignados?.length) {
         tbody.innerHTML = '<tr class="tabla-empty"><td colspan="7">Sin folios asignados este mes</td></tr>'; return;
@@ -634,7 +679,7 @@
       const res   = await fetch(`${API}/compartidos?${new URLSearchParams(getParams())}`, { headers:{ Authorization:`Bearer ${token()}` } });
       const data  = await res.json();
       const tbody = document.getElementById('tbodyCompartidos');
-      if (!tbody) return; // panel no existe para este rol, no es error
+      if (!tbody) return;
       setText('totalCompartidos', `${(data.compartidos||[]).length} registros`);
       if (!data.ok || !data.compartidos?.length) {
         tbody.innerHTML = '<tr class="tabla-empty"><td colspan="6">Sin folios asignados este mes</td></tr>'; return;
@@ -683,13 +728,33 @@
     if (esCoordinador(usuario)) await iniciarPanelCoordinador();
     else                        await iniciarPanelCompartidos();
 
+    // ── Filtro texto búsqueda
     const bVentas = document.getElementById('busquedaVentas');
-    if (bVentas) bVentas.addEventListener('input', e => {
-      const q = e.target.value.toLowerCase();
-      renderVentasMes(ventasMesData.filter(v =>
-        String(v.Folio||'').toLowerCase().includes(q) ||
-        String(v.cliente||'').toLowerCase().includes(q)
-      ));
+    if (bVentas) bVentas.addEventListener('input', aplicarFiltrosVentasMes);
+
+    // ── Filtro por vendedor
+    const selVend = document.getElementById('filtroVendedorVentas');
+    if (selVend) selVend.addEventListener('change', e => {
+      filtroVendedorActivo = e.target.value;
+      aplicarFiltrosVentasMes();
+    });
+
+    // ── Filtro por tipo (toggles F / N / D)
+    document.querySelectorAll('.tipo-toggle').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tipo = btn.dataset.tipo;
+        if (tiposActivos.has(tipo)) {
+          // no dejar que se desactiven todos
+          if (tiposActivos.size > 1) {
+            tiposActivos.delete(tipo);
+            btn.classList.remove('tipo-toggle--activo');
+          }
+        } else {
+          tiposActivos.add(tipo);
+          btn.classList.add('tipo-toggle--activo');
+        }
+        aplicarFiltrosVentasMes();
+      });
     });
 
     const modalCerrar = document.getElementById('modalCerrar');
