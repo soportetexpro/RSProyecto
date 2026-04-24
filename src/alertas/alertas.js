@@ -1,21 +1,17 @@
 'use strict';
 /**
- * alertas.js v2.2 — Frontend del módulo de Alertas y Recordatorios
+ * alertas.js v2.3 — Frontend del módulo de Alertas y Recordatorios
  * Texpro RSProyecto
  *
- * Fix v2.2 (directo a main):
- *  - Auth guard corregido: usuario desde sessionStorage('texpro_user')
- *    en lugar de localStorage('user') — alineado con login.js
- *  - Logout corregido: elimina sessionStorage('texpro_user')
- *
- * Fix v2.1:
- *  - cargarBadgeAlertas: endpoint corregido a /badge
- *  - mostrarRecordatorioLogin: badge "Asignada por" usa nombre_creador de /pendientes
- *  - frecuencia 'siempre' incluida en FREC_LABEL
+ * v2.3:
+ *  - initSidebar unificado con dashboard.js:
+ *    · Mismos MODULOS, mismos íconos, filtrado por área del usuario
+ *    · Dashboard con SVG de casa (igual que dashboard.js)
+ *    · Alertas marcada como active
+ *  - Fix logout: elimina token y texpro_user igual que dashboard
  */
 
 // ── Auth guard ───────────────────────────────────────────────────
-// login.js guarda: localStorage('token') y sessionStorage('texpro_user')
 const TOKEN   = localStorage.getItem('token');
 const USUARIO = JSON.parse(sessionStorage.getItem('texpro_user') || 'null');
 
@@ -62,47 +58,80 @@ document.addEventListener('DOMContentLoaded', async () => {
   initModal();
 });
 
-// ── SIDEBAR / HEADER ─────────────────────────────────────────────
+// ── SIDEBAR — idéntico al dashboard ─────────────────────────────
+// area: null  → visible para TODOS los usuarios
+// area: [...] → visible solo para las áreas listadas
+const MODULOS = [
+  { nombre: 'Ventas',         icon: '📊', url: '../ventas/index.html',        area: ['ventas', 'gerencia'] },
+  { nombre: 'Facturación',    icon: '🧾', url: '../facturacion/index.html',   area: ['facturacion', 'contabilidad', 'gerencia'] },
+  { nombre: 'Bodega',         icon: '🏭', url: '../bodega/index.html',        area: ['bodega', 'produccion', 'gerencia'] },
+  { nombre: 'Producción',     icon: '⚙️', url: '../produccion/index.html',    area: ['produccion', 'gerencia'] },
+  { nombre: 'Laboratorio',    icon: '🧪', url: '../laboratorio/index.html',   area: ['laboratorio', 'gerencia'] },
+  { nombre: 'Cobranza',       icon: '💰', url: '../cobranza/index.html',      area: ['cobranza', 'contabilidad', 'gerencia'] },
+  { nombre: 'RRHH',           icon: '👥', url: '../rrhh/index.html',          area: ['rrhh', 'gerencia'] },
+  { nombre: 'Contabilidad',   icon: '📜', url: '../contabilidad/index.html',  area: ['contabilidad', 'gerencia'] },
+  { nombre: 'Administración', icon: '🔧', url: '../admin/index.html',         area: ['admin'] },
+  { nombre: 'Alertas',        icon: '🔔', url: '../alertas/index.html',       area: null, active: true, badge: true },
+];
+
 function initSidebar() {
   const nav = document.getElementById('sidebarNav');
   if (!nav || !USUARIO) return;
 
-  const links = [
-    { label: 'Dashboard', href: '../dashboard/index.html', icon: '📊' },
-    { label: 'Ventas',    href: '../ventas/index.html',    icon: '💼' },
-    { label: 'Alertas',   href: '../alertas/index.html',   icon: '🔔', active: true, badge: true },
-  ];
+  const visibles = MODULOS.filter(m => {
+    if (m.area === null) return true;
+    if (USUARIO.is_admin) return true;
+    return m.area.includes(USUARIO.area);
+  });
 
-  nav.innerHTML = links.map(l =>
-    `<a class="nav-item${l.active ? ' active' : ''}" href="${l.href}">
-       <span class="nav-icon-wrap">
-         <span>${l.icon}</span>
-         ${l.badge ? '<span class="nav-badge" id="navBadgeAlertas" style="display:none">0</span>' : ''}
-       </span>
-       <span class="nav-label">${l.label}</span>
-     </a>`
-  ).join('');
+  // SVG casa idéntico al dashboard.js
+  const svgCasa = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>`;
 
+  nav.innerHTML =
+    `<span class="nav-section-title">NAVEGACIÓN</span>
+     <a class="nav-item" href="../dashboard/index.html">
+       ${svgCasa}
+       <span class="nav-label">Dashboard</span>
+     </a>
+     ${visibles.map(m => `
+       <a class="nav-item${m.active ? ' active' : ''}" href="${m.url}">
+         <span class="nav-icon-wrap">
+           <span style="font-size:1rem">${m.icon}</span>
+           ${m.badge ? '<span class="nav-badge" id="navBadgeAlertas" style="display:none">0</span>' : ''}
+         </span>
+         <span class="nav-label">${m.nombre}</span>
+       </a>`).join('')}`;
+
+  // Info usuario
+  const ini = (USUARIO.nombre || '?').charAt(0).toUpperCase();
   const ua  = document.getElementById('userAvatar');
   const un  = document.getElementById('userName');
   const uu  = document.getElementById('userArea');
   const ca  = document.getElementById('chipAvatar');
   const cn  = document.getElementById('chipName');
-  const ini = (USUARIO.nombre || '?').charAt(0).toUpperCase();
   if (ua) ua.textContent = ini;
   if (ca) ca.textContent = ini;
   if (un) un.textContent = USUARIO.nombre || '';
   if (uu) uu.textContent = USUARIO.area   || '';
   if (cn) cn.textContent = USUARIO.nombre || '';
 
+  // Logout — limpia igual que dashboard
   document.getElementById('btnLogout')?.addEventListener('click', () => {
     localStorage.removeItem('token');
+    localStorage.removeItem('user');
     sessionStorage.removeItem('texpro_user');
     location.href = '../login/index.html';
   });
+
+  // Colapsar sidebar
   document.getElementById('sidebarToggle')?.addEventListener('click', () => {
     document.getElementById('sidebar').classList.toggle('sidebar--collapsed');
     document.getElementById('mainWrapper').classList.toggle('main-wrapper--expanded');
+  });
+
+  // Menú móvil
+  document.getElementById('headerMenuBtn')?.addEventListener('click', () => {
+    document.getElementById('sidebar').classList.toggle('sidebar--mobile-open');
   });
 
   cargarBadgeAlertas();
@@ -121,7 +150,7 @@ async function cargarBadgeAlertas() {
     } else {
       badge.style.display = 'none';
     }
-  } catch { /* fallo silencioso — badge opcional */ }
+  } catch { /* fallo silencioso */ }
 }
 
 function initHeader() {
@@ -150,7 +179,7 @@ async function cargarUsuarios() {
     const r = await fetch(`${API}/usuarios`, { headers: headers() });
     const j = await r.json();
     if (j.ok) _usuarios = j.data.filter(u => u.id !== USUARIO.id);
-  } catch { /* sin usuarios disponibles — fallo silencioso */ }
+  } catch { /* sin usuarios disponibles */ }
 }
 
 // ── RENDER GRID ──────────────────────────────────────────────────
@@ -468,7 +497,7 @@ async function mostrarRecordatorioLogin() {
 
     recordatorioOv.classList.add('recordatorio-overlay--visible');
     recordatorioOv.setAttribute('aria-hidden', 'false');
-  } catch { /* fallo silencioso — recordatorio es opcional */ }
+  } catch { /* fallo silencioso */ }
 }
 
 function cerrarRecordatorio() {
