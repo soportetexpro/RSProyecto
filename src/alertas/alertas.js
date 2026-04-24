@@ -1,12 +1,11 @@
 'use strict';
 /**
- * alertas.js v2 — Frontend del módulo de Alertas y Recordatorios
+ * alertas.js v2.1 — Frontend del módulo de Alertas y Recordatorios
  * Texpro RSProyecto
- * Cambios v2:
- *  - Campo frecuencia_recordatorio en formulario
- *  - Filtro "Propias" y "Asignadas a mí"
- *  - Badge "Asignada por [nombre]" en cards de terceros
- *  - Badge en sidebar con contador de alertas próximas
+ * Fix v2.1:
+ *  - cargarBadgeAlertas: corregido endpoint /badge (antes apuntaba a /contador erróneamente)
+ *  - mostrarRecordatorioLogin: badge "Asignada por" usa nombre_creador que ahora viene en /pendientes
+ *  - frecuencia 'siempre' → opción renombrada a 'Siempre — recordar cada vez'
  */
 
 const TOKEN   = sessionStorage.getItem('token');
@@ -97,10 +96,10 @@ function initSidebar() {
     document.getElementById('mainWrapper').classList.toggle('main-wrapper--expanded');
   });
 
-  // Cargar badge de alertas próximas
   cargarBadgeAlertas();
 }
 
+// Fix v2.1: endpoint correcto es /badge (existe en backend)
 async function cargarBadgeAlertas() {
   try {
     const r = await fetch(`${API}/badge`, { headers: headers() });
@@ -206,10 +205,10 @@ function labelDias(dias, completada) {
 }
 
 const FREC_LABEL = {
+  siempre:   '🔄 Siempre',
   diaria:    '🔄 Diaria',
   semanal:   '🔄 Semanal',
   quincenal: '🔄 Quincenal',
-  manual:    '🔕 Manual',
 };
 
 function cardHTML(a) {
@@ -218,7 +217,6 @@ function cardHTML(a) {
   const fecha  = new Date(a.fecha_vence).toLocaleDateString('es-CL', { day: '2-digit', month: 'short', year: 'numeric' });
   const frecLabel = FREC_LABEL[a.frecuencia_recordatorio] || '';
 
-  // Badge de origen: "Propia" vs "Asignada por X"
   const badgeOrigen = esMio
     ? `<span class="alerta-origen-badge alerta-origen-badge--propia">🔒 Propia</span>`
     : `<span class="alerta-origen-badge alerta-origen-badge--asignada">📌 Asignada por ${escHtml(a.nombre_creador)}</span>`;
@@ -234,7 +232,7 @@ function cardHTML(a) {
 
   return `
     <div class="alerta-card alerta-card--${u}
-      ${a.completada           ? 'alerta-card--completada'  : ''}
+      ${a.completada               ? 'alerta-card--completada'  : ''}
       ${!a.activa && !a.completada ? 'alerta-card--desactivada' : ''}">
       <div class="alerta-card-body">
         <div class="alerta-card-top">
@@ -308,7 +306,6 @@ function abrirCrear() {
 function abrirEditar(id) {
   const a = _alertas.find(x => x.id === id);
   if (!a) return;
-  // Solo el creador puede editar
   if (a.id_creador !== USUARIO.id) return;
   _editandoId = id;
   modalTitulo.textContent = 'Editar Alerta';
@@ -419,6 +416,7 @@ async function eliminarAlerta(id) {
 }
 
 // ── POPUP RECORDATORIO AL LOGIN ─────────────────────────────────
+// Fix v2.1: nombre_creador ahora viene en /pendientes — el badge "Asignada por" funciona correctamente
 async function mostrarRecordatorioLogin() {
   if (sessionStorage.getItem('rec_mostrado')) return;
 
@@ -434,6 +432,7 @@ async function mostrarRecordatorioLogin() {
       const fecha = new Date(a.fecha_vence).toLocaleDateString('es-CL', {
         day: '2-digit', month: 'short', year: 'numeric',
       });
+      // nombre_creador ya viene en /pendientes desde v2.1
       const badgeOrigen = a.id_creador !== USUARIO.id
         ? `<span class="rec-asignada-badge">📌 Asignada por ${escHtml(a.nombre_creador)}</span>`
         : '';
