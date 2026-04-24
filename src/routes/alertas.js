@@ -1,8 +1,12 @@
 ﻿'use strict';
 /**
- * routes/alertas.js
- * CRUD completo para el mÃ³dulo de Alertas y Recordatorios.
- * Incluye: frecuencia_recordatorio, cooldown en /pendientes, contador para sidebar.
+ * routes/alertas.js  v2.1
+ * CRUD completo para el módulo de Alertas y Recordatorios.
+ * Fix v2.1:
+ *  - endpoint /badge (alias de /contador) para compatibilidad con frontend
+ *  - frecuencia_recordatorio incluida en schema y validaciones
+ *  - nombre_creador expuesto en /pendientes
+ *  - cooldown por frecuencia en /pendientes usando ultimo_recordatorio
  */
 
 const express  = require('express');
@@ -85,7 +89,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-// â”€â”€ GET /api/alertas/contador â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── GET /api/alertas/contador  (fuente de verdad) ─────────────────────────────────
 router.get('/contador', async (req, res) => {
   const uid = req.usuario.id;
   try {
@@ -112,7 +116,34 @@ router.get('/contador', async (req, res) => {
   }
 });
 
-// â”€â”€ GET /api/alertas/pendientes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── GET /api/alertas/badge  (alias de /contador — usado por sidebar) ─────────
+router.get('/badge', async (req, res) => {
+  const uid = req.usuario.id;
+  try {
+    const [[{ total }]] = await db.query(`
+      SELECT COUNT(*) AS total
+      FROM alertas a
+      LEFT JOIN alerta_destinatarios ad ON ad.id_alerta = a.id AND ad.id_usuario = ?
+      WHERE
+        a.activa = 1
+        AND a.completada = 0
+        AND DATEDIFF(a.fecha_vence, CURDATE()) BETWEEN 0 AND 7
+        AND COALESCE(ad.silenciada, 0) = 0
+        AND (
+          a.id_creador = ?
+          OR EXISTS (
+            SELECT 1 FROM alerta_destinatarios adx
+            WHERE adx.id_alerta = a.id AND adx.id_usuario = ?
+          )
+        )
+    `, [uid, uid, uid]);
+    res.json({ ok: true, total });
+  } catch (_e) {
+    res.status(500).json({ ok: false, error: 'Error al obtener badge' });
+  }
+});
+
+// ── GET /api/alertas/pendientes ──────────────────────────────────────
 router.get('/pendientes', async (req, res) => {
   const uid = req.usuario.id;
   const hoy = new Date().toISOString().slice(0, 10);
@@ -122,10 +153,12 @@ router.get('/pendientes', async (req, res) => {
         a.id, a.titulo, a.descripcion, a.tipo, a.fecha_vence,
         a.frecuencia_recordatorio,
         a.id_creador,
+        COALESCE(u.nombre, '') AS nombre_creador,
         COALESCE(ad.silenciada, 0) AS silenciada,
         COALESCE(ad.descartada_hoy, NULL) AS descartada_hoy,
         COALESCE(ad.ultimo_recordatorio, NULL) AS ultimo_recordatorio
       FROM alertas a
+      LEFT JOIN usuarios u ON u.id = a.id_creador
       LEFT JOIN alerta_destinatarios ad ON ad.id_alerta = a.id AND ad.id_usuario = ?
       WHERE
         a.activa = 1
@@ -144,7 +177,6 @@ router.get('/pendientes', async (req, res) => {
       ORDER BY a.fecha_vence ASC
     `, [uid, hoy, uid, uid]);
 
-    // Filtrar por frecuencia_recordatorio usando lÃ³gica JS
     const data = rows
       .filter(r => debeRecordar(r.ultimo_recordatorio, r.frecuencia_recordatorio))
       .map(r => ({
@@ -176,7 +208,7 @@ router.post('/', async (req, res) => {
   const uid = req.usuario.id;
   const {
     titulo, descripcion, tipo, fecha_vence,
-    frecuencia_recordatorio = 'siempre',
+    frecuencia_recordatorio = 'semanal',
     destinatarios = []
   } = req.body;
 
@@ -220,7 +252,7 @@ router.put('/:id', async (req, res) => {
   const id  = Number(req.params.id);
   const {
     titulo, descripcion, tipo, fecha_vence,
-    frecuencia_recordatorio = 'siempre',
+    frecuencia_recordatorio = 'semanal',
     destinatarios = []
   } = req.body;
 

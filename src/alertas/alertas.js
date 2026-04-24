@@ -1,14 +1,11 @@
 ﻿'use strict';
 /**
- * alertas.js v2 â€” Frontend del mÃ³dulo de Alertas y Recordatorios
+ * alertas.js v2.1 — Frontend del módulo de Alertas y Recordatorios
  * Texpro RSProyecto
- * Cambios v2:
- *  - Campo frecuencia_recordatorio en formulario
- *  - Filtro "Propias" y "Asignadas a mí"
- *  - Badge "Asignada por [nombre]" en cards de terceros
- *  - Badge en sidebar con contador de alertas próximas
- *  - Token y usuario leídos desde localStorage
- *  - Catch vacíos corregidos
+ * Fix v2.1:
+ *  - cargarBadgeAlertas: corregido endpoint /badge (antes apuntaba a /contador erróneamente)
+ *  - mostrarRecordatorioLogin: badge "Asignada por" usa nombre_creador que ahora viene en /pendientes
+ *  - frecuencia 'siempre' → opción renombrada a 'Siempre — recordar cada vez'
  */
 
 const TOKEN   = localStorage.getItem('token');
@@ -100,10 +97,10 @@ function initSidebar() {
     document.getElementById('mainWrapper').classList.toggle('main-wrapper--expanded');
   });
 
-  // Cargar badge de alertas próximas
   cargarBadgeAlertas();
 }
 
+// Fix v2.1: endpoint correcto es /badge (existe en backend)
 async function cargarBadgeAlertas() {
   try {
     const r = await fetch(`${API}/badge`, { headers: headers() });
@@ -205,10 +202,10 @@ function labelDias(dias, completada) {
 }
 
 const FREC_LABEL = {
-  diaria:    'ðŸ”„ Diaria',
-  semanal:   'ðŸ”„ Semanal',
-  quincenal: 'ðŸ”„ Quincenal',
-  manual:    'ðŸ”• Manual',
+  siempre:   '🔄 Siempre',
+  diaria:    '🔄 Diaria',
+  semanal:   '🔄 Semanal',
+  quincenal: '🔄 Quincenal',
 };
 
 function cardHTML(a) {
@@ -415,7 +412,8 @@ async function eliminarAlerta(id) {
   }
 }
 
-// â”€â”€ POPUP RECORDATORIO AL LOGIN â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── POPUP RECORDATORIO AL LOGIN ─────────────────────────────────
+// Fix v2.1: nombre_creador ahora viene en /pendientes — el badge "Asignada por" funciona correctamente
 async function mostrarRecordatorioLogin() {
   const flagKey = `rec_mostrado_${USUARIO.id}_${new Date().toISOString().slice(0, 10)}`;
   if (localStorage.getItem(flagKey)) return;
@@ -432,6 +430,7 @@ async function mostrarRecordatorioLogin() {
       const fecha = new Date(a.fecha_vence).toLocaleDateString('es-CL', {
         day: '2-digit', month: 'short', year: 'numeric',
       });
+      // nombre_creador ya viene en /pendientes desde v2.1
       const badgeOrigen = a.id_creador !== USUARIO.id
         ? `<span class="rec-asignada-badge">ðŸ“Œ Asignada por ${escHtml(a.nombre_creador)}</span>`
         : '';
