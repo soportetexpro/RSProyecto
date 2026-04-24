@@ -1,6 +1,7 @@
 /* ============================================
    LOGIN — Texpro RSProyecto
    Usa variables de src/assets/styles/tokens.css
+   v2.1.1 — fix logo color + contraste textos panel izquierdo
    ============================================ */
 
 *, *::before, *::after {
@@ -70,11 +71,14 @@ body {
   text-align: center;
 }
 
+/* FIX: se elimina filter brightness/invert que forzaba el logo a blanco puro.
+   El logo ahora se muestra con sus colores reales.
+   Se agrega drop-shadow sutil para dar profundidad sobre el fondo degradado. */
 .brand-logo {
   max-width: 280px;
   width: 100%;
   object-fit: contain;
-  filter: brightness(0) invert(1);
+  filter: drop-shadow(0 4px 24px rgba(0,0,0,0.18));
 }
 
 /* Fallback si no hay logo */
@@ -97,22 +101,26 @@ body {
   letter-spacing: 4px;
 }
 
+/* FIX: opacidad aumentada de 0.75 → 1 para visibilidad total sobre fondo verde */
 .brand-tagline {
   font-size: var(--text-base);
-  color: rgba(255,255,255,0.75);
+  color: rgba(255, 255, 255, 1);
   max-width: 260px;
   line-height: var(--line-height-normal);
+  text-shadow: 0 1px 6px rgba(0,0,0,0.25);
 }
 
 .brand-footer {
   margin-top: var(--space-6);
 }
 
+/* FIX: opacidad aumentada de 0.5 → 0.85 para visibilidad aceptable */
 .brand-cert {
   font-size: var(--text-xs);
-  color: rgba(255,255,255,0.5);
+  color: rgba(255, 255, 255, 0.85);
   letter-spacing: 1px;
   text-transform: uppercase;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.2);
 }
 
 /* ── PANEL DERECHO — FORMULARIO ── */
@@ -140,6 +148,7 @@ body {
   justify-content: center;
 }
 
+/* FIX: logo mobile también sin filtro blanco */
 .login-isotipo-mobile {
   width: 72px;
   height: 72px;
