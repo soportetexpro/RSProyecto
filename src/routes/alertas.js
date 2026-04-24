@@ -1,14 +1,17 @@
 'use strict';
 /**
- * routes/alertas.js  v2.2
- * Fix v2.2: const { pool: db } en lugar de const db = require('../config/db')
- *           db.js exporta { pool, testConnection }, no el pool directamente.
+ * routes/alertas.js  v2.3
+ * Fix v2.3:
+ *  - req.usuario.sub en lugar de req.usuario.id (JWT payload usa 'sub')
+ *  - tabla `usuario` en lugar de `usuarios` (nombre real en bdtexpro)
+ *  - columna `is_active` en lugar de `activo`
+ *  - columna `nombre` existe en `usuario` ✓
  */
 
-const express  = require('express');
-const router   = express.Router();
-const { pool: db } = require('../config/db');
-const { requireAuth } = require('../middlewares/requireAuth');
+const express          = require('express');
+const router           = express.Router();
+const { pool: db }     = require('../config/db');
+const { requireAuth }  = require('../middlewares/requireAuth');
 
 router.use(requireAuth);
 
@@ -20,18 +23,18 @@ function diasRestantes(fechaVence) {
 
 function debeRecordar(ultimoRec, frecuencia) {
   if (!ultimoRec || frecuencia === 'siempre') return true;
-  const hoy     = new Date(); hoy.setHours(0, 0, 0, 0);
-  const ultimo  = new Date(ultimoRec); ultimo.setHours(0, 0, 0, 0);
-  const diffDias = Math.floor((hoy - ultimo) / 86400000);
-  if (frecuencia === 'diaria')    return diffDias >= 1;
-  if (frecuencia === 'semanal')   return diffDias >= 7;
-  if (frecuencia === 'quincenal') return diffDias >= 15;
+  const hoy    = new Date(); hoy.setHours(0, 0, 0, 0);
+  const ultimo = new Date(ultimoRec); ultimo.setHours(0, 0, 0, 0);
+  const diff   = Math.floor((hoy - ultimo) / 86400000);
+  if (frecuencia === 'diaria')    return diff >= 1;
+  if (frecuencia === 'semanal')   return diff >= 7;
+  if (frecuencia === 'quincenal') return diff >= 15;
   return true;
 }
 
 // ── GET /api/alertas ──────────────────────────────────────────────────────────
 router.get('/', async (req, res) => {
-  const uid = req.usuario.id;
+  const uid = req.usuario.sub;
   try {
     const [rows] = await db.query(`
       SELECT
@@ -44,7 +47,7 @@ router.get('/', async (req, res) => {
         (
           SELECT GROUP_CONCAT(du.nombre ORDER BY du.nombre SEPARATOR ', ')
           FROM alerta_destinatarios adc
-          JOIN usuarios du ON du.id = adc.id_usuario
+          JOIN usuario du ON du.id = adc.id_usuario
           WHERE adc.id_alerta = a.id
         ) AS destinatarios_nombres,
         (
@@ -53,7 +56,7 @@ router.get('/', async (req, res) => {
           WHERE adc2.id_alerta = a.id
         ) AS destinatarios_ids
       FROM alertas a
-      LEFT JOIN usuarios u ON u.id = a.id_creador
+      LEFT JOIN usuario u ON u.id = a.id_creador
       LEFT JOIN alerta_destinatarios ad ON ad.id_alerta = a.id AND ad.id_usuario = ?
       WHERE
         a.id_creador = ?
@@ -81,23 +84,19 @@ router.get('/', async (req, res) => {
 
 // ── GET /api/alertas/contador ─────────────────────────────────────────────────
 router.get('/contador', async (req, res) => {
-  const uid = req.usuario.id;
+  const uid = req.usuario.sub;
   try {
     const [[{ total }]] = await db.query(`
       SELECT COUNT(*) AS total
       FROM alertas a
       LEFT JOIN alerta_destinatarios ad ON ad.id_alerta = a.id AND ad.id_usuario = ?
       WHERE
-        a.activa = 1
-        AND a.completada = 0
+        a.activa = 1 AND a.completada = 0
         AND DATEDIFF(a.fecha_vence, CURDATE()) BETWEEN 0 AND 7
         AND COALESCE(ad.silenciada, 0) = 0
         AND (
           a.id_creador = ?
-          OR EXISTS (
-            SELECT 1 FROM alerta_destinatarios adx
-            WHERE adx.id_alerta = a.id AND adx.id_usuario = ?
-          )
+          OR EXISTS (SELECT 1 FROM alerta_destinatarios adx WHERE adx.id_alerta = a.id AND adx.id_usuario = ?)
         )
     `, [uid, uid, uid]);
     res.json({ ok: true, total });
@@ -107,25 +106,21 @@ router.get('/contador', async (req, res) => {
   }
 });
 
-// ── GET /api/alertas/badge  (alias de /contador) ─────────────────────────────
+// ── GET /api/alertas/badge (alias de /contador) ───────────────────────────────
 router.get('/badge', async (req, res) => {
-  const uid = req.usuario.id;
+  const uid = req.usuario.sub;
   try {
     const [[{ total }]] = await db.query(`
       SELECT COUNT(*) AS total
       FROM alertas a
       LEFT JOIN alerta_destinatarios ad ON ad.id_alerta = a.id AND ad.id_usuario = ?
       WHERE
-        a.activa = 1
-        AND a.completada = 0
+        a.activa = 1 AND a.completada = 0
         AND DATEDIFF(a.fecha_vence, CURDATE()) BETWEEN 0 AND 7
         AND COALESCE(ad.silenciada, 0) = 0
         AND (
           a.id_creador = ?
-          OR EXISTS (
-            SELECT 1 FROM alerta_destinatarios adx
-            WHERE adx.id_alerta = a.id AND adx.id_usuario = ?
-          )
+          OR EXISTS (SELECT 1 FROM alerta_destinatarios adx WHERE adx.id_alerta = a.id AND adx.id_usuario = ?)
         )
     `, [uid, uid, uid]);
     res.json({ ok: true, total });
@@ -137,44 +132,36 @@ router.get('/badge', async (req, res) => {
 
 // ── GET /api/alertas/pendientes ───────────────────────────────────────────────
 router.get('/pendientes', async (req, res) => {
-  const uid = req.usuario.id;
+  const uid = req.usuario.sub;
   const hoy = new Date().toISOString().slice(0, 10);
   try {
     const [rows] = await db.query(`
       SELECT
         a.id, a.titulo, a.descripcion, a.tipo, a.fecha_vence,
-        a.frecuencia_recordatorio,
-        a.id_creador,
+        a.frecuencia_recordatorio, a.id_creador,
         COALESCE(u.nombre, '') AS nombre_creador,
         COALESCE(ad.silenciada, 0) AS silenciada,
         COALESCE(ad.descartada_hoy, NULL) AS descartada_hoy,
         COALESCE(ad.ultimo_recordatorio, NULL) AS ultimo_recordatorio
       FROM alertas a
-      LEFT JOIN usuarios u ON u.id = a.id_creador
+      LEFT JOIN usuario u ON u.id = a.id_creador
       LEFT JOIN alerta_destinatarios ad ON ad.id_alerta = a.id AND ad.id_usuario = ?
       WHERE
-        a.activa = 1
-        AND a.completada = 0
+        a.activa = 1 AND a.completada = 0
         AND a.fecha_vence >= CURDATE()
         AND DATEDIFF(a.fecha_vence, CURDATE()) <= 7
         AND COALESCE(ad.silenciada, 0) = 0
         AND (ad.descartada_hoy IS NULL OR ad.descartada_hoy != ?)
         AND (
           a.id_creador = ?
-          OR EXISTS (
-            SELECT 1 FROM alerta_destinatarios adx
-            WHERE adx.id_alerta = a.id AND adx.id_usuario = ?
-          )
+          OR EXISTS (SELECT 1 FROM alerta_destinatarios adx WHERE adx.id_alerta = a.id AND adx.id_usuario = ?)
         )
       ORDER BY a.fecha_vence ASC
     `, [uid, hoy, uid, uid]);
 
     const data = rows
       .filter(r => debeRecordar(r.ultimo_recordatorio, r.frecuencia_recordatorio))
-      .map(r => ({
-        ...r,
-        dias_restantes: diasRestantes(r.fecha_vence),
-      }));
+      .map(r => ({ ...r, dias_restantes: diasRestantes(r.fecha_vence) }));
 
     res.json({ ok: true, data });
   } catch (e) {
@@ -187,7 +174,7 @@ router.get('/pendientes', async (req, res) => {
 router.get('/usuarios', async (req, res) => {
   try {
     const [rows] = await db.query(
-      `SELECT id, nombre, area FROM usuarios WHERE activo = 1 ORDER BY nombre ASC`
+      `SELECT id, nombre, area FROM usuario WHERE is_active = 1 ORDER BY nombre ASC`
     );
     res.json({ ok: true, data: rows });
   } catch (e) {
@@ -198,7 +185,7 @@ router.get('/usuarios', async (req, res) => {
 
 // ── POST /api/alertas ─────────────────────────────────────────────────────────
 router.post('/', async (req, res) => {
-  const uid = req.usuario.id;
+  const uid = req.usuario.sub;
   const {
     titulo, descripcion, tipo, fecha_vence,
     frecuencia_recordatorio = 'semanal',
@@ -241,7 +228,7 @@ router.post('/', async (req, res) => {
 
 // ── PUT /api/alertas/:id ──────────────────────────────────────────────────────
 router.put('/:id', async (req, res) => {
-  const uid = req.usuario.id;
+  const uid = req.usuario.sub;
   const id  = Number(req.params.id);
   const {
     titulo, descripcion, tipo, fecha_vence,
@@ -251,9 +238,7 @@ router.put('/:id', async (req, res) => {
 
   const conn = await db.getConnection();
   try {
-    const [[alerta]] = await conn.query(
-      `SELECT id_creador FROM alertas WHERE id = ?`, [id]
-    );
+    const [[alerta]] = await conn.query(`SELECT id_creador FROM alertas WHERE id = ?`, [id]);
     if (!alerta)
       return res.status(404).json({ ok: false, error: 'Alerta no encontrada' });
     if (alerta.id_creador !== uid && !req.usuario.is_admin)
@@ -285,7 +270,7 @@ router.put('/:id', async (req, res) => {
 
 // ── PATCH /:id/completar ──────────────────────────────────────────────────────
 router.patch('/:id/completar', async (req, res) => {
-  const uid = req.usuario.id;
+  const uid = req.usuario.sub;
   const id  = Number(req.params.id);
   try {
     const [[a]] = await db.query(`SELECT id_creador FROM alertas WHERE id=?`, [id]);
@@ -302,7 +287,7 @@ router.patch('/:id/completar', async (req, res) => {
 
 // ── PATCH /:id/desactivar ─────────────────────────────────────────────────────
 router.patch('/:id/desactivar', async (req, res) => {
-  const uid = req.usuario.id;
+  const uid = req.usuario.sub;
   const id  = Number(req.params.id);
   try {
     const [[a]] = await db.query(`SELECT id_creador FROM alertas WHERE id=?`, [id]);
@@ -319,7 +304,7 @@ router.patch('/:id/desactivar', async (req, res) => {
 
 // ── PATCH /:id/descartar ──────────────────────────────────────────────────────
 router.patch('/:id/descartar', async (req, res) => {
-  const uid = req.usuario.id;
+  const uid = req.usuario.sub;
   const id  = Number(req.params.id);
   const hoy = new Date().toISOString().slice(0, 10);
   try {
@@ -339,7 +324,7 @@ router.patch('/:id/descartar', async (req, res) => {
 
 // ── PATCH /:id/silenciar ──────────────────────────────────────────────────────
 router.patch('/:id/silenciar', async (req, res) => {
-  const uid = req.usuario.id;
+  const uid = req.usuario.sub;
   const id  = Number(req.params.id);
   try {
     await db.query(`
@@ -356,7 +341,7 @@ router.patch('/:id/silenciar', async (req, res) => {
 
 // ── DELETE /api/alertas/:id ───────────────────────────────────────────────────
 router.delete('/:id', async (req, res) => {
-  const uid = req.usuario.id;
+  const uid = req.usuario.sub;
   const id  = Number(req.params.id);
   try {
     const [[a]] = await db.query(`SELECT id_creador FROM alertas WHERE id=?`, [id]);
