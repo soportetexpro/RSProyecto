@@ -1,15 +1,23 @@
-﻿'use strict';
+'use strict';
 /**
- * alertas.js v2.1 — Frontend del módulo de Alertas y Recordatorios
+ * alertas.js v2.2 — Frontend del módulo de Alertas y Recordatorios
  * Texpro RSProyecto
+ *
+ * Fix v2.2 (directo a main):
+ *  - Auth guard corregido: usuario desde sessionStorage('texpro_user')
+ *    en lugar de localStorage('user') — alineado con login.js
+ *  - Logout corregido: elimina sessionStorage('texpro_user')
+ *
  * Fix v2.1:
- *  - cargarBadgeAlertas: corregido endpoint /badge (antes apuntaba a /contador erróneamente)
- *  - mostrarRecordatorioLogin: badge "Asignada por" usa nombre_creador que ahora viene en /pendientes
- *  - frecuencia 'siempre' → opción renombrada a 'Siempre — recordar cada vez'
+ *  - cargarBadgeAlertas: endpoint corregido a /badge
+ *  - mostrarRecordatorioLogin: badge "Asignada por" usa nombre_creador de /pendientes
+ *  - frecuencia 'siempre' incluida en FREC_LABEL
  */
 
+// ── Auth guard ───────────────────────────────────────────────────
+// login.js guarda: localStorage('token') y sessionStorage('texpro_user')
 const TOKEN   = localStorage.getItem('token');
-const USUARIO = JSON.parse(localStorage.getItem('user') || 'null');
+const USUARIO = JSON.parse(sessionStorage.getItem('texpro_user') || 'null');
 
 if (!TOKEN || !USUARIO) {
   location.href = '../login/index.html';
@@ -54,7 +62,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   initModal();
 });
 
-// â”€â”€ SIDEBAR / HEADER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── SIDEBAR / HEADER ─────────────────────────────────────────────
 function initSidebar() {
   const nav = document.getElementById('sidebarNav');
   if (!nav || !USUARIO) return;
@@ -89,7 +97,7 @@ function initSidebar() {
 
   document.getElementById('btnLogout')?.addEventListener('click', () => {
     localStorage.removeItem('token');
-    localStorage.removeItem('user');
+    sessionStorage.removeItem('texpro_user');
     location.href = '../login/index.html';
   });
   document.getElementById('sidebarToggle')?.addEventListener('click', () => {
@@ -100,7 +108,6 @@ function initSidebar() {
   cargarBadgeAlertas();
 }
 
-// Fix v2.1: endpoint correcto es /badge (existe en backend)
 async function cargarBadgeAlertas() {
   try {
     const r = await fetch(`${API}/badge`, { headers: headers() });
@@ -125,7 +132,7 @@ function initHeader() {
   });
 }
 
-// â”€â”€ CARGAR DATOS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── CARGAR DATOS ─────────────────────────────────────────────────
 async function cargarAlertas() {
   try {
     const r = await fetch(API, { headers: headers() });
@@ -134,7 +141,7 @@ async function cargarAlertas() {
     _alertas = j.data;
     renderAlertas();
   } catch (e) {
-    grid.innerHTML = `<div class="alertas-empty"><div class="alertas-empty-icon">âš ï¸</div><p class="alertas-empty-txt">Error al cargar alertas: ${e.message}</p></div>`;
+    grid.innerHTML = `<div class="alertas-empty"><div class="alertas-empty-icon">⚠️</div><p class="alertas-empty-txt">Error al cargar alertas: ${e.message}</p></div>`;
   }
 }
 
@@ -146,15 +153,15 @@ async function cargarUsuarios() {
   } catch { /* sin usuarios disponibles — fallo silencioso */ }
 }
 
-// â”€â”€ RENDER GRID â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── RENDER GRID ──────────────────────────────────────────────────
 function renderAlertas() {
   const filtradas = filtrarAlertas(_alertas, _filtroActual);
 
   if (!filtradas.length) {
     grid.innerHTML = `
       <div class="alertas-empty">
-        <div class="alertas-empty-icon">ðŸ””</div>
-        <p class="alertas-empty-txt">No hay alertas en este filtro.<br>Â¡Crea una nueva!</p>
+        <div class="alertas-empty-icon">🔔</div>
+        <p class="alertas-empty-txt">No hay alertas en este filtro.<br>¡Crea una nueva!</p>
       </div>`;
     return;
   }
@@ -194,11 +201,11 @@ function urgencia(dias, completada) {
 }
 
 function labelDias(dias, completada) {
-  if (completada) return 'âœ… Completada';
-  if (dias < 0)   return `VenciÃ³ hace ${Math.abs(dias)} dÃ­a${Math.abs(dias) !== 1 ? 's' : ''}`;
-  if (dias === 0) return 'âš ï¸ Vence HOY';
-  if (dias === 1) return 'âš ï¸ Vence maÃ±ana';
-  return `${dias} dÃ­as restantes`;
+  if (completada) return '✅ Completada';
+  if (dias < 0)   return `Venció hace ${Math.abs(dias)} día${Math.abs(dias) !== 1 ? 's' : ''}`;
+  if (dias === 0) return '⚠️ Vence HOY';
+  if (dias === 1) return '⚠️ Vence mañana';
+  return `${dias} días restantes`;
 }
 
 const FREC_LABEL = {
@@ -215,11 +222,11 @@ function cardHTML(a) {
   const frecLabel = FREC_LABEL[a.frecuencia_recordatorio] || '';
 
   const badgeOrigen = esMio
-    ? `<span class="alerta-origen-badge alerta-origen-badge--propia">ðŸ”’ Propia</span>`
-    : `<span class="alerta-origen-badge alerta-origen-badge--asignada">ðŸ“Œ Asignada por ${escHtml(a.nombre_creador)}</span>`;
+    ? `<span class="alerta-origen-badge alerta-origen-badge--propia">🔒 Propia</span>`
+    : `<span class="alerta-origen-badge alerta-origen-badge--asignada">📌 Asignada por ${escHtml(a.nombre_creador)}</span>`;
 
   const botonesAccion = a.completada
-    ? `<button class="btn-accion btn-accion--eliminar" data-accion="eliminar" data-id="${a.id}">ðŸ—‘ Eliminar</button>`
+    ? `<button class="btn-accion btn-accion--eliminar" data-accion="eliminar" data-id="${a.id}">🗑 Eliminar</button>`
     : `
       ${esMio ? `<button class="btn-accion btn-accion--completar"  data-accion="completar"  data-id="${a.id}">✅ Completar</button>` : ''}
       ${esMio ? `<button class="btn-accion btn-accion--editar"     data-accion="editar"     data-id="${a.id}">✏️ Editar</button>`    : ''}
@@ -237,7 +244,7 @@ function cardHTML(a) {
             <div class="alerta-titulo-card" title="${escHtml(a.titulo)}">${escHtml(a.titulo)}</div>
             <div class="alerta-badges-row">
               <span class="alerta-tipo-badge alerta-tipo-badge--${a.tipo}">
-                ${a.tipo === 'grupal' ? 'ðŸ‘¥ Grupal' : 'ðŸ”’ Personal'}
+                ${a.tipo === 'grupal' ? '👥 Grupal' : '🔒 Personal'}
               </span>
               ${badgeOrigen}
             </div>
@@ -246,12 +253,12 @@ function cardHTML(a) {
         </div>
         ${a.descripcion ? `<p class="alerta-desc">${escHtml(a.descripcion)}</p>` : ''}
         <div class="alerta-meta">
-          <span>ðŸ“… Vence: <strong>${fecha}</strong></span>
-          <span>ðŸ‘¤ ${escHtml(a.nombre_creador)}</span>
+          <span>📅 Vence: <strong>${fecha}</strong></span>
+          <span>👤 ${escHtml(a.nombre_creador)}</span>
           ${frecLabel ? `<span class="alerta-frec-badge">${frecLabel}</span>` : ''}
         </div>
         ${a.tipo === 'grupal' && a.destinatarios_nombres
-          ? `<div class="alerta-destinatarios">ðŸ‘¥ ${escHtml(a.destinatarios_nombres)}</div>`
+          ? `<div class="alerta-destinatarios">👥 ${escHtml(a.destinatarios_nombres)}</div>`
           : ''}
       </div>
       <div class="alerta-card-acciones">${botonesAccion}</div>
@@ -267,7 +274,7 @@ function escHtml(s) {
     .replace(/"/g,  '&quot;');
 }
 
-// â”€â”€ FILTROS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── FILTROS ──────────────────────────────────────────────────────
 function initFiltros() {
   document.querySelectorAll('.filtro-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -279,7 +286,7 @@ function initFiltros() {
   });
 }
 
-// â”€â”€ MODAL CREAR / EDITAR â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── MODAL CREAR / EDITAR ─────────────────────────────────────────
 function initModal() {
   btnNueva.addEventListener('click', abrirCrear);
   btnCerrar.addEventListener('click', cerrarModal);
@@ -381,13 +388,13 @@ async function guardarAlerta(e) {
   }
 }
 
-// â”€â”€ ACCIONES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── ACCIONES ─────────────────────────────────────────────────────
 async function accionAlerta(id, accion) {
   const msgs = {
-    completar:  'Â¿Marcar esta alerta como completada?',
-    desactivar: 'Â¿Desactivar esta alerta? Se ocultarÃ¡ pero no se eliminarÃ¡.',
+    completar:  '¿Marcar esta alerta como completada?',
+    desactivar: '¿Desactivar esta alerta? Se ocultará pero no se eliminará.',
   };
-  if (!confirm(msgs[accion] || 'Â¿Confirmar?')) return;
+  if (!confirm(msgs[accion] || '¿Confirmar?')) return;
   try {
     const r = await fetch(`${API}/${id}/${accion}`, { method: 'PATCH', headers: headers() });
     const j = await r.json();
@@ -400,7 +407,7 @@ async function accionAlerta(id, accion) {
 }
 
 async function eliminarAlerta(id) {
-  if (!confirm('Â¿Eliminar esta alerta permanentemente? Esta acciÃ³n no se puede deshacer.')) return;
+  if (!confirm('¿Eliminar esta alerta permanentemente? Esta acción no se puede deshacer.')) return;
   try {
     const r = await fetch(`${API}/${id}`, { method: 'DELETE', headers: headers() });
     const j = await r.json();
@@ -412,8 +419,7 @@ async function eliminarAlerta(id) {
   }
 }
 
-// ── POPUP RECORDATORIO AL LOGIN ─────────────────────────────────
-// Fix v2.1: nombre_creador ahora viene en /pendientes — el badge "Asignada por" funciona correctamente
+// ── POPUP RECORDATORIO AL LOGIN ──────────────────────────────────
 async function mostrarRecordatorioLogin() {
   const flagKey = `rec_mostrado_${USUARIO.id}_${new Date().toISOString().slice(0, 10)}`;
   if (localStorage.getItem(flagKey)) return;
@@ -430,9 +436,8 @@ async function mostrarRecordatorioLogin() {
       const fecha = new Date(a.fecha_vence).toLocaleDateString('es-CL', {
         day: '2-digit', month: 'short', year: 'numeric',
       });
-      // nombre_creador ya viene en /pendientes desde v2.1
       const badgeOrigen = a.id_creador !== USUARIO.id
-        ? `<span class="rec-asignada-badge">ðŸ“Œ Asignada por ${escHtml(a.nombre_creador)}</span>`
+        ? `<span class="rec-asignada-badge">📌 Asignada por ${escHtml(a.nombre_creador)}</span>`
         : '';
       return `
         <li class="rec-item rec-item--${u}" id="rec-${a.id}">
@@ -442,8 +447,8 @@ async function mostrarRecordatorioLogin() {
           </div>
           ${badgeOrigen}
           ${a.descripcion ? `<p class="rec-desc">${escHtml(a.descripcion)}</p>` : ''}
-          <span class="rec-fecha">ðŸ“… Vence: ${fecha}</span>
-          <button class="btn-no-mostrar" data-id="${a.id}">No mostrar mÃ¡s hoy</button>
+          <span class="rec-fecha">📅 Vence: ${fecha}</span>
+          <button class="btn-no-mostrar" data-id="${a.id}">No mostrar más hoy</button>
         </li>`;
     }).join('');
 
@@ -473,4 +478,3 @@ function cerrarRecordatorio() {
 
 btnCerrarRec?.addEventListener('click', cerrarRecordatorio);
 btnIrAlertas?.addEventListener('click', cerrarRecordatorio);
-
