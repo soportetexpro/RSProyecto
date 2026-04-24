@@ -4,6 +4,7 @@
  * Texpro RSProyecto
  *
  * fix: token y usuario leídos desde localStorage (consistente con el resto del sistema)
+ * fix(lint): catch vacíos corregidos — no-empty / no-unused-vars
  */
 
 const TOKEN   = localStorage.getItem('token');
@@ -111,7 +112,7 @@ async function cargarBadgeAlertas() {
     } else {
       badge.style.display = 'none';
     }
-  } catch (_e) {}
+  } catch { /* fallo silencioso — badge opcional */ }
 }
 
 function initHeader() {
@@ -140,7 +141,7 @@ async function cargarUsuarios() {
     const r = await fetch(`${API}/usuarios`, { headers: headers() });
     const j = await r.json();
     if (j.ok) _usuarios = j.data.filter(u => u.id !== USUARIO.id);
-  } catch (_e) {}
+  } catch { /* sin usuarios disponibles — fallo silencioso */ }
 }
 
 // ── RENDER GRID ───────────────────────────────────────────────────
@@ -411,8 +412,7 @@ async function eliminarAlerta(id) {
 
 // ── POPUP RECORDATORIO AL LOGIN ─────────────────────────────────
 async function mostrarRecordatorioLogin() {
-  // Usar localStorage para que el flag persista igual que el token
-  const flagKey = `rec_mostrado_${USUARIO.id}_${new Date().toISOString().slice(0,10)}`;
+  const flagKey = `rec_mostrado_${USUARIO.id}_${new Date().toISOString().slice(0, 10)}`;
   if (localStorage.getItem(flagKey)) return;
 
   try {
@@ -459,7 +459,7 @@ async function mostrarRecordatorioLogin() {
 
     recordatorioOv.classList.add('recordatorio-overlay--visible');
     recordatorioOv.setAttribute('aria-hidden', 'false');
-  } catch (_e) {}
+  } catch { /* fallo silencioso — recordatorio es opcional */ }
 }
 
 function cerrarRecordatorio() {
