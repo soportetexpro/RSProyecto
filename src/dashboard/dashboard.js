@@ -1,4 +1,4 @@
-'use strict';
+﻿'use strict';
 
 /**
  * dashboard.js — RSProyecto Texpro
@@ -42,6 +42,7 @@
     if (el) el.textContent = value;
   }
 
+  // eslint-disable-next-line no-unused-vars
   function setHTML(id, value) {
     const el = document.getElementById(id);
     if (el) el.innerHTML = value;
@@ -765,3 +766,4 @@
   else init();
 
 })();
+
