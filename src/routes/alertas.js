@@ -1,17 +1,13 @@
-﻿'use strict';
+'use strict';
 /**
- * routes/alertas.js  v2.1
- * CRUD completo para el módulo de Alertas y Recordatorios.
- * Fix v2.1:
- *  - endpoint /badge (alias de /contador) para compatibilidad con frontend
- *  - frecuencia_recordatorio incluida en schema y validaciones
- *  - nombre_creador expuesto en /pendientes
- *  - cooldown por frecuencia en /pendientes usando ultimo_recordatorio
+ * routes/alertas.js  v2.2
+ * Fix v2.2: const { pool: db } en lugar de const db = require('../config/db')
+ *           db.js exporta { pool, testConnection }, no el pool directamente.
  */
 
 const express  = require('express');
 const router   = express.Router();
-const db       = require('../config/db');
+const { pool: db } = require('../config/db');
 const { requireAuth } = require('../middlewares/requireAuth');
 
 router.use(requireAuth);
@@ -22,12 +18,6 @@ function diasRestantes(fechaVence) {
   return Math.ceil((vence - hoy) / 86400000);
 }
 
-/**
- * Determina si hay que mostrar el recordatorio segÃºn frecuencia.
- * @param {string|null} ultimoRec  â€” fecha ISO 'YYYY-MM-DD' o null
- * @param {string} frecuencia      â€” 'siempre'|'diaria'|'semanal'|'quincenal'
- * @returns {boolean}
- */
 function debeRecordar(ultimoRec, frecuencia) {
   if (!ultimoRec || frecuencia === 'siempre') return true;
   const hoy     = new Date(); hoy.setHours(0, 0, 0, 0);
@@ -39,7 +29,7 @@ function debeRecordar(ultimoRec, frecuencia) {
   return true;
 }
 
-// â”€â”€ GET /api/alertas â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── GET /api/alertas ──────────────────────────────────────────────────────────
 router.get('/', async (req, res) => {
   const uid = req.usuario.id;
   try {
@@ -89,7 +79,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-// ── GET /api/alertas/contador  (fuente de verdad) ─────────────────────────────────
+// ── GET /api/alertas/contador ─────────────────────────────────────────────────
 router.get('/contador', async (req, res) => {
   const uid = req.usuario.id;
   try {
@@ -111,12 +101,13 @@ router.get('/contador', async (req, res) => {
         )
     `, [uid, uid, uid]);
     res.json({ ok: true, total });
-  } catch {
+  } catch (e) {
+    console.error('[alertas contador]', e);
     res.status(500).json({ ok: false, error: 'Error al obtener contador' });
   }
 });
 
-// ── GET /api/alertas/badge  (alias de /contador — usado por sidebar) ─────────
+// ── GET /api/alertas/badge  (alias de /contador) ─────────────────────────────
 router.get('/badge', async (req, res) => {
   const uid = req.usuario.id;
   try {
@@ -138,12 +129,13 @@ router.get('/badge', async (req, res) => {
         )
     `, [uid, uid, uid]);
     res.json({ ok: true, total });
-  } catch (_e) {
+  } catch (e) {
+    console.error('[alertas badge]', e);
     res.status(500).json({ ok: false, error: 'Error al obtener badge' });
   }
 });
 
-// ── GET /api/alertas/pendientes ──────────────────────────────────────
+// ── GET /api/alertas/pendientes ───────────────────────────────────────────────
 router.get('/pendientes', async (req, res) => {
   const uid = req.usuario.id;
   const hoy = new Date().toISOString().slice(0, 10);
@@ -191,19 +183,20 @@ router.get('/pendientes', async (req, res) => {
   }
 });
 
-// â”€â”€ GET /api/alertas/usuarios â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── GET /api/alertas/usuarios ─────────────────────────────────────────────────
 router.get('/usuarios', async (req, res) => {
   try {
     const [rows] = await db.query(
       `SELECT id, nombre, area FROM usuarios WHERE activo = 1 ORDER BY nombre ASC`
     );
     res.json({ ok: true, data: rows });
-  } catch {
+  } catch (e) {
+    console.error('[alertas usuarios]', e);
     res.status(500).json({ ok: false, error: 'Error al obtener usuarios' });
   }
 });
 
-// â”€â”€ POST /api/alertas â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── POST /api/alertas ─────────────────────────────────────────────────────────
 router.post('/', async (req, res) => {
   const uid = req.usuario.id;
   const {
@@ -213,11 +206,11 @@ router.post('/', async (req, res) => {
   } = req.body;
 
   if (!titulo || !fecha_vence)
-    return res.status(400).json({ ok: false, error: 'TÃ­tulo y fecha de vencimiento son obligatorios' });
+    return res.status(400).json({ ok: false, error: 'Título y fecha de vencimiento son obligatorios' });
   if (!['personal', 'grupal'].includes(tipo))
-    return res.status(400).json({ ok: false, error: 'Tipo invÃ¡lido' });
+    return res.status(400).json({ ok: false, error: 'Tipo inválido' });
   if (!['siempre','diaria','semanal','quincenal'].includes(frecuencia_recordatorio))
-    return res.status(400).json({ ok: false, error: 'Frecuencia invÃ¡lida' });
+    return res.status(400).json({ ok: false, error: 'Frecuencia inválida' });
 
   const conn = await db.getConnection();
   try {
@@ -246,7 +239,7 @@ router.post('/', async (req, res) => {
   }
 });
 
-// â”€â”€ PUT /api/alertas/:id â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── PUT /api/alertas/:id ──────────────────────────────────────────────────────
 router.put('/:id', async (req, res) => {
   const uid = req.usuario.id;
   const id  = Number(req.params.id);
@@ -290,7 +283,7 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// â”€â”€ PATCH /api/alertas/:id/completar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── PATCH /:id/completar ──────────────────────────────────────────────────────
 router.patch('/:id/completar', async (req, res) => {
   const uid = req.usuario.id;
   const id  = Number(req.params.id);
@@ -301,12 +294,13 @@ router.patch('/:id/completar', async (req, res) => {
       return res.status(403).json({ ok: false, error: 'Sin permisos' });
     await db.query(`UPDATE alertas SET completada=1, activa=0 WHERE id=?`, [id]);
     res.json({ ok: true });
-  } catch {
+  } catch (e) {
+    console.error('[alertas completar]', e);
     res.status(500).json({ ok: false, error: 'Error al completar alerta' });
   }
 });
 
-// â”€â”€ PATCH /api/alertas/:id/desactivar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── PATCH /:id/desactivar ─────────────────────────────────────────────────────
 router.patch('/:id/desactivar', async (req, res) => {
   const uid = req.usuario.id;
   const id  = Number(req.params.id);
@@ -317,12 +311,13 @@ router.patch('/:id/desactivar', async (req, res) => {
       return res.status(403).json({ ok: false, error: 'Sin permisos' });
     await db.query(`UPDATE alertas SET activa=0 WHERE id=?`, [id]);
     res.json({ ok: true });
-  } catch {
+  } catch (e) {
+    console.error('[alertas desactivar]', e);
     res.status(500).json({ ok: false, error: 'Error al desactivar alerta' });
   }
 });
 
-// â”€â”€ PATCH /api/alertas/:id/descartar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── PATCH /:id/descartar ──────────────────────────────────────────────────────
 router.patch('/:id/descartar', async (req, res) => {
   const uid = req.usuario.id;
   const id  = Number(req.params.id);
@@ -336,12 +331,13 @@ router.patch('/:id/descartar', async (req, res) => {
         ultimo_recordatorio = VALUES(ultimo_recordatorio)
     `, [id, uid, hoy, hoy]);
     res.json({ ok: true });
-  } catch {
+  } catch (e) {
+    console.error('[alertas descartar]', e);
     res.status(500).json({ ok: false, error: 'Error al descartar alerta' });
   }
 });
 
-// â”€â”€ PATCH /api/alertas/:id/silenciar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── PATCH /:id/silenciar ──────────────────────────────────────────────────────
 router.patch('/:id/silenciar', async (req, res) => {
   const uid = req.usuario.id;
   const id  = Number(req.params.id);
@@ -352,12 +348,13 @@ router.patch('/:id/silenciar', async (req, res) => {
       ON DUPLICATE KEY UPDATE silenciada = 1
     `, [id, uid]);
     res.json({ ok: true });
-  } catch {
+  } catch (e) {
+    console.error('[alertas silenciar]', e);
     res.status(500).json({ ok: false, error: 'Error al silenciar alerta' });
   }
 });
 
-// â”€â”€ DELETE /api/alertas/:id â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── DELETE /api/alertas/:id ───────────────────────────────────────────────────
 router.delete('/:id', async (req, res) => {
   const uid = req.usuario.id;
   const id  = Number(req.params.id);
@@ -368,7 +365,8 @@ router.delete('/:id', async (req, res) => {
       return res.status(403).json({ ok: false, error: 'Sin permisos para eliminar' });
     await db.query(`DELETE FROM alertas WHERE id=?`, [id]);
     res.json({ ok: true });
-  } catch {
+  } catch (e) {
+    console.error('[alertas DELETE]', e);
     res.status(500).json({ ok: false, error: 'Error al eliminar alerta' });
   }
 });
