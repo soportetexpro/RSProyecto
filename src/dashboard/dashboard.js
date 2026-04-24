@@ -3,14 +3,9 @@
 /**
  * dashboard.js — RSProyecto Texpro
  *
- * Controlador frontend del módulo Dashboard.
- *
  * 2026-04-23: filtros client-side en tabla Ventas del Mes
- *   - filtroVendedorVentas: select que filtra por CodVendedor
- *   - tipoToggles: botones F / N / D (multi-selección) que filtran por Tipo
- *   - Ambos operan sobre ventasMesData junto con busquedaVentas
- *
  * 2026-04-24: módulo Alertas agregado al sidebar — accesible para TODOS los usuarios
+ * 2026-04-24: fix(lint) — eliminada función setHTML no utilizada
  */
 
 (function () {
@@ -25,7 +20,6 @@
   let carteraData = { activos: [], inactivos: [], recuperados: [] };
   let carteraRendered = { activo: false, inactivo: false, recuperado: false };
 
-  // Estado de filtros de la tabla Ventas del Mes
   let filtroVendedorActivo = '';
   let tiposActivos = new Set(['F', 'N', 'D']);
 
@@ -36,16 +30,9 @@
     return new Intl.NumberFormat('es-CL', { style:'currency', currency:'CLP', maximumFractionDigits:0 }).format(Number(v));
   }
 
-  // ── helpers seguros contra null ──────────────────────────────────────────
   function setText(id, value) {
     const el = document.getElementById(id);
     if (el) el.textContent = value;
-  }
-
-  // eslint-disable-next-line no-unused-vars
-  function setHTML(id, value) {
-    const el = document.getElementById(id);
-    if (el) el.innerHTML = value;
   }
 
   function setStyle(id, prop, value) {
@@ -135,13 +122,11 @@
     setText('welcomeSubtitle', `Área: ${usuario.area||'Sistema'} — Texpro`);
 
     const nav      = document.getElementById('sidebarNav');
-    // area:null = acceso universal; area:[...] = filtrar por área del usuario
     const visibles = MODULOS.filter(m => {
-      if (m.area === null) return true;          // acceso universal
-      if (usuario.is_admin) return true;         // admin ve todo
-      return m.area.includes(usuario.area);      // filtro normal por área
+      if (m.area === null) return true;
+      if (usuario.is_admin) return true;
+      return m.area.includes(usuario.area);
     });
-
     if (nav) nav.innerHTML = `<span class="nav-section-title">NAVEGACIÓN</span>
       <a class="nav-item active" href="#">
         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
@@ -306,9 +291,9 @@
   }
 
   function aplicarFiltrosVentasMes() {
-    const q          = (document.getElementById('busquedaVentas')?.value || '').toLowerCase();
-    const vendedor   = filtroVendedorActivo;
-    const tipos      = tiposActivos;
+    const q        = (document.getElementById('busquedaVentas')?.value || '').toLowerCase();
+    const vendedor = filtroVendedorActivo;
+    const tipos    = tiposActivos;
 
     const lista = ventasMesData.filter(v => {
       if (q && !String(v.Folio||'').toLowerCase().includes(q) && !String(v.cliente||'').toLowerCase().includes(q)) return false;

@@ -4,16 +4,18 @@
  * Texpro RSProyecto
  * Cambios v2:
  *  - Campo frecuencia_recordatorio en formulario
- *  - Filtro "Propias" y "Asignadas a mÃ­"
+ *  - Filtro "Propias" y "Asignadas a mí"
  *  - Badge "Asignada por [nombre]" en cards de terceros
- *  - Badge en sidebar con contador de alertas prÃ³ximas
+ *  - Badge en sidebar con contador de alertas próximas
+ *  - Token y usuario leídos desde localStorage
+ *  - Catch vacíos corregidos
  */
 
-const TOKEN   = sessionStorage.getItem('token');
-const USUARIO = JSON.parse(sessionStorage.getItem('usuario') || 'null');
+const TOKEN   = localStorage.getItem('token');
+const USUARIO = JSON.parse(localStorage.getItem('user') || 'null');
 
 if (!TOKEN || !USUARIO) {
-  location.href = '/src/login/index.html';
+  location.href = '../login/index.html';
 }
 
 const API = '/api/alertas';
@@ -61,9 +63,9 @@ function initSidebar() {
   if (!nav || !USUARIO) return;
 
   const links = [
-    { label: 'Dashboard', href: '/src/dashboard/index.html', icon: 'ðŸ“Š' },
-    { label: 'Ventas',    href: '/src/ventas/index.html',    icon: 'ðŸ’¼' },
-    { label: 'Alertas',   href: '/src/alertas/index.html',   icon: 'ðŸ””', active: true, badge: true },
+    { label: 'Dashboard', href: '../dashboard/index.html', icon: '📊' },
+    { label: 'Ventas',    href: '../ventas/index.html',    icon: '💼' },
+    { label: 'Alertas',   href: '../alertas/index.html',   icon: '🔔', active: true, badge: true },
   ];
 
   nav.innerHTML = links.map(l =>
@@ -89,15 +91,16 @@ function initSidebar() {
   if (cn) cn.textContent = USUARIO.nombre || '';
 
   document.getElementById('btnLogout')?.addEventListener('click', () => {
-    sessionStorage.clear();
-    location.href = '/src/login/index.html';
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    location.href = '../login/index.html';
   });
   document.getElementById('sidebarToggle')?.addEventListener('click', () => {
     document.getElementById('sidebar').classList.toggle('sidebar--collapsed');
     document.getElementById('mainWrapper').classList.toggle('main-wrapper--expanded');
   });
 
-  // Cargar badge de alertas prÃ³ximas
+  // Cargar badge de alertas próximas
   cargarBadgeAlertas();
 }
 
@@ -114,9 +117,7 @@ async function cargarBadgeAlertas() {
     } else {
       badge.style.display = 'none';
     }
-  } catch {
-    // fallo silencioso
-  }
+  } catch { /* fallo silencioso — badge opcional */ }
 }
 
 function initHeader() {
@@ -145,9 +146,7 @@ async function cargarUsuarios() {
     const r = await fetch(`${API}/usuarios`, { headers: headers() });
     const j = await r.json();
     if (j.ok) _usuarios = j.data.filter(u => u.id !== USUARIO.id);
-  } catch {
-    // sin usuarios disponibles
-  }
+  } catch { /* sin usuarios disponibles — fallo silencioso */ }
 }
 
 // â”€â”€ RENDER GRID â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -213,12 +212,11 @@ const FREC_LABEL = {
 };
 
 function cardHTML(a) {
-  const u      = urgencia(a.dias_restantes, !!a.completada);
-  const esMio  = a.id_creador === USUARIO.id;
-  const fecha  = new Date(a.fecha_vence).toLocaleDateString('es-CL', { day: '2-digit', month: 'short', year: 'numeric' });
+  const u         = urgencia(a.dias_restantes, !!a.completada);
+  const esMio     = a.id_creador === USUARIO.id;
+  const fecha     = new Date(a.fecha_vence).toLocaleDateString('es-CL', { day: '2-digit', month: 'short', year: 'numeric' });
   const frecLabel = FREC_LABEL[a.frecuencia_recordatorio] || '';
 
-  // Badge de origen: "Propia" vs "Asignada por X"
   const badgeOrigen = esMio
     ? `<span class="alerta-origen-badge alerta-origen-badge--propia">ðŸ”’ Propia</span>`
     : `<span class="alerta-origen-badge alerta-origen-badge--asignada">ðŸ“Œ Asignada por ${escHtml(a.nombre_creador)}</span>`;
@@ -226,15 +224,15 @@ function cardHTML(a) {
   const botonesAccion = a.completada
     ? `<button class="btn-accion btn-accion--eliminar" data-accion="eliminar" data-id="${a.id}">ðŸ—‘ Eliminar</button>`
     : `
-      ${esMio ? `<button class="btn-accion btn-accion--completar" data-accion="completar" data-id="${a.id}">âœ… Completar</button>` : ''}
-      ${esMio ? `<button class="btn-accion btn-accion--editar"    data-accion="editar"    data-id="${a.id}">âœï¸ Editar</button>`    : ''}
-      ${a.activa && esMio ? `<button class="btn-accion btn-accion--desactivar" data-accion="desactivar" data-id="${a.id}">ðŸ”• Desactivar</button>` : ''}
-      ${esMio ? `<button class="btn-accion btn-accion--eliminar"  data-accion="eliminar"  data-id="${a.id}">ðŸ—‘ Eliminar</button>`  : ''}
+      ${esMio ? `<button class="btn-accion btn-accion--completar"  data-accion="completar"  data-id="${a.id}">✅ Completar</button>` : ''}
+      ${esMio ? `<button class="btn-accion btn-accion--editar"     data-accion="editar"     data-id="${a.id}">✏️ Editar</button>`    : ''}
+      ${a.activa && esMio ? `<button class="btn-accion btn-accion--desactivar" data-accion="desactivar" data-id="${a.id}">🔕 Desactivar</button>` : ''}
+      ${esMio ? `<button class="btn-accion btn-accion--eliminar"   data-accion="eliminar"   data-id="${a.id}">🗑 Eliminar</button>`  : ''}
     `;
 
   return `
     <div class="alerta-card alerta-card--${u}
-      ${a.completada           ? 'alerta-card--completada'  : ''}
+      ${a.completada               ? 'alerta-card--completada'  : ''}
       ${!a.activa && !a.completada ? 'alerta-card--desactivada' : ''}">
       <div class="alerta-card-body">
         <div class="alerta-card-top">
@@ -266,10 +264,10 @@ function cardHTML(a) {
 function escHtml(s) {
   if (!s) return '';
   return String(s)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+    .replace(/&/g,  '&amp;')
+    .replace(/</g,  '&lt;')
+    .replace(/>/g,  '&gt;')
+    .replace(/"/g,  '&quot;');
 }
 
 // â”€â”€ FILTROS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -308,7 +306,6 @@ function abrirCrear() {
 function abrirEditar(id) {
   const a = _alertas.find(x => x.id === id);
   if (!a) return;
-  // Solo el creador puede editar
   if (a.id_creador !== USUARIO.id) return;
   _editandoId = id;
   modalTitulo.textContent = 'Editar Alerta';
@@ -420,17 +417,18 @@ async function eliminarAlerta(id) {
 
 // â”€â”€ POPUP RECORDATORIO AL LOGIN â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function mostrarRecordatorioLogin() {
-  if (sessionStorage.getItem('rec_mostrado')) return;
+  const flagKey = `rec_mostrado_${USUARIO.id}_${new Date().toISOString().slice(0, 10)}`;
+  if (localStorage.getItem(flagKey)) return;
 
   try {
     const r = await fetch(`${API}/pendientes`, { headers: headers() });
     const j = await r.json();
     if (!j.ok || !j.data.length) return;
 
-    sessionStorage.setItem('rec_mostrado', '1');
+    localStorage.setItem(flagKey, '1');
 
     recordatorioLista.innerHTML = j.data.map(a => {
-      const u    = urgencia(a.dias_restantes, false);
+      const u     = urgencia(a.dias_restantes, false);
       const fecha = new Date(a.fecha_vence).toLocaleDateString('es-CL', {
         day: '2-digit', month: 'short', year: 'numeric',
       });
@@ -466,9 +464,7 @@ async function mostrarRecordatorioLogin() {
 
     recordatorioOv.classList.add('recordatorio-overlay--visible');
     recordatorioOv.setAttribute('aria-hidden', 'false');
-  } catch {
-    // fallo silencioso
-  }
+  } catch { /* fallo silencioso — recordatorio es opcional */ }
 }
 
 function cerrarRecordatorio() {
