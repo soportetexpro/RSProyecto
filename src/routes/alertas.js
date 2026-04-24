@@ -1,4 +1,4 @@
-'use strict';
+﻿'use strict';
 /**
  * routes/alertas.js  v2.1
  * CRUD completo para el módulo de Alertas y Recordatorios.
@@ -23,9 +23,9 @@ function diasRestantes(fechaVence) {
 }
 
 /**
- * Determina si hay que mostrar el recordatorio según frecuencia.
- * @param {string|null} ultimoRec  — fecha ISO 'YYYY-MM-DD' o null
- * @param {string} frecuencia      — 'siempre'|'diaria'|'semanal'|'quincenal'
+ * Determina si hay que mostrar el recordatorio segÃºn frecuencia.
+ * @param {string|null} ultimoRec  â€” fecha ISO 'YYYY-MM-DD' o null
+ * @param {string} frecuencia      â€” 'siempre'|'diaria'|'semanal'|'quincenal'
  * @returns {boolean}
  */
 function debeRecordar(ultimoRec, frecuencia) {
@@ -39,7 +39,7 @@ function debeRecordar(ultimoRec, frecuencia) {
   return true;
 }
 
-// ── GET /api/alertas ────────────────────────────────────────────────
+// â”€â”€ GET /api/alertas â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 router.get('/', async (req, res) => {
   const uid = req.usuario.id;
   try {
@@ -83,8 +83,8 @@ router.get('/', async (req, res) => {
     }));
 
     res.json({ ok: true, data });
-  } catch (_e) {
-    console.error('[alertas GET]', _e);
+  } catch (e) {
+    console.error('[alertas GET]', e);
     res.status(500).json({ ok: false, error: 'Error al obtener alertas' });
   }
 });
@@ -111,7 +111,7 @@ router.get('/contador', async (req, res) => {
         )
     `, [uid, uid, uid]);
     res.json({ ok: true, total });
-  } catch (_e) {
+  } catch {
     res.status(500).json({ ok: false, error: 'Error al obtener contador' });
   }
 });
@@ -185,25 +185,25 @@ router.get('/pendientes', async (req, res) => {
       }));
 
     res.json({ ok: true, data });
-  } catch (_e) {
-    console.error('[alertas pendientes]', _e);
+  } catch (e) {
+    console.error('[alertas pendientes]', e);
     res.status(500).json({ ok: false, error: 'Error al obtener alertas pendientes' });
   }
 });
 
-// ── GET /api/alertas/usuarios ──────────────────────────────────────
+// â”€â”€ GET /api/alertas/usuarios â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 router.get('/usuarios', async (req, res) => {
   try {
     const [rows] = await db.query(
       `SELECT id, nombre, area FROM usuarios WHERE activo = 1 ORDER BY nombre ASC`
     );
     res.json({ ok: true, data: rows });
-  } catch (_e) {
+  } catch {
     res.status(500).json({ ok: false, error: 'Error al obtener usuarios' });
   }
 });
 
-// ── POST /api/alertas ────────────────────────────────────────────────
+// â”€â”€ POST /api/alertas â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 router.post('/', async (req, res) => {
   const uid = req.usuario.id;
   const {
@@ -213,11 +213,11 @@ router.post('/', async (req, res) => {
   } = req.body;
 
   if (!titulo || !fecha_vence)
-    return res.status(400).json({ ok: false, error: 'Título y fecha de vencimiento son obligatorios' });
+    return res.status(400).json({ ok: false, error: 'TÃ­tulo y fecha de vencimiento son obligatorios' });
   if (!['personal', 'grupal'].includes(tipo))
-    return res.status(400).json({ ok: false, error: 'Tipo inválido' });
+    return res.status(400).json({ ok: false, error: 'Tipo invÃ¡lido' });
   if (!['siempre','diaria','semanal','quincenal'].includes(frecuencia_recordatorio))
-    return res.status(400).json({ ok: false, error: 'Frecuencia inválida' });
+    return res.status(400).json({ ok: false, error: 'Frecuencia invÃ¡lida' });
 
   const conn = await db.getConnection();
   try {
@@ -237,16 +237,16 @@ router.post('/', async (req, res) => {
     }
     await conn.commit();
     res.json({ ok: true, id: idAlerta });
-  } catch (_e) {
+  } catch (e) {
     await conn.rollback();
-    console.error('[alertas POST]', _e);
+    console.error('[alertas POST]', e);
     res.status(500).json({ ok: false, error: 'Error al crear alerta' });
   } finally {
     conn.release();
   }
 });
 
-// ── PUT /api/alertas/:id ───────────────────────────────────────────────
+// â”€â”€ PUT /api/alertas/:id â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 router.put('/:id', async (req, res) => {
   const uid = req.usuario.id;
   const id  = Number(req.params.id);
@@ -281,16 +281,16 @@ router.put('/:id', async (req, res) => {
     }
     await conn.commit();
     res.json({ ok: true });
-  } catch (_e) {
+  } catch (e) {
     await conn.rollback();
-    console.error('[alertas PUT]', _e);
+    console.error('[alertas PUT]', e);
     res.status(500).json({ ok: false, error: 'Error al editar alerta' });
   } finally {
     conn.release();
   }
 });
 
-// ── PATCH /api/alertas/:id/completar ─────────────────────────────────
+// â”€â”€ PATCH /api/alertas/:id/completar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 router.patch('/:id/completar', async (req, res) => {
   const uid = req.usuario.id;
   const id  = Number(req.params.id);
@@ -301,12 +301,12 @@ router.patch('/:id/completar', async (req, res) => {
       return res.status(403).json({ ok: false, error: 'Sin permisos' });
     await db.query(`UPDATE alertas SET completada=1, activa=0 WHERE id=?`, [id]);
     res.json({ ok: true });
-  } catch (_e) {
+  } catch {
     res.status(500).json({ ok: false, error: 'Error al completar alerta' });
   }
 });
 
-// ── PATCH /api/alertas/:id/desactivar ────────────────────────────────
+// â”€â”€ PATCH /api/alertas/:id/desactivar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 router.patch('/:id/desactivar', async (req, res) => {
   const uid = req.usuario.id;
   const id  = Number(req.params.id);
@@ -317,12 +317,12 @@ router.patch('/:id/desactivar', async (req, res) => {
       return res.status(403).json({ ok: false, error: 'Sin permisos' });
     await db.query(`UPDATE alertas SET activa=0 WHERE id=?`, [id]);
     res.json({ ok: true });
-  } catch (_e) {
+  } catch {
     res.status(500).json({ ok: false, error: 'Error al desactivar alerta' });
   }
 });
 
-// ── PATCH /api/alertas/:id/descartar ────────────────────────────────
+// â”€â”€ PATCH /api/alertas/:id/descartar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 router.patch('/:id/descartar', async (req, res) => {
   const uid = req.usuario.id;
   const id  = Number(req.params.id);
@@ -336,12 +336,12 @@ router.patch('/:id/descartar', async (req, res) => {
         ultimo_recordatorio = VALUES(ultimo_recordatorio)
     `, [id, uid, hoy, hoy]);
     res.json({ ok: true });
-  } catch (_e) {
+  } catch {
     res.status(500).json({ ok: false, error: 'Error al descartar alerta' });
   }
 });
 
-// ── PATCH /api/alertas/:id/silenciar ────────────────────────────────
+// â”€â”€ PATCH /api/alertas/:id/silenciar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 router.patch('/:id/silenciar', async (req, res) => {
   const uid = req.usuario.id;
   const id  = Number(req.params.id);
@@ -352,12 +352,12 @@ router.patch('/:id/silenciar', async (req, res) => {
       ON DUPLICATE KEY UPDATE silenciada = 1
     `, [id, uid]);
     res.json({ ok: true });
-  } catch (_e) {
+  } catch {
     res.status(500).json({ ok: false, error: 'Error al silenciar alerta' });
   }
 });
 
-// ── DELETE /api/alertas/:id ───────────────────────────────────────────────
+// â”€â”€ DELETE /api/alertas/:id â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 router.delete('/:id', async (req, res) => {
   const uid = req.usuario.id;
   const id  = Number(req.params.id);
@@ -368,7 +368,7 @@ router.delete('/:id', async (req, res) => {
       return res.status(403).json({ ok: false, error: 'Sin permisos para eliminar' });
     await db.query(`DELETE FROM alertas WHERE id=?`, [id]);
     res.json({ ok: true });
-  } catch (_e) {
+  } catch {
     res.status(500).json({ ok: false, error: 'Error al eliminar alerta' });
   }
 });

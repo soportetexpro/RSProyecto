@@ -1,14 +1,11 @@
-'use strict';
+﻿'use strict';
 
 /**
  * dashboard.js — RSProyecto Texpro
  *
- * Controlador frontend del módulo Dashboard.
- *
  * 2026-04-23: filtros client-side en tabla Ventas del Mes
- *   - filtroVendedorVentas: select que filtra por CodVendedor
- *   - tipoToggles: botones F / N / D (multi-selección) que filtran por Tipo
- *   - Ambos operan sobre ventasMesData junto con busquedaVentas
+ * 2026-04-24: módulo Alertas agregado al sidebar — accesible para TODOS los usuarios
+ * 2026-04-24: fix(lint) — eliminada función setHTML no utilizada
  */
 
 (function () {
@@ -23,7 +20,6 @@
   let carteraData = { activos: [], inactivos: [], recuperados: [] };
   let carteraRendered = { activo: false, inactivo: false, recuperado: false };
 
-  // Estado de filtros de la tabla Ventas del Mes
   let filtroVendedorActivo = '';
   let tiposActivos = new Set(['F', 'N', 'D']);
 
@@ -34,15 +30,9 @@
     return new Intl.NumberFormat('es-CL', { style:'currency', currency:'CLP', maximumFractionDigits:0 }).format(Number(v));
   }
 
-  // ── helpers seguros contra null ──────────────────────────────────────────
   function setText(id, value) {
     const el = document.getElementById(id);
     if (el) el.textContent = value;
-  }
-
-  function setHTML(id, value) {
-    const el = document.getElementById(id);
-    if (el) el.innerHTML = value;
   }
 
   function setStyle(id, prop, value) {
@@ -104,6 +94,8 @@
   }
 
   // ── Sidebar ───────────────────────────────────────────────────────────────
+  // area: null  → visible para TODOS los usuarios sin excepción
+  // area: [...]  → visible solo para las áreas listadas
   const MODULOS = [
     { nombre:'Ventas',        icon:'📊', url:'../ventas/index.html',       area:['ventas','gerencia'] },
     { nombre:'Facturación',   icon:'🧾', url:'../facturacion/index.html',  area:['facturacion','contabilidad','gerencia'] },
@@ -114,6 +106,7 @@
     { nombre:'RRHH',          icon:'👥', url:'../rrhh/index.html',         area:['rrhh','gerencia'] },
     { nombre:'Contabilidad',  icon:'📜', url:'../contabilidad/index.html', area:['contabilidad','gerencia'] },
     { nombre:'Administración',icon:'🔧', url:'../admin/index.html',        area:['admin'] },
+    { nombre:'Alertas',       icon:'🔔', url:'../alertas/index.html',      area: null },
   ];
 
   function cargarSidebar(usuario) {
@@ -129,11 +122,11 @@
     setText('welcomeSubtitle', `Área: ${usuario.area||'Sistema'} — Texpro`);
 
     const nav      = document.getElementById('sidebarNav');
-    const visibles = MODULOS.filter(m =>
-      usuario.is_admin
-        ? m.area.includes('admin') || true
-        : m.area.includes(usuario.area)
-    );
+    const visibles = MODULOS.filter(m => {
+      if (m.area === null) return true;
+      if (usuario.is_admin) return true;
+      return m.area.includes(usuario.area);
+    });
     if (nav) nav.innerHTML = `<span class="nav-section-title">NAVEGACIÓN</span>
       <a class="nav-item active" href="#">
         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
@@ -282,39 +275,29 @@
       const data = await res.json();
       if (!data.ok) throw new Error(data.error);
       ventasMesData = data.ventas || [];
-
-      // Reconstruir opciones del select de vendedor
       poblarFiltroVendedor(ventasMesData);
-
       aplicarFiltrosVentasMes();
     } catch (err) { console.error('[cargarVentasMes]', err); }
   }
 
-  /** Puebla el <select id="filtroVendedorVentas"> con los vendedores únicos del dataset */
   function poblarFiltroVendedor(lista) {
     const sel = document.getElementById('filtroVendedorVentas');
     if (!sel) return;
     const codigos = [...new Set(lista.map(v => v.CodVendedor).filter(Boolean))].sort();
-    // conservar selección actual si sigue siendo válida
     const actual = filtroVendedorActivo;
     sel.innerHTML = '<option value="">Todos los vendedores</option>' +
       codigos.map(c => `<option value="${c}"${c === actual ? ' selected' : ''}>${c}</option>`).join('');
-    // si la selección anterior ya no existe en el nuevo dataset, resetear
     if (actual && !codigos.includes(actual)) filtroVendedorActivo = '';
   }
 
-  /** Aplica los tres filtros (texto, vendedor, tipo) sobre ventasMesData y renderiza */
   function aplicarFiltrosVentasMes() {
-    const q          = (document.getElementById('busquedaVentas')?.value || '').toLowerCase();
-    const vendedor   = filtroVendedorActivo;
-    const tipos      = tiposActivos;
+    const q        = (document.getElementById('busquedaVentas')?.value || '').toLowerCase();
+    const vendedor = filtroVendedorActivo;
+    const tipos    = tiposActivos;
 
     const lista = ventasMesData.filter(v => {
-      // filtro texto
       if (q && !String(v.Folio||'').toLowerCase().includes(q) && !String(v.cliente||'').toLowerCase().includes(q)) return false;
-      // filtro vendedor
       if (vendedor && v.CodVendedor !== vendedor) return false;
-      // filtro tipo — el campo Tipo viene del API; si no viene, se deja pasar
       if (v.Tipo && !tipos.has(v.Tipo)) return false;
       return true;
     });
@@ -728,23 +711,19 @@
     if (esCoordinador(usuario)) await iniciarPanelCoordinador();
     else                        await iniciarPanelCompartidos();
 
-    // ── Filtro texto búsqueda
     const bVentas = document.getElementById('busquedaVentas');
     if (bVentas) bVentas.addEventListener('input', aplicarFiltrosVentasMes);
 
-    // ── Filtro por vendedor
     const selVend = document.getElementById('filtroVendedorVentas');
     if (selVend) selVend.addEventListener('change', e => {
       filtroVendedorActivo = e.target.value;
       aplicarFiltrosVentasMes();
     });
 
-    // ── Filtro por tipo (toggles F / N / D)
     document.querySelectorAll('.tipo-toggle').forEach(btn => {
       btn.addEventListener('click', () => {
         const tipo = btn.dataset.tipo;
         if (tiposActivos.has(tipo)) {
-          // no dejar que se desactiven todos
           if (tiposActivos.size > 1) {
             tiposActivos.delete(tipo);
             btn.classList.remove('tipo-toggle--activo');
@@ -772,3 +751,4 @@
   else init();
 
 })();
+
