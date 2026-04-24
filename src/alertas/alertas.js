@@ -1,10 +1,14 @@
-'use strict';
+﻿'use strict';
 /**
- * alertas.js v2 — Frontend del módulo de Alertas y Recordatorios
+ * alertas.js v2 â€” Frontend del mÃ³dulo de Alertas y Recordatorios
  * Texpro RSProyecto
- *
- * fix: token y usuario leídos desde localStorage (consistente con el resto del sistema)
- * fix(lint): catch vacíos corregidos — no-empty / no-unused-vars
+ * Cambios v2:
+ *  - Campo frecuencia_recordatorio en formulario
+ *  - Filtro "Propias" y "Asignadas a mí"
+ *  - Badge "Asignada por [nombre]" en cards de terceros
+ *  - Badge en sidebar con contador de alertas próximas
+ *  - Token y usuario leídos desde localStorage
+ *  - Catch vacíos corregidos
  */
 
 const TOKEN   = localStorage.getItem('token');
@@ -53,7 +57,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   initModal();
 });
 
-// ── SIDEBAR / HEADER ─────────────────────────────────────────────────
+// â”€â”€ SIDEBAR / HEADER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function initSidebar() {
   const nav = document.getElementById('sidebarNav');
   if (!nav || !USUARIO) return;
@@ -96,6 +100,7 @@ function initSidebar() {
     document.getElementById('mainWrapper').classList.toggle('main-wrapper--expanded');
   });
 
+  // Cargar badge de alertas próximas
   cargarBadgeAlertas();
 }
 
@@ -123,7 +128,7 @@ function initHeader() {
   });
 }
 
-// ── CARGAR DATOS ─────────────────────────────────────────────────
+// â”€â”€ CARGAR DATOS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function cargarAlertas() {
   try {
     const r = await fetch(API, { headers: headers() });
@@ -132,7 +137,7 @@ async function cargarAlertas() {
     _alertas = j.data;
     renderAlertas();
   } catch (e) {
-    grid.innerHTML = `<div class="alertas-empty"><div class="alertas-empty-icon">⚠️</div><p class="alertas-empty-txt">Error al cargar alertas: ${e.message}</p></div>`;
+    grid.innerHTML = `<div class="alertas-empty"><div class="alertas-empty-icon">âš ï¸</div><p class="alertas-empty-txt">Error al cargar alertas: ${e.message}</p></div>`;
   }
 }
 
@@ -144,15 +149,15 @@ async function cargarUsuarios() {
   } catch { /* sin usuarios disponibles — fallo silencioso */ }
 }
 
-// ── RENDER GRID ───────────────────────────────────────────────────
+// â”€â”€ RENDER GRID â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function renderAlertas() {
   const filtradas = filtrarAlertas(_alertas, _filtroActual);
 
   if (!filtradas.length) {
     grid.innerHTML = `
       <div class="alertas-empty">
-        <div class="alertas-empty-icon">🔔</div>
-        <p class="alertas-empty-txt">No hay alertas en este filtro.<br>¡Crea una nueva!</p>
+        <div class="alertas-empty-icon">ðŸ””</div>
+        <p class="alertas-empty-txt">No hay alertas en este filtro.<br>Â¡Crea una nueva!</p>
       </div>`;
     return;
   }
@@ -192,18 +197,18 @@ function urgencia(dias, completada) {
 }
 
 function labelDias(dias, completada) {
-  if (completada) return '✅ Completada';
-  if (dias < 0)   return `Venció hace ${Math.abs(dias)} día${Math.abs(dias) !== 1 ? 's' : ''}`;
-  if (dias === 0) return '⚠️ Vence HOY';
-  if (dias === 1) return '⚠️ Vence mañana';
-  return `${dias} días restantes`;
+  if (completada) return 'âœ… Completada';
+  if (dias < 0)   return `VenciÃ³ hace ${Math.abs(dias)} dÃ­a${Math.abs(dias) !== 1 ? 's' : ''}`;
+  if (dias === 0) return 'âš ï¸ Vence HOY';
+  if (dias === 1) return 'âš ï¸ Vence maÃ±ana';
+  return `${dias} dÃ­as restantes`;
 }
 
 const FREC_LABEL = {
-  diaria:    '🔄 Diaria',
-  semanal:   '🔄 Semanal',
-  quincenal: '🔄 Quincenal',
-  manual:    '🔕 Manual',
+  diaria:    'ðŸ”„ Diaria',
+  semanal:   'ðŸ”„ Semanal',
+  quincenal: 'ðŸ”„ Quincenal',
+  manual:    'ðŸ”• Manual',
 };
 
 function cardHTML(a) {
@@ -213,11 +218,11 @@ function cardHTML(a) {
   const frecLabel = FREC_LABEL[a.frecuencia_recordatorio] || '';
 
   const badgeOrigen = esMio
-    ? `<span class="alerta-origen-badge alerta-origen-badge--propia">🔒 Propia</span>`
-    : `<span class="alerta-origen-badge alerta-origen-badge--asignada">📌 Asignada por ${escHtml(a.nombre_creador)}</span>`;
+    ? `<span class="alerta-origen-badge alerta-origen-badge--propia">ðŸ”’ Propia</span>`
+    : `<span class="alerta-origen-badge alerta-origen-badge--asignada">ðŸ“Œ Asignada por ${escHtml(a.nombre_creador)}</span>`;
 
   const botonesAccion = a.completada
-    ? `<button class="btn-accion btn-accion--eliminar" data-accion="eliminar" data-id="${a.id}">🗑 Eliminar</button>`
+    ? `<button class="btn-accion btn-accion--eliminar" data-accion="eliminar" data-id="${a.id}">ðŸ—‘ Eliminar</button>`
     : `
       ${esMio ? `<button class="btn-accion btn-accion--completar"  data-accion="completar"  data-id="${a.id}">✅ Completar</button>` : ''}
       ${esMio ? `<button class="btn-accion btn-accion--editar"     data-accion="editar"     data-id="${a.id}">✏️ Editar</button>`    : ''}
@@ -235,7 +240,7 @@ function cardHTML(a) {
             <div class="alerta-titulo-card" title="${escHtml(a.titulo)}">${escHtml(a.titulo)}</div>
             <div class="alerta-badges-row">
               <span class="alerta-tipo-badge alerta-tipo-badge--${a.tipo}">
-                ${a.tipo === 'grupal' ? '👥 Grupal' : '🔒 Personal'}
+                ${a.tipo === 'grupal' ? 'ðŸ‘¥ Grupal' : 'ðŸ”’ Personal'}
               </span>
               ${badgeOrigen}
             </div>
@@ -244,12 +249,12 @@ function cardHTML(a) {
         </div>
         ${a.descripcion ? `<p class="alerta-desc">${escHtml(a.descripcion)}</p>` : ''}
         <div class="alerta-meta">
-          <span>📅 Vence: <strong>${fecha}</strong></span>
-          <span>👤 ${escHtml(a.nombre_creador)}</span>
+          <span>ðŸ“… Vence: <strong>${fecha}</strong></span>
+          <span>ðŸ‘¤ ${escHtml(a.nombre_creador)}</span>
           ${frecLabel ? `<span class="alerta-frec-badge">${frecLabel}</span>` : ''}
         </div>
         ${a.tipo === 'grupal' && a.destinatarios_nombres
-          ? `<div class="alerta-destinatarios">👥 ${escHtml(a.destinatarios_nombres)}</div>`
+          ? `<div class="alerta-destinatarios">ðŸ‘¥ ${escHtml(a.destinatarios_nombres)}</div>`
           : ''}
       </div>
       <div class="alerta-card-acciones">${botonesAccion}</div>
@@ -265,7 +270,7 @@ function escHtml(s) {
     .replace(/"/g,  '&quot;');
 }
 
-// ── FILTROS ─────────────────────────────────────────────────────────
+// â”€â”€ FILTROS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function initFiltros() {
   document.querySelectorAll('.filtro-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -277,7 +282,7 @@ function initFiltros() {
   });
 }
 
-// ── MODAL CREAR / EDITAR ───────────────────────────────────────────
+// â”€â”€ MODAL CREAR / EDITAR â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function initModal() {
   btnNueva.addEventListener('click', abrirCrear);
   btnCerrar.addEventListener('click', cerrarModal);
@@ -379,13 +384,13 @@ async function guardarAlerta(e) {
   }
 }
 
-// ── ACCIONES ─────────────────────────────────────────────────────
+// â”€â”€ ACCIONES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function accionAlerta(id, accion) {
   const msgs = {
-    completar:  '¿Marcar esta alerta como completada?',
-    desactivar: '¿Desactivar esta alerta? Se ocultará pero no se eliminará.',
+    completar:  'Â¿Marcar esta alerta como completada?',
+    desactivar: 'Â¿Desactivar esta alerta? Se ocultarÃ¡ pero no se eliminarÃ¡.',
   };
-  if (!confirm(msgs[accion] || '¿Confirmar?')) return;
+  if (!confirm(msgs[accion] || 'Â¿Confirmar?')) return;
   try {
     const r = await fetch(`${API}/${id}/${accion}`, { method: 'PATCH', headers: headers() });
     const j = await r.json();
@@ -398,7 +403,7 @@ async function accionAlerta(id, accion) {
 }
 
 async function eliminarAlerta(id) {
-  if (!confirm('¿Eliminar esta alerta permanentemente? Esta acción no se puede deshacer.')) return;
+  if (!confirm('Â¿Eliminar esta alerta permanentemente? Esta acciÃ³n no se puede deshacer.')) return;
   try {
     const r = await fetch(`${API}/${id}`, { method: 'DELETE', headers: headers() });
     const j = await r.json();
@@ -410,7 +415,7 @@ async function eliminarAlerta(id) {
   }
 }
 
-// ── POPUP RECORDATORIO AL LOGIN ─────────────────────────────────
+// â”€â”€ POPUP RECORDATORIO AL LOGIN â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function mostrarRecordatorioLogin() {
   const flagKey = `rec_mostrado_${USUARIO.id}_${new Date().toISOString().slice(0, 10)}`;
   if (localStorage.getItem(flagKey)) return;
@@ -428,7 +433,7 @@ async function mostrarRecordatorioLogin() {
         day: '2-digit', month: 'short', year: 'numeric',
       });
       const badgeOrigen = a.id_creador !== USUARIO.id
-        ? `<span class="rec-asignada-badge">📌 Asignada por ${escHtml(a.nombre_creador)}</span>`
+        ? `<span class="rec-asignada-badge">ðŸ“Œ Asignada por ${escHtml(a.nombre_creador)}</span>`
         : '';
       return `
         <li class="rec-item rec-item--${u}" id="rec-${a.id}">
@@ -438,8 +443,8 @@ async function mostrarRecordatorioLogin() {
           </div>
           ${badgeOrigen}
           ${a.descripcion ? `<p class="rec-desc">${escHtml(a.descripcion)}</p>` : ''}
-          <span class="rec-fecha">📅 Vence: ${fecha}</span>
-          <button class="btn-no-mostrar" data-id="${a.id}">No mostrar más hoy</button>
+          <span class="rec-fecha">ðŸ“… Vence: ${fecha}</span>
+          <button class="btn-no-mostrar" data-id="${a.id}">No mostrar mÃ¡s hoy</button>
         </li>`;
     }).join('');
 
@@ -469,3 +474,4 @@ function cerrarRecordatorio() {
 
 btnCerrarRec?.addEventListener('click', cerrarRecordatorio);
 btnIrAlertas?.addEventListener('click', cerrarRecordatorio);
+

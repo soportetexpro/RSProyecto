@@ -1,4 +1,4 @@
-'use strict';
+﻿'use strict';
 
 /**
  * routes/dashboard.js
@@ -43,6 +43,7 @@ router.use(requireAuth);
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
+// eslint-disable-next-line no-unused-vars
 function RTRIM(s) { return s ? s.toString().trimEnd() : ''; }
 
 function getCodigos(usuario) {
@@ -632,3 +633,4 @@ router.get('/asignados', async (req, res) => {
 });
 
 module.exports = router;
+

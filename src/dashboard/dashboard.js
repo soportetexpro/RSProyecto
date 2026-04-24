@@ -1,4 +1,4 @@
-'use strict';
+﻿'use strict';
 
 /**
  * dashboard.js — RSProyecto Texpro
@@ -751,3 +751,4 @@
   else init();
 
 })();
+
