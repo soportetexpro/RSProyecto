@@ -1,4 +1,4 @@
-﻿'use strict';
+'use strict';
 
 /**
  * routes/dashboard.js
@@ -24,6 +24,13 @@
  *   /vendedores — INNER JOIN iw_tprod reemplazado por LEFT JOIN para evitar
  *   que productos sin registro en el catálogo descarten filas completas.
  *   ISNULL() protege los cálculos de PrecioVta cuando el JOIN no matchea.
+ *
+ * FIX 2026-04-27:
+ *   /ventas-mes — reemplaza AVG(PreUniMB) por descuento ponderado real:
+ *   (1 - SUM(TotLinea) / SUM(base_lista)) × 100
+ *   donde base_lista respeta canal 301 (factor 1.10) igual que /vendedores.
+ *   Cuadra con reporte físico en folios con múltiples productos y descuentos
+ *   distintos por línea (ej: EULEN 6,24%, Serviphar ~22%).
  */
 
 const express             = require('express');
@@ -344,6 +351,11 @@ router.get('/vendedores-todos', async (req, res) => {
 });
 
 // ── GET /api/dashboard/ventas-mes ──────────────────────────────────────
+// FIX 2026-04-27: descuento ponderado real por folio.
+//   Reemplaza AVG(PreUniMB) que promediaba sin ponderar por monto de línea.
+//   Nueva fórmula: (1 - SUM(TotLinea) / SUM(base_lista)) × 100
+//   base_lista respeta canal 301 (factor ×1.10) igual que /vendedores.
+//   Fallback cuando PrecioVta=0: usa TotLinea → descuento=0% para esa línea.
 router.get('/ventas-mes', async (req, res) => {
   const usuario = req.usuario, codigos = getCodigos(usuario), hoy = new Date();
   const { validarMesAnio } = require('../utils/stringHelpers');
@@ -358,25 +370,75 @@ router.get('/ventas-mes', async (req, res) => {
     const foliosCompSet  = foliosComp.length ? `h.Folio IN (${foliosComp.join(',')})` : `1=0`;
     const pool = await getSoftlandPool();
     const result = await pool.request().query(`
-      SELECT 
+      SELECT
         h.Folio,
-        CONVERT(varchar, h.Fecha, 103) AS fecha_formato,
-        c.NomAux                       AS cliente,
+        CONVERT(varchar, h.Fecha, 103)                          AS fecha_formato,
+        c.NomAux                                                AS cliente,
         h.CodVendedor,
-        SUM(m.TotLinea)                AS monto,
-        ROUND(AVG(
-          CASE WHEN m.PreUniMB > 0 AND m.CantFacturada > 0
-               THEN (m.PreUniMB - (m.TotLinea / m.CantFacturada)) / m.PreUniMB * 100
-               ELSE 0 END), 2)        AS pct_descuento,
-        CASE WHEN ${foliosCompSet} THEN 1 ELSE 0 END AS es_compartido
+        h.Tipo,
+
+        -- Monto cobrado real del folio
+        SUM(m.TotLinea)                                         AS monto,
+
+        -- Neto lista ponderado respetando canal 301 (factor ×1.10)
+        SUM(
+          CASE
+            WHEN cl.CodCan = '301' AND ISNULL(t.PrecioVta, 0) > 0
+              THEN t.PrecioVta * 1.10 * m.CantFacturada
+            WHEN ISNULL(t.PrecioVta, 0) > 0
+              THEN t.PrecioVta * m.CantFacturada
+            ELSE m.TotLinea
+          END
+        )                                                       AS neto_lista,
+
+        -- % Descuento real ponderado del folio completo
+        ROUND(
+          CASE
+            WHEN SUM(
+              CASE
+                WHEN cl.CodCan = '301' AND ISNULL(t.PrecioVta, 0) > 0
+                  THEN t.PrecioVta * 1.10 * m.CantFacturada
+                WHEN ISNULL(t.PrecioVta, 0) > 0
+                  THEN t.PrecioVta * m.CantFacturada
+                ELSE m.TotLinea
+              END
+            ) > 0
+            THEN (
+              1 - (
+                SUM(m.TotLinea) /
+                SUM(
+                  CASE
+                    WHEN cl.CodCan = '301' AND ISNULL(t.PrecioVta, 0) > 0
+                      THEN t.PrecioVta * 1.10 * m.CantFacturada
+                    WHEN ISNULL(t.PrecioVta, 0) > 0
+                      THEN t.PrecioVta * m.CantFacturada
+                    ELSE m.TotLinea
+                  END
+                )
+              )
+            ) * 100
+            ELSE 0
+          END
+        , 2)                                                    AS pct_descuento,
+
+        CASE WHEN ${foliosCompSet} THEN 1 ELSE 0 END           AS es_compartido,
+        COUNT(m.Linea)                                          AS cant_lineas
+
       FROM [PRODIN].[softland].[iw_gsaen] h
-      LEFT JOIN [PRODIN].[softland].[cwtauxi] c ON c.CodAux = h.CodAux
-      LEFT JOIN [PRODIN].[softland].[iw_gmovi] m ON m.NroInt = h.NroInt AND m.Tipo = h.Tipo
+      LEFT JOIN [PRODIN].[softland].[cwtauxi]  c  ON c.CodAux  = h.CodAux
+      LEFT JOIN [PRODIN].[softland].[cwtcvcl]  cl ON cl.CodAux = h.CodAux
+      LEFT JOIN [PRODIN].[softland].[iw_gmovi] m  ON m.NroInt  = h.NroInt AND m.Tipo = h.Tipo
+      LEFT JOIN [PRODIN].[softland].[iw_tprod] t  ON t.CodProd = m.CodProd
+
       WHERE (h.CodVendedor IN (${mssqlIn(codigos)}) ${extraFolios})
-        AND MONTH(h.Fecha) = ${mes} AND YEAR(h.Fecha) = ${anio}
-        AND h.Tipo IN ('F','N','D') AND h.Estado <> 'A'
-      GROUP BY h.Folio, h.Fecha, c.NomAux, h.CodVendedor, h.NroInt
-      ORDER BY h.Fecha DESC
+        AND MONTH(h.Fecha) = ${mes}
+        AND YEAR(h.Fecha)  = ${anio}
+        AND h.Tipo    IN ('F','N','D')
+        AND h.Estado  <>  'A'
+
+      GROUP BY h.Folio, h.Fecha, h.Tipo, c.NomAux, h.CodVendedor, h.NroInt
+
+      ORDER BY h.Fecha DESC, h.Folio
     `);
     const ventas = result.recordset.map(v => {
       if (v.es_compartido) {
@@ -633,4 +695,3 @@ router.get('/asignados', async (req, res) => {
 });
 
 module.exports = router;
-
