@@ -36,10 +36,14 @@
  *   /vendedores — lógica de compartidos corregida por ROL:
  *   - Vendedor PRINCIPAL (cede el folio): su total incluye solo el porcentaje
  *     que RETIENE. Si comparte 50% de $5.312.490 → suma $2.656.245.
- *   - Vendedor RECEPTOR (recibe el folio): su total incluye el monto REAL de
- *     Softland completo ($5.312.490), sin aplicar porcentaje.
- *   Antes: el folio completo se sumaba al dueño Softland (principal) y el
- *   receptor no recibía nada → totales erróneos para ambos.
+ *   - Vendedor RECEPTOR (recibe el folio): su total incluye SOLO el monto
+ *     que se le compartió (monto × porcentaje / 100 = $2.656.245).
+ *     NO el monto real completo de Softland.
+ *
+ * Ejemplo Marzo:
+ *   Norelbys (630) PRINCIPAL folio $5.312.490, comparte 50% a Claudia (454)
+ *   → Norelbys:  $5.312.490 × 50% = $2.656.245  (lo que retiene)
+ *   → Claudia:   $5.312.490 × 50% = $2.656.245  (lo que recibió)
  */
 
 const express             = require('express');
@@ -303,17 +307,16 @@ router.get('/evolucion', async (req, res) => {
 // ── GET /api/dashboard/vendedores ──────────────────────────────────────
 // FIX 2026-04-27 (b): lógica compartidos corregida por ROL.
 //
-// Problema anterior: el folio compartido se traía con OR h.Folio IN (...)
-// y al agrupar por h.CodVendedor el monto COMPLETO quedaba en el vendedor
-// dueño en Softland (principal), y el receptor no recibía nada.
+// Flujo real:
+//   - PRINCIPAL: vendedor dueño del folio en Softland que CEDE un % al receptor.
+//     → Su total acumula el % que RETIENE: monto × (100 - pct) / 100
+//   - RECEPTOR:  vendedor que RECIBE la asignación del principal.
+//     → Su total acumula SOLO el monto compartido: monto × pct / 100
+//     → NO el monto real completo del folio en Softland.
 //
-// Solución:
-//   1. La query SQL solo trae ventas PROPIAS de los vendedores (sin folios
-//      compartidos de ningún tipo — ni como principal ni como receptor).
-//   2. En Node.js se consultan TODOS los folios con compartidos del panel:
-//      - Para cada folio el PRINCIPAL suma (monto × (100-pct)/100)  → lo que retiene
-//      - Para cada folio el RECEPTOR  suma monto_real de Softland   → valor completo
-//   3. Los mapas de nombres se obtienen de cwtvend en la misma query SQL.
+// Ejemplo: Norelbys (630) folio $5.312.490, comparte 50% a Claudia (454)
+//   → Norelbys PRINCIPAL: $5.312.490 × 50% = $2.656.245  (retiene 50%)
+//   → Claudia  RECEPTOR:  $5.312.490 × 50% = $2.656.245  (recibe 50%)
 router.get('/vendedores', async (req, res) => {
   const usuario = req.usuario, codigos = getCodigos(usuario), hoy = new Date();
   const { validarMesAnio } = require('../utils/stringHelpers');
@@ -323,12 +326,13 @@ router.get('/vendedores', async (req, res) => {
   if (!codigos.length) return res.json({ ok: true, vendedores: [] });
 
   try {
-    // ── 1. Leer todos los compartidos donde alguno de los codigos es RECEPTOR
+    // ── 1. Folios donde alguno de los codigos es RECEPTOR (recibe compartido)
+    //       Trae folio + porcentaje que se le asignó
     const foliosRecibidosConPct = await getFoliosCompartidosConPct(codigos, mes, anio);
     const foliosRecibidosNums   = foliosRecibidosConPct.map(r => r.folio);
 
-    // ── 2. Leer todos los compartidos donde alguno de los codigos es PRINCIPAL
-    //       (folios que cedieron — necesitamos saber cuánto retienen)
+    // ── 2. Folios donde alguno de los codigos es PRINCIPAL (cede compartido)
+    //       Trae folio + porcentaje cedido + ambos códigos
     const [rowsPrincipal] = await db.pool.query(
       `SELECT folio, porcentaje, cod_vendedor_principal, cod_vendedor_compartido
        FROM factura_compartida
@@ -338,14 +342,14 @@ router.get('/vendedores', async (req, res) => {
     );
     const foliosCedidosNums = rowsPrincipal.map(r => Number(r.folio));
 
-    // ── 3. Todos los folios con compartidos (a excluir de la query SQL base)
+    // ── 3. Excluir TODOS los folios con compartidos de la query SQL base
     const todosFoliosComp = [...new Set([...foliosRecibidosNums, ...foliosCedidosNums])];
     const excludeComp     = todosFoliosComp.length
       ? `AND h.Folio NOT IN (${todosFoliosComp.join(',')})` : '';
 
     const pool = await getSoftlandPool();
 
-    // ── 4. Query SQL: solo ventas propias sin ningún folio compartido
+    // ── 4. Query SQL: solo ventas propias (sin ningún folio con compartidos)
     const resultPropias = await pool.request().query(`
       SELECT
         h.CodVendedor                                                             AS codVendedor,
@@ -364,7 +368,7 @@ router.get('/vendedores', async (req, res) => {
       GROUP BY h.CodVendedor
     `);
 
-    // ── 5. Construir mapa base de acumuladores por vendedor
+    // ── 5. Mapa base de acumuladores por vendedor
     const mapa = {};
     for (const cod of codigos) {
       mapa[cod] = { codVendedor: cod, nombreVendedor: cod, totalFolios: 0, totalVentasCobrado: 0, ventaRealLista: 0 };
@@ -379,28 +383,27 @@ router.get('/vendedores', async (req, res) => {
       };
     }
 
-    // ── 6. Procesar folios con compartidos solo si existen
+    // ── 6. Traer montos reales de Softland de todos los folios con compartidos
     if (todosFoliosComp.length) {
       const resultComp = await pool.request().query(`
         SELECT
           h.Folio,
-          h.CodVendedor                                        AS codVendedorSoftland,
-          ROUND(SUM(m.TotLinea), 0)                            AS totalLinea,
+          ROUND(SUM(m.TotLinea), 0)                                AS totalLinea,
           ROUND(SUM(ISNULL(t.PrecioVta, 0) * m.CantFacturada), 0) AS listaLinea
         FROM [PRODIN].[softland].[iw_gsaen] h
         INNER JOIN [PRODIN].[softland].[iw_gmovi] m ON m.NroInt = h.NroInt AND m.Tipo = h.Tipo
         LEFT  JOIN [PRODIN].[softland].[iw_tprod] t ON t.CodProd = m.CodProd
         WHERE h.Folio IN (${todosFoliosComp.join(',')})
           AND h.Tipo IN ('F','N','D') AND h.Estado <> 'A'
-        GROUP BY h.Folio, h.CodVendedor
+        GROUP BY h.Folio
       `);
 
       for (const row of resultComp.recordset) {
-        const folio      = Number(row.Folio);
-        const montoReal  = Number(row.totalLinea)  || 0;
-        const listaReal  = Number(row.listaLinea)  || 0;
+        const folio     = Number(row.Folio);
+        const montoReal = Number(row.totalLinea) || 0;
+        const listaReal = Number(row.listaLinea) || 0;
 
-        // ── Rol PRINCIPAL: vendedor que cedió el folio → retiene (100 - pct)
+        // ── ROL PRINCIPAL: cede el folio → acumula solo lo que RETIENE
         const infoPrincipal = rowsPrincipal.find(r => Number(r.folio) === folio);
         if (infoPrincipal && mapa[infoPrincipal.cod_vendedor_principal]) {
           const pctCedido  = Number(infoPrincipal.porcentaje);
@@ -411,10 +414,10 @@ router.get('/vendedores', async (req, res) => {
           acum.ventaRealLista     += Math.round(listaReal * pctRetiene / 100);
         }
 
-        // ── Rol RECEPTOR: vendedor que recibió el folio → monto REAL completo
+        // ── ROL RECEPTOR: recibe compartido → acumula SOLO el monto asignado (pct)
+        //    NO el monto real completo del folio en Softland
         const infoReceptor = foliosRecibidosConPct.find(r => r.folio === folio);
         if (infoReceptor) {
-          // Identificar qué código receptor visible en este panel recibe este folio
           const [recRows] = await db.pool.query(
             `SELECT cod_vendedor_compartido FROM factura_compartida
              WHERE folio = ? AND cod_vendedor_compartido IN (${codigos.map(() => '?').join(',')})
@@ -423,16 +426,17 @@ router.get('/vendedores', async (req, res) => {
           );
           const codReceptor = recRows[0]?.cod_vendedor_compartido;
           if (codReceptor && mapa[codReceptor]) {
+            const pctAsignado = Number(infoReceptor.porcentaje);
             const acum = mapa[codReceptor];
             acum.totalFolios        += 1;
-            acum.totalVentasCobrado += montoReal;
-            acum.ventaRealLista     += listaReal;
+            acum.totalVentasCobrado += Math.round(montoReal * pctAsignado / 100);
+            acum.ventaRealLista     += Math.round(listaReal * pctAsignado / 100);
           }
         }
       }
     }
 
-    // ── 7. Calcular pctDescuento final y ordenar
+    // ── 7. Calcular pctDescuento final y ordenar por totalVentasCobrado DESC
     const vendedores = Object.values(mapa)
       .map(v => ({
         ...v,
@@ -469,10 +473,6 @@ router.get('/vendedores-todos', async (req, res) => {
 
 // ── GET /api/dashboard/ventas-mes ──────────────────────────────────────
 // FIX 2026-04-27 (a): descuento ponderado real por folio.
-//   Reemplaza AVG(PreUniMB) que promediaba sin ponderar por monto de línea.
-//   Nueva fórmula: (1 - SUM(TotLinea) / SUM(base_lista)) × 100
-//   base_lista respeta canal 301 (factor ×1.10) igual que /vendedores.
-//   Fallback cuando PrecioVta=0: usa TotLinea → descuento=0% para esa línea.
 router.get('/ventas-mes', async (req, res) => {
   const usuario = req.usuario, codigos = getCodigos(usuario), hoy = new Date();
   const { validarMesAnio } = require('../utils/stringHelpers');
@@ -493,11 +493,7 @@ router.get('/ventas-mes', async (req, res) => {
         c.NomAux                                                AS cliente,
         h.CodVendedor,
         h.Tipo,
-
-        -- Monto cobrado real del folio
         SUM(m.TotLinea)                                         AS monto,
-
-        -- Neto lista ponderado respetando canal 301 (factor ×1.10)
         SUM(
           CASE
             WHEN cl.CodCan = '301' AND ISNULL(t.PrecioVta, 0) > 0
@@ -507,8 +503,6 @@ router.get('/ventas-mes', async (req, res) => {
             ELSE m.TotLinea
           END
         )                                                       AS neto_lista,
-
-        -- % Descuento real ponderado del folio completo
         ROUND(
           CASE
             WHEN SUM(
@@ -537,24 +531,19 @@ router.get('/ventas-mes', async (req, res) => {
             ELSE 0
           END
         , 2)                                                    AS pct_descuento,
-
         CASE WHEN ${foliosCompSet} THEN 1 ELSE 0 END           AS es_compartido,
         COUNT(m.Linea)                                          AS cant_lineas
-
       FROM [PRODIN].[softland].[iw_gsaen] h
       LEFT JOIN [PRODIN].[softland].[cwtauxi]  c  ON c.CodAux  = h.CodAux
       LEFT JOIN [PRODIN].[softland].[cwtcvcl]  cl ON cl.CodAux = h.CodAux
       LEFT JOIN [PRODIN].[softland].[iw_gmovi] m  ON m.NroInt  = h.NroInt AND m.Tipo = h.Tipo
       LEFT JOIN [PRODIN].[softland].[iw_tprod] t  ON t.CodProd = m.CodProd
-
       WHERE (h.CodVendedor IN (${mssqlIn(codigos)}) ${extraFolios})
         AND MONTH(h.Fecha) = ${mes}
         AND YEAR(h.Fecha)  = ${anio}
         AND h.Tipo    IN ('F','N','D')
         AND h.Estado  <>  'A'
-
       GROUP BY h.Folio, h.Fecha, h.Tipo, c.NomAux, h.CodVendedor, h.NroInt
-
       ORDER BY h.Fecha DESC, h.Folio
     `);
     const ventas = result.recordset.map(v => {
@@ -576,7 +565,6 @@ router.get('/detalle/:folio', async (req, res) => {
   let folio;
   try { folio = validateFolio(req.params.folio); }
   catch (err) { return res.status(400).json({ ok: false, error: err.message }); }
-
   try {
     const pool = await getSoftlandPool();
     const result = await pool.request().query(`
