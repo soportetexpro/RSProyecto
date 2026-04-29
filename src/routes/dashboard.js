@@ -38,6 +38,12 @@
  * Ejemplo Marzo — Claudia (454) ve en su tabla:
  *   454  Claudia  …ventas propias…
  *   630  Norelbys  $2.656.245   (compartido recibido 50% de $5.312.490)
+ *
+ * FEAT 2026-04-29:
+ *   /detalle/:folio — divisor_historico hardcodeado reemplazado por
+ *   getFactorHistorico(mes, anio) que lee tasas_descuentos en MySQL.
+ *   Ahora agregar un nuevo aumento en marzo solo requiere una fila en
+ *   la tabla tasas_descuentos, sin tocar código.
  */
 
 const express             = require('express');
@@ -52,6 +58,7 @@ const {
   validatePorcentaje,
   validateId,
 } = require('../utils/validators');
+const { getFactorHistorico, aplicarFactor } = require('../utils/precioHistorico');
 
 router.use(requireAuth);
 
@@ -310,12 +317,10 @@ router.get('/vendedores', async (req, res) => {
 
   try {
     // ── 1. Folios RECIBIDOS: el usuario es RECEPTOR
-    //       Trae folio + porcentaje asignado + cod_vendedor_principal
     const foliosRecibidosConPct = await getFoliosCompartidosConPct(codigos, mes, anio);
     const foliosRecibidosNums   = foliosRecibidosConPct.map(r => r.folio);
 
     // ── 2. Folios CEDIDOS: el usuario es PRINCIPAL
-    //       Trae folio + porcentaje cedido
     const [rowsPrincipal] = await db.pool.query(
       `SELECT folio, porcentaje, cod_vendedor_principal, cod_vendedor_compartido
        FROM factura_compartida
@@ -351,7 +356,7 @@ router.get('/vendedores', async (req, res) => {
       GROUP BY h.CodVendedor
     `);
 
-    // ── 5. Mapa base: inicializar todos los códigos propios del usuario
+    // ── 5. Mapa base
     const mapa = {};
     for (const cod of codigos) {
       mapa[cod] = { codVendedor: cod, nombreVendedor: cod, totalFolios: 0,
@@ -368,7 +373,7 @@ router.get('/vendedores', async (req, res) => {
       };
     }
 
-    // ── 6. Traer montos + nombre del vendedor dueño del folio en Softland
+    // ── 6. Traer montos de folios compartidos
     if (todosFoliosComp.length) {
       const resultComp = await pool.request().query(`
         SELECT
@@ -391,7 +396,6 @@ router.get('/vendedores', async (req, res) => {
         const montoReal = Number(row.totalLinea) || 0;
         const listaReal = Number(row.listaLinea) || 0;
 
-        // ── ROL PRINCIPAL PROPIO: el usuario cedió este folio → acumula lo que RETIENE
         const infoPrincipal = rowsPrincipal.find(r => Number(r.folio) === folio);
         if (infoPrincipal && mapa[infoPrincipal.cod_vendedor_principal]) {
           const pctRetiene = 100 - Number(infoPrincipal.porcentaje);
@@ -401,8 +405,6 @@ router.get('/vendedores', async (req, res) => {
           acum.ventaRealLista     += Math.round(listaReal * pctRetiene / 100);
         }
 
-        // ── ROL RECEPTOR: el usuario RECIBE este folio de otro vendedor
-        //    → crear/acumular FILA EXTRA con el cod_vendedor_principal (Norelbys, Sergio…)
         const infoRecibido = foliosRecibidosConPct.find(r => r.folio === folio);
         if (infoRecibido) {
           const codPrincipal    = infoRecibido.cod_vendedor_principal;
@@ -410,7 +412,6 @@ router.get('/vendedores', async (req, res) => {
           const nombrePrincipal = row.nombreVendedorSoftland || codPrincipal;
 
           if (!mapa[codPrincipal]) {
-            // Primera vez que aparece este principal → crear fila vacía
             mapa[codPrincipal] = {
               codVendedor:          codPrincipal,
               nombreVendedor:       nombrePrincipal,
@@ -485,8 +486,8 @@ router.get('/ventas-mes', async (req, res) => {
         c.NomAux                                                AS cliente,
         h.CodVendedor,
         h.Tipo,
-        SUM(m.TotLinea)                                         AS monto,
-        SUM(
+        ROUND(SUM(m.TotLinea), 0)                               AS monto,
+        ROUND(SUM(
           CASE
             WHEN cl.CodCan = '301' AND ISNULL(t.PrecioVta, 0) > 0
               THEN t.PrecioVta * 1.10 * m.CantFacturada
@@ -494,7 +495,7 @@ router.get('/ventas-mes', async (req, res) => {
               THEN t.PrecioVta * m.CantFacturada
             ELSE m.TotLinea
           END
-        )                                                       AS neto_lista,
+        ), 0)                                                   AS neto_lista,
         ROUND(
           CASE
             WHEN SUM(
@@ -551,44 +552,111 @@ router.get('/ventas-mes', async (req, res) => {
 });
 
 // ── GET /api/dashboard/detalle/:folio — T-01 validateFolio ──────────────
+//
+// FEAT 2026-04-29: el divisor_historico ya no está hardcodeado.
+// Se obtiene la Fecha del folio desde Softland, luego se calcula
+// el factor acumulado con getFactorHistorico(mes, anio) que lee
+// tasas_descuentos en MySQL. Se usa aplicarFactor() para ajustar
+// precio_historico_base y precio_historico_ajustado.
+//
+// Agregar un nuevo aumento en marzo requiere solo una INSERT en
+// tasas_descuentos — sin tocar código.
 router.get('/detalle/:folio', async (req, res) => {
   let folio;
   try { folio = validateFolio(req.params.folio); }
   catch (err) { return res.status(400).json({ ok: false, error: err.message }); }
   try {
     const pool = await getSoftlandPool();
-    const result = await pool.request().query(`
-      WITH base AS (
-        SELECT gsaen.Folio, gsaen.Fecha, gsaen.CodVendedor, gsaen.CanCod,
-          cwtauxi.nomAux AS Cliente, gmovi.CodProd, tprod.DesProd, gmovi.CantFacturada,
-          gmovi.TotLinea, tprod.PrecioVta,
-          CASE WHEN gsaen.Fecha < '2023-03-01' THEN (1.07*1.07*1.05*1.17)
-               WHEN gsaen.Fecha < '2024-03-01' THEN (1.07*1.07*1.05)
-               WHEN gsaen.Fecha < '2025-03-01' THEN (1.07*1.07)
-               WHEN gsaen.Fecha < '2026-03-01' THEN (1.07)
-               ELSE 1.0 END AS divisor_historico,
-          CASE WHEN gsaen.CanCod <> '301' THEN 1.10 ELSE 1.0 END AS factor_canal
-        FROM [PRODIN].[softland].[iw_gmovi] gmovi
-        INNER JOIN [PRODIN].[softland].[iw_gsaen] gsaen ON gsaen.NroInt = gmovi.NroInt AND gsaen.Tipo = gmovi.Tipo
-        INNER JOIN [PRODIN].[softland].[iw_tprod] tprod ON tprod.CodProd = gmovi.CodProd
-        INNER JOIN [PRODIN].[softland].[cwtauxi] cwtauxi ON cwtauxi.CodAux = gsaen.CodAux
-        WHERE gsaen.Tipo IN ('F','N','D') AND gsaen.Folio = ${folio}
-      ),
-      calc AS (
-        SELECT *,
-          ROUND(TotLinea / NULLIF(CantFacturada, 0), 4) AS precio_unitario_cobrado,
-          ROUND((TotLinea / NULLIF(CantFacturada, 0)) / divisor_historico, 4) AS precio_unitario_cobrado_hist,
-          ROUND(PrecioVta / divisor_historico, 4) AS precio_historico_base,
-          ROUND((PrecioVta / divisor_historico) * factor_canal, 4) AS precio_historico_ajustado
-        FROM base
-      )
-      SELECT Folio, CONVERT(VARCHAR(10), Fecha, 103) AS Fecha, CodVendedor, CanCod, Cliente,
-        CodProd, DesProd, CantFacturada, TotLinea, precio_unitario_cobrado, precio_historico_ajustado,
-        ROUND((precio_historico_ajustado - precio_unitario_cobrado_hist) / NULLIF(precio_historico_ajustado, 0) * 100, 2) AS pct_descuento,
-        ROUND((precio_historico_ajustado - precio_unitario_cobrado_hist) * CantFacturada, 0) AS descuento_total_pesos
-      FROM calc ORDER BY CodProd
+
+    // ── Paso 1: obtener la fecha del folio para derivar mes/anio ─────────
+    const resultFecha = await pool.request().query(`
+      SELECT TOP 1 MONTH(Fecha) AS mes, YEAR(Fecha) AS anio
+      FROM [PRODIN].[softland].[iw_gsaen]
+      WHERE Folio = ${folio} AND Tipo IN ('F','N','D') AND Estado <> 'A'
     `);
-    res.json({ ok: true, folio, detalle: result.recordset });
+    if (!resultFecha.recordset.length) {
+      return res.status(404).json({ ok: false, error: 'Folio no encontrado' });
+    }
+    const { mes: mesFolio, anio: anioFolio } = resultFecha.recordset[0];
+
+    // ── Paso 2: calcular factor histórico acumulado desde MySQL ──────────
+    // factor = ∏ (1 - tasa_i/100) para todas las tasas posteriores al período
+    const factor = await getFactorHistorico(mesFolio, anioFolio);
+
+    // ── Paso 3: traer detalle de líneas desde Softland ───────────────────
+    const result = await pool.request().query(`
+      SELECT
+        gsaen.Folio,
+        CONVERT(VARCHAR(10), gsaen.Fecha, 103)          AS Fecha,
+        gsaen.CodVendedor,
+        gsaen.CanCod,
+        cwtauxi.nomAux                                  AS Cliente,
+        gmovi.CodProd,
+        tprod.DesProd,
+        gmovi.CantFacturada,
+        gmovi.TotLinea,
+        tprod.PrecioVta,
+        CASE WHEN gsaen.CanCod <> '301' THEN 1.10 ELSE 1.0 END AS factor_canal
+      FROM [PRODIN].[softland].[iw_gmovi] gmovi
+      INNER JOIN [PRODIN].[softland].[iw_gsaen]  gsaen   ON gsaen.NroInt  = gmovi.NroInt  AND gsaen.Tipo  = gmovi.Tipo
+      INNER JOIN [PRODIN].[softland].[iw_tprod]  tprod   ON tprod.CodProd = gmovi.CodProd
+      INNER JOIN [PRODIN].[softland].[cwtauxi]   cwtauxi ON cwtauxi.CodAux = gsaen.CodAux
+      WHERE gsaen.Tipo IN ('F','N','D')
+        AND gsaen.Folio = ${folio}
+      ORDER BY gmovi.CodProd
+    `);
+
+    // ── Paso 4: aplicar factor histórico en Node.js ──────────────────────
+    const detalle = result.recordset.map(row => {
+      const precioVta          = Number(row.PrecioVta)   || 0;
+      const cantFacturada      = Number(row.CantFacturada) || 0;
+      const totLinea           = Number(row.TotLinea)    || 0;
+      const factorCanal        = Number(row.factor_canal) || 1;
+
+      // Precio unitario cobrado (real, sin ajuste)
+      const precioUnitarioCobrado = cantFacturada > 0
+        ? Math.round((totLinea / cantFacturada) * 100) / 100
+        : 0;
+
+      // Precio unitario cobrado normalizado al período histórico
+      const precioUnitarioCobradoHist = cantFacturada > 0
+        ? Math.round((totLinea / cantFacturada) * factor * 100) / 100
+        : 0;
+
+      // Precio histórico base (precio lista ajustado al período)
+      const precioHistoricoBase = Math.round(aplicarFactor(precioVta, factor) * 100) / 100;
+
+      // Precio histórico ajustado por canal (distribuidor → ×1.10)
+      const precioHistoricoAjustado = Math.round(precioHistoricoBase * factorCanal * 100) / 100;
+
+      // % descuento respecto al precio lista histórico
+      const pctDescuento = precioHistoricoAjustado > 0
+        ? Math.round((precioHistoricoAjustado - precioUnitarioCobradoHist) / precioHistoricoAjustado * 10000) / 100
+        : 0;
+
+      // Descuento total en pesos por línea
+      const descuentoTotalPesos = Math.round(
+        (precioHistoricoAjustado - precioUnitarioCobradoHist) * cantFacturada
+      );
+
+      return {
+        Folio:                        row.Folio,
+        Fecha:                        row.Fecha,
+        CodVendedor:                  row.CodVendedor,
+        CanCod:                       row.CanCod,
+        Cliente:                      row.Cliente,
+        CodProd:                      row.CodProd,
+        DesProd:                      row.DesProd,
+        CantFacturada:                cantFacturada,
+        TotLinea:                     Math.round(totLinea),
+        precio_unitario_cobrado:      precioUnitarioCobrado,
+        precio_historico_ajustado:    precioHistoricoAjustado,
+        pct_descuento:                pctDescuento,
+        descuento_total_pesos:        descuentoTotalPesos,
+      };
+    });
+
+    res.json({ ok: true, folio, detalle });
   } catch (err) {
     console.error('[GET /api/dashboard/detalle]', err.message);
     res.status(500).json({ ok: false, error: 'Error al obtener detalle del folio' });
@@ -612,7 +680,7 @@ router.get('/compartir/lista', async (req, res) => {
         h.Folio,
         CONVERT(varchar, h.Fecha, 103) AS fecha_formato,
         c.NomAux AS cliente,
-        SUM(m.TotLinea) AS monto,
+        ROUND(SUM(m.TotLinea), 0)      AS monto,
         h.CodVendedor
       FROM [PRODIN].[softland].[iw_gsaen] h
       LEFT JOIN [PRODIN].[softland].[cwtauxi] c ON c.CodAux = h.CodAux
