@@ -8,11 +8,17 @@
  *
  * Fuentes de datos:
  *   - SQL Server Softland (ventas, clientes, folios, detalle)
- *   - MySQL bdtexpro (meta anual por usuario vendedor)
+ *   - MySQL bdtexpro (meta anual por usuario vendedor, tasas_descuentos)
  *
  * Regla de seguridad:
  *   Todos los endpoints usan requireAuth y filtran por los códigos
  *   de vendedor asociados al usuario autenticado.
+ *
+ * Reglas de negocio aplicadas:
+ *   - Precio histórico dinámico desde tasas_descuentos (acumulado multiplicativo)
+ *   - Productos NC% usan TotLinea/CantFacturada como precio real
+ *   - Canal 301: precio de lista × 1.1
+ *   - Estado <> 'A': excluye documentos anulados
  *
  * GET /api/ventas                    — lista de folios del mes
  * GET /api/ventas/kpis               — KPIs card: totalVentas, metaMes, totalDescuento
@@ -31,10 +37,10 @@ const express = require('express');
 const router  = express.Router();
 const sql     = require('mssql');
 
-const { getDescuentosVendedor } = require('../models/venta');
 const { requireAuth }           = require('../middlewares/requireAuth');
 const db                        = require('../config/db');
 const { getSoftlandPool }       = require('../config/db.softland');
+const { buildPrecioListaRealCASE } = require('../utils/precioHistorico');
 const {
   getTotalVentas,
   getResumenPorVendedor,
@@ -42,6 +48,7 @@ const {
   getVentas,
   getMontoFolio,
   getDetalleFolio,
+  getDescuentosVendedor,
 } = require('../models/venta');
 const { validarMesAnio } = require('../utils/stringHelpers');
 
@@ -72,16 +79,9 @@ router.get('/', requireAuth, async (req, res) => {
 // ── GET /api/ventas/kpis ──────────────────────────────────────────────────────────────────────────────
 //
 // KPIs para las cards del dashboard de ventas.
-//
-//   Campos retornados:
-//     totalVentas    = SUM(TotLinea) de todos los códigos del vendedor en el mes
-//                      ✔ Suma cada código por separado y los acumula como totalVentasMes
-//     metaMes        = meta mensual desde MySQL bdtexpro
-//     totalDescuento = diferencia entre ventaRealLista y totalVentas
-//
-//   Filtros:
-//     CodVendedor IN (codigos dinámicos del usuario autenticado)
-//     Tipo IN ('F','N','D') | Estado <> 'A' | mes + año
+//   totalVentas    = SUM(TotLinea) cobrado real
+//   metaMes        = meta mensual desde MySQL bdtexpro
+//   totalDescuento = diferencia entre ventaListaReal y totalVentas (calculado real)
 //
 router.get('/kpis', requireAuth, async (req, res) => {
   try {
@@ -102,44 +102,52 @@ router.get('/kpis', requireAuth, async (req, res) => {
     const metaAnual = metaRows.length ? Number(metaRows[0].meta) : 0;
     const metaMes   = metaAnual > 0 ? Math.round(metaAnual / 12) : 0;
 
-    // Sin códigos asignados → retornar ceros
     if (!codigos.length) {
       return res.json({ ok: true, totalVentas: 0, metaMes, totalDescuento: 0 });
     }
 
     const codigosIn = codigos.map(c => `'${c}'`).join(',');
 
-    // ─ KPIs desde SQL Server Softland ───────────────────────────────────────
+    // CASE de precio lista real dinámico
+    const precioListaRealCASE = await buildPrecioListaRealCASE(db, {
+      campoFecha:     'enc.Fecha',
+      campoCodProd:   'm.CodProd',
+      campoTotLinea:  'm.TotLinea',
+      campoCant:      'm.CantFacturada',
+      campoPrecioVta: 't.PrecioVta',
+      campoCodCan:    'cvl.CodCan',
+    });
+
     const pool   = await getSoftlandPool();
     const result = await pool.request()
       .input('mes',  sql.Int, mes)
       .input('anio', sql.Int, anio)
       .query(`
         SELECT
-          -- totalVentasMes: suma de TotLinea de todos los códigos del vendedor
-          -- Se agrupa por CodVendedor y se acumula con SUM() OVER ()
-          SUM(m.TotLinea)              AS totalVentasCobrado,
-          SUM(SUM(m.TotLinea)) OVER () AS totalVentasMes
+          SUM(m.TotLinea)                                          AS totalVentasCobrado,
+          SUM(m.CantFacturada * (${precioListaRealCASE}))          AS totalVentasLista,
+          SUM(SUM(m.TotLinea)) OVER ()                             AS totalVentasMes
         FROM [PRODIN].[softland].[iw_gsaen] enc
         INNER JOIN [PRODIN].[softland].[iw_gmovi] m
           ON m.NroInt = enc.NroInt
          AND m.Tipo   = enc.Tipo
+        INNER JOIN [PRODIN].[softland].[iw_tprod] t
+          ON t.CodProd = m.CodProd
+        LEFT JOIN [PRODIN].[softland].[cwtcvcl] cvl
+          ON cvl.CodAux = enc.CodAux
         WHERE enc.Tipo         IN ('F', 'N', 'D')
           AND enc.Estado       <>  'A'
           AND enc.CodVendedor  IN (${codigosIn})
           AND MONTH(enc.Fecha) =   @mes
           AND YEAR(enc.Fecha)  =   @anio
         GROUP BY enc.CodVendedor
-        ORDER BY totalVentasCobrado DESC
       `);
 
-    // Tomar totalVentasMes desde la primera fila (es igual en todas)
-    const rows        = result.recordset;
-    const totalVentas = rows.length ? Number(rows[0].totalVentasMes) : 0;
-
-    // totalDescuento: se calcula en resumen-vendedores, aquí retornamos 0 como placeholder
-    // si en el futuro se requiere, se puede agregar el JOIN a iw_tprod aquí
-    const totalDescuento = 0;
+    const rows           = result.recordset;
+    const totalVentas    = rows.length ? Number(rows[0].totalVentasMes)    : 0;
+    const totalLista     = rows.reduce((acc, r) => acc + Number(r.totalVentasLista    || 0), 0);
+    const totalCobrado   = rows.reduce((acc, r) => acc + Number(r.totalVentasCobrado  || 0), 0);
+    const totalDescuento = Math.round(totalLista - totalCobrado);
 
     res.json({ ok: true, totalVentas, metaMes, totalDescuento });
   } catch (err) {
@@ -192,24 +200,8 @@ router.get('/meta', requireAuth, async (req, res) => {
 
 // ── GET /api/ventas/resumen-vendedores ────────────────────────────────────────────────────────────────────────────
 //
-// Retorna ventas agrupadas por vendedor filtrando por mes y año.
-//
-//   Query params requeridos:
-//     ?mes=<1-12>&anio=<YYYY>    (validados por validarMesAnio)
-//
-//   Campos retornados:
-//     codVendedor          = enc.CodVendedor
-//     nombreVendedor       = MIN(enc.NomAux)
-//     totalFolios          = COUNT(DISTINCT enc.Folio)
-//     totalVentasCobrado   = SUM(enc.SubTotal) desde subquery independiente
-//                            ✅ Filtrada por los mismos CodVendedor del usuario autenticado
-//                            ✅ Evita duplicación causada por JOIN con iw_gmovi/iw_tprod
-//     ventaRealLista       = ROUND(SUM(t.PrecioVta * m.CantFacturada), 0)
-//     pctDescuento         = (1 - totalVentasCobrado / ventaRealLista) * 100
-//
-//   Tablas: iw_gsaen (enc) + iw_gmovi (m) + iw_tprod (t)
-//   Filtro de seguridad: enc.CodVendedor IN (codigos del usuario autenticado)
-//   Filtro de período:   MONTH(enc.Fecha) = @mes  AND  YEAR(enc.Fecha) = @anio
+// Retorna ventas agrupadas por vendedor con precio lista real dinámico.
+// Aplica: histórico acumulado + canal 301 (+10%) + NC% (precio = cobrado)
 //
 router.get('/resumen-vendedores', requireAuth, async (req, res) => {
   try {
@@ -225,29 +217,38 @@ router.get('/resumen-vendedores', requireAuth, async (req, res) => {
 
     const codigosIn = codigos.map(c => `'${c}'`).join(',');
 
+    const precioListaRealCASE = await buildPrecioListaRealCASE(db, {
+      campoFecha:     'enc.Fecha',
+      campoCodProd:   'm.CodProd',
+      campoTotLinea:  'm.TotLinea',
+      campoCant:      'm.CantFacturada',
+      campoPrecioVta: 't.PrecioVta',
+      campoCodCan:    'cvl.CodCan',
+    });
+
     const pool   = await getSoftlandPool();
     const result = await pool.request()
       .input('mes',  sql.Int, mes)
       .input('anio', sql.Int, anio)
       .query(`
         SELECT
-          enc.CodVendedor                                                    AS codVendedor,
-          MIN(enc.NomAux)                                                    AS nombreVendedor,
-          COUNT(DISTINCT enc.Folio)                                          AS totalFolios,
-          ROUND(tot.totalVentasCobrado, 0)                                   AS totalVentasCobrado,
-          ROUND(SUM(t.PrecioVta * m.CantFacturada), 0)                       AS ventaRealLista,
+          enc.CodVendedor                                                AS codVendedor,
+          MIN(enc.NomAux)                                                AS nombreVendedor,
+          COUNT(DISTINCT enc.Folio)                                      AS totalFolios,
+          ROUND(tot.totalVentasCobrado, 0)                               AS totalVentasCobrado,
+          ROUND(SUM(m.CantFacturada * (${precioListaRealCASE})), 0)      AS ventaRealLista,
           CASE
-            WHEN SUM(t.PrecioVta * m.CantFacturada) > 0
+            WHEN SUM(m.CantFacturada * (${precioListaRealCASE})) > 0
             THEN ROUND(
-              (1 - (tot.totalVentasCobrado / SUM(t.PrecioVta * m.CantFacturada))) * 100
+              (1 - (tot.totalVentasCobrado
+                  / NULLIF(SUM(m.CantFacturada * (${precioListaRealCASE})), 0))
+              ) * 100
             , 2)
             ELSE 0
-          END                                                                AS pctDescuento
+          END                                                            AS pctDescuento
         FROM [PRODIN].[softland].[iw_gsaen] enc
         INNER JOIN (
-          SELECT
-            CodVendedor,
-            SUM(SubTotal) AS totalVentasCobrado
+          SELECT CodVendedor, SUM(SubTotal) AS totalVentasCobrado
           FROM [PRODIN].[softland].[iw_gsaen]
           WHERE CodVendedor IN (${codigosIn})
             AND Tipo    IN ('F','N','D')
@@ -261,6 +262,8 @@ router.get('/resumen-vendedores', requireAuth, async (req, res) => {
          AND m.Tipo   = enc.Tipo
         INNER JOIN [PRODIN].[softland].[iw_tprod] t
           ON t.CodProd = m.CodProd
+        LEFT JOIN [PRODIN].[softland].[cwtcvcl] cvl
+          ON cvl.CodAux = enc.CodAux
         WHERE enc.CodVendedor IN (${codigosIn})
           AND enc.Tipo    IN ('F','N','D')
           AND enc.Estado <>  'A'
@@ -397,13 +400,7 @@ router.get('/folio/:folio', requireAuth, async (req, res) => {
 router.get('/detalle/:folio', requireAuth, async (req, res) => {
   try {
     const folio = req.params.folio;
-    let anio;
-    try {
-      ({ anio } = validarMesAnio('1', req.query.anio));
-    } catch (err) {
-      return res.status(400).json({ ok: false, error: err.message });
-    }
-    const detalle = await getDetalleFolio({ folio, anio });
+    const detalle = await getDetalleFolio({ folio });
     res.json({ ok: true, detalle });
   } catch (err) {
     console.error('[GET /api/ventas/detalle]', err.message);
